@@ -775,8 +775,15 @@ test_that("Snowflake semantic view selection follows the shared fixture", {
   for (case in section$cases) {
     warehouse <- section$warehouse
     warehouse$semantic_listing_fails <- case$semantic_listing_fails
+    reply <- fixture_snowflake_reply(warehouse)
+    reads <- character()
     local_mocked_bindings(
-      dbGetQuery = fixture_snowflake_reply(warehouse),
+      dbGetQuery = function(con, sql, ...) {
+        if (startsWith(sql, "SELECT SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW")) {
+          reads <<- c(reads, sub('.*"([^"]*)"\'\\).*', "\\1", sql))
+        }
+        reply(con, sql, ...)
+      },
       .package = "DBI"
     )
     if (!is.null(case$object_limit)) {
@@ -795,6 +802,9 @@ test_that("Snowflake semantic view selection follows the shared fixture", {
     )
     if (!is.null(case$expected$error)) {
       expect_fixture_error(result, case$expected, info = case$name)
+      if (!is.null(case$expected$reads)) {
+        expect_equal(as.list(reads), case$expected$reads, info = case$name)
+      }
       next
     }
     expect_equal(as.list(result$labels), case$expected$tables, info = case$name)

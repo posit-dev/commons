@@ -943,7 +943,7 @@
     ]
   },
   "selection": {
-    "description": "Which semantic views a `tables` selection reads up front, which it leaves as stubs, and which relations remain tables. A view an entry names exactly is read up front and keeps the label it was named by, and one that cannot be used fails the selection. A namespace's views are stubs, read only when inspected or used, so one that cannot be used is found out then. A view over exactly named relations is read up front when those relations include every table it reads, and is skipped quietly when it cannot be read or used, or when a table it reads names no table. `exclude` drops views by name, and a listing that fails lists no views. Views count toward the object limit with relations, as `catalog-merge.json` sets it; a case's `object_limit` lowers it, and the views listed beside an exact relation count before any is read. A `tables` entry is a string, or an object naming a namespace by its `catalog` and `schema`. `warehouse` is the catalog every case reads, all in ANALYTICS.PUBLIC, whose current namespace it is.",
+    "description": "Which semantic views a `tables` selection reads up front, which it leaves as stubs, and which relations remain tables. A view an entry names exactly is read up front and keeps the label it was named by, and one that cannot be used fails the selection. A namespace's views are stubs, read only when inspected or used, so one that cannot be used is found out then. A view over exactly named relations is read up front when those relations include every table it reads, and is skipped quietly when it cannot be read or used, or when a table it reads names no table. `exclude` drops views by name, and a listing that fails lists no views. Views count toward the object limit with relations, as `catalog-merge.json` sets it; a case's `object_limit` lowers it, and the views listed beside an exact relation count before any is read. `reads`, when given, names the views whose YAML the selection read, in order. A `tables` entry is a string, or an object naming a namespace by its `catalog` and `schema`. `warehouse` is the catalog every case reads, all in ANALYTICS.PUBLIC, whose current namespace it is.",
     "warehouse": {
       "relations": [
         "SALES",
@@ -1140,7 +1140,8 @@
           "mentions": [
             "7 objects",
             "limit of 6"
-          ]
+          ],
+          "reads": []
         }
       },
       {

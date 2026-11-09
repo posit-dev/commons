@@ -179,6 +179,8 @@ def test_selection(case: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> Non
         with pytest.raises(ValueError) as raised:
             import_catalog(backend, tables, case.get("exclude"))
         assert_fixture_error(raised.value, expected)
+        if "reads" in expected:
+            assert backend.yaml_reads == expected["reads"]
         return
     imported = import_catalog(backend, tables, case.get("exclude"))
     assert imported.tables == expected["tables"]
