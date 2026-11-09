@@ -486,12 +486,12 @@
       {
         "name": "nothing",
         "unread": [
-          "ANALYTICS.PUBLIC.{stop('markup')}"
+          "ANALYTICS.PUBLIC.{stop('markup')}\\x"
         ],
         "expected": {
           "error": "missing",
           "mentions": [
-            "ANALYTICS.PUBLIC.{stop('markup')}"
+            "ANALYTICS.PUBLIC.{stop('markup')}\\x"
           ]
         }
       }

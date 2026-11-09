@@ -519,7 +519,8 @@ def _unread_text(unread: Sequence[str]) -> str:
         return ""
     shown = list(unread)[:_UNREAD_SHOWN]
     more = len(unread) - len(shown)
-    listed = _vals(shown) + (
+    # Quoted as written: repr() would double a backslash in a label.
+    listed = ", ".join(f"'{label}'" for label in shown) + (
         f", and {more} more that search_pool finds" if more else ""
     )
     return (
