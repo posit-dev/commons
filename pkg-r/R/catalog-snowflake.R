@@ -230,7 +230,8 @@ snowflake_catalog_selection <- function(
     character(1)
   )
   duplicated_labels <- unique(semantic_labels[
-    semantic_keys %in% semantic_keys[duplicated(semantic_keys)]
+    semantic_labels %in% semantic_labels[duplicated(semantic_labels)] |
+      semantic_keys %in% semantic_keys[duplicated(semantic_keys)]
   ])
   if (length(duplicated_labels)) {
     cli::cli_abort(

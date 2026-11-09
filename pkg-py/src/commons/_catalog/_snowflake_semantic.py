@@ -415,7 +415,11 @@ def select_semantic_views(
     # reached through its namespace too is found by its warehouse identity.
     keys = [view.identity or view.id for view in views]
     duplicated = list(
-        dict.fromkeys(label for label, key in zip(labels, keys) if keys.count(key) > 1)
+        dict.fromkeys(
+            label
+            for label, key in zip(labels, keys)
+            if labels.count(label) > 1 or keys.count(key) > 1
+        )
     )
     if duplicated:
         listed = ", ".join(repr(label) for label in duplicated)
