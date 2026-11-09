@@ -18,6 +18,9 @@ denied table. That works because the principal that runs this SQL owns the
 copy, and on Snowflake that is the active role. Run it under a role other than
 the test principal, or the test principal owns the copy and can read it.
 
+The SQL drops and recreates the fixture tables, which removes the grants of any
+principal it does not name, so pass the principal CI connects as.
+
 On Snowflake it also creates the semantic views and grants the test role the
 alternate role. On Databricks it creates the parameterized metric view.
 """
