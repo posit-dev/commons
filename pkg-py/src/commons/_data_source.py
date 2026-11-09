@@ -329,6 +329,20 @@ class DataSource:
             return self.backend.query(sql, params)
         return self.backend.query(sql)
 
+    def _query_trusted(self, sql: str) -> list[dict[str, Any]]:
+        """Run a verified query a warehouse model declares, as written.
+
+        The read-only parse is skipped for the same reason as in
+        `_query_compiled`, but the query may start with WITH, so the
+        trusted-query check guards it instead. The session is still checked.
+        """
+        from ._catalog import check_session
+        from ._semantic_models import check_trusted_query
+
+        check_session(self.backend, self.session)
+        check_trusted_query(sql)
+        return self.backend.query(sql)
+
     def _query_loading_pins(self, sql: str) -> list[dict[str, Any]]:
         # Let DuckDB resolve the query's table references and drive loading off
         # the tables it reports missing: run it, load the pending tables the

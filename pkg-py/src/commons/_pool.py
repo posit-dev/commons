@@ -404,7 +404,7 @@ def call_calculation(
     calculation = resolve_calculation(calculations_registry(sources), name, label)
     # Verified queries take no arguments, so any given is unexpected.
     values = validate_arguments({}, dict(arguments or {}))
-    rows = source.query(calculation.sql)
+    rows = source._query_trusted(calculation.sql)
     advert = handles.register_rows(rows) if handles is not None else None
     body = "\n\n".join(part for part in (rows_to_markdown(rows), advert) if part)
     return tool_result(

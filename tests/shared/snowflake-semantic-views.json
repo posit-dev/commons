@@ -1384,6 +1384,19 @@
         }
       },
       {
+        "name": "a query may use SEMANTIC_VIEW syntax the SQL parser does not know",
+        "yaml": "verified_queries:\n  - name: emea_revenue\n    sql: SELECT * FROM SEMANTIC_VIEW(\"ANALYTICS\".\"PUBLIC\".\"REVENUE_MODEL\" METRICS \"orders\".\"revenue\" VARIABLES \"REGION\" => 'EMEA')\n",
+        "expected": {
+          "calculations": [
+            {
+              "name": "emea_revenue",
+              "description": "emea_revenue",
+              "sql": "SELECT * FROM SEMANTIC_VIEW(\"ANALYTICS\".\"PUBLIC\".\"REVENUE_MODEL\" METRICS \"orders\".\"revenue\" VARIABLES \"REGION\" => 'EMEA')"
+            }
+          ]
+        }
+      },
+      {
         "name": "a view without verified queries has none",
         "yaml": "tables: []\n",
         "expected": {
