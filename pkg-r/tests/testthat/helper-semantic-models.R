@@ -117,6 +117,9 @@ expect_fixture_error <- function(err, expected, info = NULL) {
   for (mention in expected$mentions) {
     expect_true(grepl(mention, message, fixed = TRUE), info = paste(info, mention))
   }
+  for (omission in expected$omits) {
+    expect_false(grepl(omission, message, fixed = TRUE), info = paste(info, omission))
+  }
 }
 
 # A dbGetQuery stand-in answering a Snowflake catalog listing from a shared

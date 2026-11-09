@@ -90,3 +90,5 @@ def assert_fixture_error(error: BaseException, expected: dict[str, Any]) -> None
     message = str(error)
     for mention in expected["mentions"]:
         assert mention in message, (mention, message)
+    for omission in expected.get("omits", []):
+        assert omission not in message, (omission, message)

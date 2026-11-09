@@ -242,15 +242,18 @@ metric_origin <- function(
   } else if (nrow(definition_named) || nrow(semantic_named)) {
     kinds <- unique(c(definition_named$kind, semantic_named$kind))
     kind_text <- paste(kinds, collapse = " or a ")
+    # Interpolated rather than spliced, so a label is never read as markup.
+    hint <- metric_origin_unread_text(unread, methods)
     cli::cli_abort(c(
       "{.val {name}} is a {kind_text}, not a metric.",
-      "i" = metric_origin_unread_text(unread, methods)
+      "i" = if (!is.null(hint)) "{hint}"
     ))
   } else {
     available <- c(
       definitions$name[definitions$kind == "metric"],
       semantic_members$name[semantic_members$kind == "metric"]
     )
+    hint <- metric_origin_unread_text(unread, methods)
     cli::cli_abort(c(
       "No governed metric is named {.val {name}}.",
       "i" = if (length(available)) {
@@ -260,7 +263,7 @@ metric_origin <- function(
       } else {
         "No governed metrics are defined."
       },
-      "i" = metric_origin_unread_text(unread, methods)
+      "i" = if (!is.null(hint)) "{hint}"
     ))
   }
 }
@@ -280,9 +283,10 @@ metric_origin_unread_text <- function(unread, methods = FALSE) {
   if (more > 0L) {
     listed <- sprintf("%s, and %d more that %s finds", listed, more, search)
   }
-  cli::format_inline(
-    "Semantic models not read yet: {listed}. ",
-    "Name a metric on one as {.code MODEL::metric}, or inspect one with {describe}."
+  paste0(
+    "Semantic models not read yet: ", listed, ". ",
+    "Name a metric on one as `MODEL::metric`, or inspect one with ",
+    describe, "."
   )
 }
 

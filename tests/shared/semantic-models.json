@@ -377,7 +377,7 @@
     ]
   },
   "metric_origin": {
-    "description": "Which pool a metric name belongs to when data-dict metric definitions and native semantic metrics share a source. A definition answers to `name` or `table::name`. A name both pools answer to is ambiguous, and must be qualified. When the source lists models it has not read, a refused name also names them, at most ten with a count of the rest, since only a `MODEL::metric` name reaches their metrics; a name that matches nothing then says no metrics are known yet rather than that none are defined. A case's `unread` replaces the unread labels, which are otherwise the `stubs`, and `empty` leaves out the definitions and the read models.",
+    "description": "Which pool a metric name belongs to when data-dict metric definitions and native semantic metrics share a source. A definition answers to `name` or `table::name`. A name both pools answer to is ambiguous, and must be qualified. When the source lists models it has not read, a refused name also names them, at most ten with a count of the rest, since only a `MODEL::metric` name reaches their metrics; a name that matches nothing then says no metrics are known yet rather than that none are defined. A case's `unread` replaces the unread labels, which are otherwise the `stubs`, and `empty` leaves out the definitions and the read models. A label is shown as written, whatever characters it holds. An error's `omits` lists text the message must not contain.",
     "cases": [
       {
         "name": "net_revenue",
@@ -465,6 +465,10 @@
           "mentions": [
             "ANALYTICS.PUBLIC.M10",
             "and 2 more that search_pool finds"
+          ],
+          "omits": [
+            "ANALYTICS.PUBLIC.M11",
+            "ANALYTICS.PUBLIC.M12"
           ]
         }
       },
@@ -476,6 +480,18 @@
           "mentions": [
             "No metrics are known until a listed semantic model is read",
             "ANALYTICS.PUBLIC.LEDGER_MODEL"
+          ]
+        }
+      },
+      {
+        "name": "nothing",
+        "unread": [
+          "ANALYTICS.PUBLIC.{stop('markup')}"
+        ],
+        "expected": {
+          "error": "missing",
+          "mentions": [
+            "ANALYTICS.PUBLIC.{stop('markup')}"
           ]
         }
       }
