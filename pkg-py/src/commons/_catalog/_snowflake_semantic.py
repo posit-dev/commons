@@ -196,11 +196,16 @@ def sql_type(declared: Any) -> str | None:
 
 
 def model_from_spec(
-    view_id: TableId, spec: Any, description: str | None = None
+    view_id: TableId,
+    spec: Any,
+    description: str | None = None,
+    identity: TableId | None = None,
 ) -> SemanticModel:
     """A model from a view's YAML specification, already parsed.
 
-    Raises `UnsupportedSemanticParameter` when a variable has no bindable type.
+    `identity` is the view's warehouse id when `view_id` is the label a caller
+    wrote, which need not spell out the namespace a base table inherits.
+    Raises `UnsupportedSemanticParameter` when a variable cannot be bound.
     """
     spec = spec or {}
     dimensions: list[SemanticMember] = []
@@ -224,7 +229,7 @@ def model_from_spec(
         )
 
     relationships = list(spec.get("relationships") or [])
-    found, complete = dependencies(view_id, spec)
+    found, complete = dependencies(identity or view_id, spec)
     context = semantic_context(spec, dimensions, facts, filters, relationships)
     name = spec.get("name")
     own_description = spec.get("description")
@@ -233,6 +238,7 @@ def model_from_spec(
         name=name if name is not None else view_id.table,
         backend=BACKEND,
         description=own_description if own_description is not None else description,
+        identity=identity,
         dimensions=dimensions,
         metrics=metrics,
         facts=facts,
@@ -313,11 +319,11 @@ def read_semantic_model(
             f"Snowflake semantic view {label!r} returned invalid YAML."
         ) from error
     try:
-        model = model_from_spec(view.id, spec, description=view.description)
+        return model_from_spec(
+            view.id, spec, description=view.description, identity=view.identity
+        )
     except UnsupportedSemanticParameter as error:
         return Unsupported(view.id, str(error))
-    model.identity = view.identity or view.id
-    return model
 
 
 def member_reference(member: Any) -> str:
@@ -403,8 +409,11 @@ def select_semantic_views(
     hidden = excluded([view.id.table for view in views], exclude)
     views = [view for view, drop in zip(views, hidden) if not drop]
     labels = [view.id.label for view in views]
+    # A view named exactly keeps the label it was named by, so the same view
+    # reached through its namespace too is found by its warehouse identity.
+    keys = [view.identity or view.id for view in views]
     duplicated = list(
-        dict.fromkeys(label for label in labels if labels.count(label) > 1)
+        dict.fromkeys(label for label, key in zip(labels, keys) if keys.count(key) > 1)
     )
     if duplicated:
         listed = ", ".join(repr(label) for label in duplicated)

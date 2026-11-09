@@ -31,7 +31,7 @@ def cases(section: str) -> list[dict[str, Any]]:
 
 def _id(value: dict[str, str]) -> TableId:
     return TableId(
-        catalog=value["catalog"], schema=value["schema"], table=value["table"]
+        catalog=value.get("catalog"), schema=value.get("schema"), table=value["table"]
     )
 
 
@@ -59,15 +59,20 @@ def test_show_rows(case: dict[str, Any]) -> None:
 @pytest.mark.parametrize("case", cases("specifications"), ids=lambda c: c["name"])
 def test_specification(case: dict[str, Any]) -> None:
     table_id = _id(case["id"])
+    identity = _id(case["identity"]) if "identity" in case else None
     spec = yaml.safe_load(case["yaml"])
     expected = case["expected"]
     if "unsupported" in expected:
         with pytest.raises(UnsupportedSemanticParameter) as raised:
-            model_from_spec(table_id, spec, description=case.get("description"))
+            model_from_spec(
+                table_id, spec, description=case.get("description"), identity=identity
+            )
         # R quotes with double quotes and Python with repr; compare the words.
         assert str(raised.value).replace("'", '"') == expected["unsupported"]
         return
-    model = model_from_spec(table_id, spec, description=case.get("description"))
+    model = model_from_spec(
+        table_id, spec, description=case.get("description"), identity=identity
+    )
     actual = {
         "name": model.name,
         "description": model.description,
@@ -150,6 +155,7 @@ def test_metric_sql() -> None:
 @pytest.mark.parametrize("case", cases("selection"), ids=lambda c: c["name"])
 def test_selection(case: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
     from commons._catalog import _core
+    from commons._catalog._core import Selector
     from commons._catalog._import import import_catalog
 
     from ._semantic_fixture import assert_fixture_error
@@ -161,15 +167,20 @@ def test_selection(case: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> Non
         semantic_views=warehouse["semantic_views"],
         semantic_listing_fails=bool(case.get("semantic_listing_fails")),
     )
+    tables = case["tables"]
+    if tables is not None:
+        tables = [
+            entry if isinstance(entry, str) else Selector(**entry) for entry in tables
+        ]
     if "object_limit" in case:
         monkeypatch.setattr(_core, "OBJECT_LIMIT", case["object_limit"])
     expected = case["expected"]
     if "error" in expected:
         with pytest.raises(ValueError) as raised:
-            import_catalog(backend, case["tables"], case.get("exclude"))
+            import_catalog(backend, tables, case.get("exclude"))
         assert_fixture_error(raised.value, expected)
         return
-    imported = import_catalog(backend, case["tables"], case.get("exclude"))
+    imported = import_catalog(backend, tables, case.get("exclude"))
     assert imported.tables == expected["tables"]
     assert list(imported.semantic_models) == expected["models"]
     assert list(imported.semantic_stubs) == expected["stubs"]

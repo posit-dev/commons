@@ -677,11 +677,13 @@ test_that("Snowflake SHOW rows read as the shared fixture says", {
 test_that("Snowflake semantic YAML reads as the shared fixture says", {
   for (case in snowflake_semantic_cases("specifications")) {
     id <- do.call(DBI::Id, case$id)
+    identity <- if (is.null(case$identity)) id else do.call(DBI::Id, case$identity)
     model <- tryCatch(
       snowflake_semantic_model_from_spec(
         id,
         yaml::yaml.load(case$yaml),
-        description = case$description
+        description = case$description,
+        identity = identity
       ),
       commons_unsupported_semantic_parameter = function(err) err
     )
@@ -780,10 +782,13 @@ test_that("Snowflake semantic view selection follows the shared fixture", {
     if (!is.null(case$object_limit)) {
       local_mocked_bindings(catalog_object_limit = as.integer(case$object_limit))
     }
+    tables <- lapply(case$tables, function(entry) {
+      if (is.list(entry)) do.call(DBI::Id, entry) else entry
+    })
     result <- tryCatch(
       snowflake_table_registry(
         DBI::ANSI(),
-        if (is.null(case$tables)) NULL else unlist(case$tables),
+        if (is.null(case$tables)) NULL else tables,
         exclude = unlist(case$exclude)
       ),
       error = function(err) err

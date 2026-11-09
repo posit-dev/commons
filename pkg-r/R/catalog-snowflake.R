@@ -203,7 +203,18 @@ snowflake_catalog_selection <- function(
     function(view) table_id_label(view$id, call = call),
     character(1)
   )
-  duplicated_labels <- unique(semantic_labels[duplicated(semantic_labels)])
+  # A view named exactly keeps the label it was named by, so the same view
+  # reached through its namespace too is found by its warehouse identity.
+  semantic_keys <- vapply(
+    semantic_views,
+    function(view) {
+      semantic_id_key(view$identity %||% view$id, "snowflake_semantic_view")
+    },
+    character(1)
+  )
+  duplicated_labels <- unique(semantic_labels[
+    semantic_keys %in% semantic_keys[duplicated(semantic_keys)]
+  ])
   if (length(duplicated_labels)) {
     cli::cli_abort(
       "{.arg tables} must not select duplicate semantic models: {.val {duplicated_labels}}.",
@@ -529,16 +540,13 @@ snowflake_read_semantic_model <- function(
     snowflake_semantic_model_from_spec(
       view$id,
       specification,
-      description = view$description
+      description = view$description,
+      identity = view$identity %||% view$id
     ),
     commons_unsupported_semantic_parameter = function(err) {
       snowflake_unsupported_semantic_view(view$id, conditionMessage(err))
     }
   )
-  if (inherits(model, "commons_unsupported_snowflake_semantic_view")) {
-    return(model)
-  }
-  model$identity <- view$identity %||% view$id
   model
 }
 
@@ -552,7 +560,8 @@ snowflake_unsupported_semantic_view <- function(id, reason) {
 snowflake_semantic_model_from_spec <- function(
   id,
   specification,
-  description = NULL
+  description = NULL,
+  identity = id
 ) {
   dimensions <- list()
   facts <- list()
@@ -585,7 +594,9 @@ snowflake_semantic_model_from_spec <- function(
     metrics,
     snowflake_semantic_members(specification$metrics, "metric")
   )
-  dependencies <- snowflake_semantic_dependencies(id, specification)
+  # A base table without a namespace is in the view's own, which the label a
+  # caller wrote need not spell out.
+  dependencies <- snowflake_semantic_dependencies(identity, specification)
   relationships <- specification$relationships %||% list()
   parameters <- semantic_parameters_from_spec(
     specification$variables,
@@ -611,6 +622,7 @@ snowflake_semantic_model_from_spec <- function(
     name = specification$name %||% id@name[["table"]],
     description = specification$description %||% description,
     backend = "snowflake_semantic_view",
+    identity = identity,
     dimensions = dimensions,
     metrics = metrics,
     facts = facts,

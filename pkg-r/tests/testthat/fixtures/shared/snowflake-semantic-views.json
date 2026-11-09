@@ -69,7 +69,7 @@
     ]
   },
   "specifications": {
-    "description": "A view's id, its YAML specification exactly as Snowflake returns it, and the model read from it. `description` is the comment `SHOW SEMANTIC VIEWS` reported, used when the YAML has none. Entries may be a list or a mapping keyed by name. Members marked private are dropped, `labels` containing `filter` (in any case) marks a dimension or fact usable as a named filter, and a member's type is its `data_type`. A base table's database, schema, and table are SQL identifiers: a quoted one is exact, with doubled quotes undone, an unquoted one is upper-cased, and a missing database or schema is the view's own. Dependencies are complete only when every table names one and there is at least one. `expected` is either the model, or `unsupported` with the reason when a variable cannot be bound: its type is missing or not bindable, its name is declared twice, or its default is null or is not a literal of its type.",
+    "description": "A view's id, its YAML specification exactly as Snowflake returns it, and the model read from it. `description` is the comment `SHOW SEMANTIC VIEWS` reported, used when the YAML has none. Entries may be a list or a mapping keyed by name. Members marked private are dropped, `labels` containing `filter` (in any case) marks a dimension or fact usable as a named filter, and a member's type is its `data_type`. A base table's database, schema, and table are SQL identifiers: a quoted one is exact, with doubled quotes undone, an unquoted one is upper-cased, and a missing database or schema is the view's own. `identity`, when given, is the view's warehouse id and `id` the label a caller named it by; the view's own namespace comes from `identity`. Dependencies are complete only when every table names one and there is at least one. `expected` is either the model, or `unsupported` with the reason when a variable cannot be bound: its type is missing or not bindable, its name is declared twice, or its default is null or is not a literal of its type.",
     "cases": [
       {
         "name": "a parameterized view in the list form Snowflake returns",
@@ -352,6 +352,37 @@
             {
               "catalog": "MyDb",
               "schema": "MySchema",
+              "table": "ORDERS"
+            }
+          ],
+          "dependencies_complete": true,
+          "first_touch": [],
+          "retrieval": []
+        }
+      },
+      {
+        "name": "a view named by a bare label inherits its warehouse namespace",
+        "id": {
+          "table": "REVENUE_MODEL"
+        },
+        "identity": {
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "REVENUE_MODEL"
+        },
+        "yaml": "tables:\n  - name: orders\n    base_table:\n      table: orders\n",
+        "expected": {
+          "name": "REVENUE_MODEL",
+          "description": null,
+          "dimensions": [],
+          "metrics": [],
+          "facts": [],
+          "filters": [],
+          "parameters": {},
+          "dependencies": [
+            {
+              "catalog": "ANALYTICS",
+              "schema": "PUBLIC",
               "table": "ORDERS"
             }
           ],
@@ -912,7 +943,7 @@
     ]
   },
   "selection": {
-    "description": "Which semantic views a `tables` selection reads up front, which it leaves as stubs, and which relations remain tables. A view an entry names exactly is read up front and keeps the label it was named by, and one that cannot be used fails the selection. A namespace's views are stubs, read only when inspected or used, so one that cannot be used is found out then. A view over exactly named relations is read up front when those relations include every table it reads, and is skipped quietly when it cannot be read or used, or when a table it reads names no table. `exclude` drops views by name, and a listing that fails lists no views. Views count toward the object limit with relations, as `catalog-merge.json` sets it; a case's `object_limit` lowers it, and the views listed beside an exact relation count before any is read. `warehouse` is the catalog every case reads, all in ANALYTICS.PUBLIC, whose current namespace it is.",
+    "description": "Which semantic views a `tables` selection reads up front, which it leaves as stubs, and which relations remain tables. A view an entry names exactly is read up front and keeps the label it was named by, and one that cannot be used fails the selection. A namespace's views are stubs, read only when inspected or used, so one that cannot be used is found out then. A view over exactly named relations is read up front when those relations include every table it reads, and is skipped quietly when it cannot be read or used, or when a table it reads names no table. `exclude` drops views by name, and a listing that fails lists no views. Views count toward the object limit with relations, as `catalog-merge.json` sets it; a case's `object_limit` lowers it, and the views listed beside an exact relation count before any is read. A `tables` entry is a string, or an object naming a namespace by its `catalog` and `schema`. `warehouse` is the catalog every case reads, all in ANALYTICS.PUBLIC, whose current namespace it is.",
     "warehouse": {
       "relations": [
         "SALES",
@@ -1106,6 +1137,23 @@
           "mentions": [
             "6 objects",
             "limit of 5"
+          ]
+        }
+      },
+      {
+        "name": "a view reached through its namespace and named exactly fails the selection",
+        "tables": [
+          {
+            "catalog": "ANALYTICS",
+            "schema": "PUBLIC"
+          },
+          "REVENUE_MODEL"
+        ],
+        "expected": {
+          "error": "duplicate",
+          "mentions": [
+            "ANALYTICS.PUBLIC.REVENUE_MODEL",
+            "REVENUE_MODEL"
           ]
         }
       },
