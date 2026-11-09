@@ -69,7 +69,7 @@
     ]
   },
   "specifications": {
-    "description": "A view's id, its YAML specification exactly as Snowflake returns it, and the model read from it. `description` is the comment `SHOW SEMANTIC VIEWS` reported, used when the YAML has none. Entries may be a list or a mapping keyed by name. Members marked private are dropped, `labels` containing `filter` (in any case) marks a dimension or fact usable as a named filter, and a member's type is its `data_type`. A base table's database, schema, and table are SQL identifiers: a quoted one is exact, with doubled quotes undone, an unquoted one is upper-cased, and a missing database or schema is the view's own. Dependencies are complete only when every table names one and there is at least one. `expected` is either the model, or `unsupported` with the reason when a variable has no bindable type.",
+    "description": "A view's id, its YAML specification exactly as Snowflake returns it, and the model read from it. `description` is the comment `SHOW SEMANTIC VIEWS` reported, used when the YAML has none. Entries may be a list or a mapping keyed by name. Members marked private are dropped, `labels` containing `filter` (in any case) marks a dimension or fact usable as a named filter, and a member's type is its `data_type`. A base table's database, schema, and table are SQL identifiers: a quoted one is exact, with doubled quotes undone, an unquoted one is upper-cased, and a missing database or schema is the view's own. Dependencies are complete only when every table names one and there is at least one. `expected` is either the model, or `unsupported` with the reason when a variable cannot be bound: its type is missing or not bindable, its name is declared twice, or its default is null or is not a literal of its type.",
     "cases": [
       {
         "name": "a parameterized view in the list form Snowflake returns",
@@ -508,6 +508,54 @@
         "yaml": "variables:\n  - name: payload\ntables:\n  - name: orders\n    base_table: {table: ORDERS}\n",
         "expected": {
           "unsupported": "Snowflake semantic parameter \"payload\" has unsupported type \"missing\"."
+        }
+      },
+      {
+        "name": "a variable declared twice makes the view unsupported",
+        "id": {
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "REVENUE_MODEL"
+        },
+        "yaml": "variables:\n  - name: since\n    data_type: DATE\n  - name: since\n    data_type: DATE\ntables:\n  - name: orders\n    base_table: {table: ORDERS}\n",
+        "expected": {
+          "unsupported": "Snowflake semantic parameter \"since\" is declared more than once."
+        }
+      },
+      {
+        "name": "a null default makes the view unsupported",
+        "id": {
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "REVENUE_MODEL"
+        },
+        "yaml": "variables:\n  - name: since\n    data_type: DATE\n    default_value: null\ntables:\n  - name: orders\n    base_table: {table: ORDERS}\n",
+        "expected": {
+          "unsupported": "Snowflake semantic parameter \"since\" has a default that is not a date value."
+        }
+      },
+      {
+        "name": "an expression as a default makes the view unsupported",
+        "id": {
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "REVENUE_MODEL"
+        },
+        "yaml": "variables:\n  - name: since\n    data_type: DATE\n    default_value: CURRENT_DATE()\ntables:\n  - name: orders\n    base_table: {table: ORDERS}\n",
+        "expected": {
+          "unsupported": "Snowflake semantic parameter \"since\" has a default that is not a date value."
+        }
+      },
+      {
+        "name": "a default that does not match its type makes the view unsupported",
+        "id": {
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "REVENUE_MODEL"
+        },
+        "yaml": "variables:\n  - name: active\n    data_type: BOOLEAN\n    default_value: 'yes'\ntables:\n  - name: orders\n    base_table: {table: ORDERS}\n",
+        "expected": {
+          "unsupported": "Snowflake semantic parameter \"active\" has a default that is not a logical value."
         }
       },
       {

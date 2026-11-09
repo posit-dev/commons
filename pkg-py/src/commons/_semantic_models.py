@@ -96,7 +96,7 @@ class SemanticStub:
 
 
 class UnsupportedSemanticParameter(ValueError):
-    """A semantic parameter declares a type commons cannot bind."""
+    """A semantic parameter commons cannot bind: its type, name, or default."""
 
 
 def spec_entries(entries: Any) -> list[dict[str, Any]]:
@@ -173,16 +173,26 @@ def parameters_from_spec(entries: Any, backend: str) -> dict[str, TypedParameter
                 f"{(declared if declared is not None else 'missing')!r}."
             )
         if name in parameters:
-            raise ValueError(f"{backend} semantic parameter names must be unique.")
+            raise UnsupportedSemanticParameter(
+                f"{backend} semantic parameter {name!r} is declared more than once."
+            )
         has_default = default_field in entry
+        default = _coerce_default(entry[default_field], type_) if has_default else None
+        if has_default:
+            try:
+                _check_value(name, default, type_)
+            except ValueError:
+                article = "an" if type_ == "integer" else "a"
+                raise UnsupportedSemanticParameter(
+                    f"{backend} semantic parameter {name!r} has a default that is "
+                    f"not {article} {type_} value."
+                ) from None
         description = entry.get("description") or entry.get("comment")
         parameters[name] = TypedParameter(
             name=name,
             type=type_,
             description=description,
-            default=(
-                _coerce_default(entry[default_field], type_) if has_default else None
-            ),
+            default=default,
             has_default=has_default,
         )
     return parameters

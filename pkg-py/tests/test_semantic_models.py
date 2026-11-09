@@ -38,17 +38,6 @@ def test_unsupported_parameter_raises():
     assert "'VARIANT'" in str(err.value)
 
 
-def test_duplicate_parameter_names_raise():
-    with pytest.raises(ValueError, match="must be unique"):
-        parameters_from_spec(
-            [
-                {"name": "a", "data_type": "DATE"},
-                {"name": "a", "data_type": "DATE"},
-            ],
-            "Snowflake",
-        )
-
-
 def _params():
     return parameters_from_spec(
         [
@@ -96,18 +85,13 @@ def test_stub_kind():
     assert stub.kind == "semantic_view"
 
 
-def test_invalid_defaults_raise():
-    for default in (None, "not-a-date", 10**400):
-        with pytest.raises(ValueError, match="'d' must be"):
+def test_an_overflowing_default_is_unsupported():
+    for data_type in ("DATE", "NUMBER"):
+        with pytest.raises(UnsupportedSemanticParameter, match="has a default"):
             parameters_from_spec(
-                [{"name": "d", "data_type": "DATE", "default_value": default}],
+                [{"name": "d", "data_type": data_type, "default_value": 10**400}],
                 "Snowflake",
             )
-    with pytest.raises(ValueError, match="'n' must be"):
-        parameters_from_spec(
-            [{"name": "n", "data_type": "NUMBER", "default_value": 10**400}],
-            "Snowflake",
-        )
 
 
 def test_huge_integer_argument_is_rejected_not_overflowed():
