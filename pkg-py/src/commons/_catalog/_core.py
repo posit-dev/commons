@@ -209,7 +209,9 @@ def _selector_id(selector: Selector) -> TableId:
     )
 
 
-def check_object_limit(count: int, object_limit: int = OBJECT_LIMIT) -> None:
+def check_object_limit(count: int, object_limit: int | None = None) -> None:
+    if object_limit is None:
+        object_limit = OBJECT_LIMIT
     if count > object_limit:
         raise ValueError(
             f"The selection resolves to {count} objects, above the "

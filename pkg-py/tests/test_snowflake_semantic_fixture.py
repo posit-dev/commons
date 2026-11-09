@@ -148,7 +148,8 @@ def test_metric_sql() -> None:
 
 
 @pytest.mark.parametrize("case", cases("selection"), ids=lambda c: c["name"])
-def test_selection(case: dict[str, Any]) -> None:
+def test_selection(case: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
+    from commons._catalog import _core
     from commons._catalog._import import import_catalog
 
     from ._semantic_fixture import assert_fixture_error
@@ -160,6 +161,8 @@ def test_selection(case: dict[str, Any]) -> None:
         semantic_views=warehouse["semantic_views"],
         semantic_listing_fails=bool(case.get("semantic_listing_fails")),
     )
+    if "object_limit" in case:
+        monkeypatch.setattr(_core, "OBJECT_LIMIT", case["object_limit"])
     expected = case["expected"]
     if "error" in expected:
         with pytest.raises(ValueError) as raised:

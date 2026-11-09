@@ -777,6 +777,9 @@ test_that("Snowflake semantic view selection follows the shared fixture", {
       dbGetQuery = fixture_snowflake_reply(warehouse),
       .package = "DBI"
     )
+    if (!is.null(case$object_limit)) {
+      local_mocked_bindings(catalog_object_limit = as.integer(case$object_limit))
+    }
     result <- tryCatch(
       snowflake_table_registry(
         DBI::ANSI(),

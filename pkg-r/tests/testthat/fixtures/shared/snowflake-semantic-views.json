@@ -912,7 +912,7 @@
     ]
   },
   "selection": {
-    "description": "Which semantic views a `tables` selection reads up front, which it leaves as stubs, and which relations remain tables. A view an entry names exactly is read up front and keeps the label it was named by, and one that cannot be used fails the selection. A namespace's views are stubs, read only when inspected or used, so one that cannot be used is found out then. A view over exactly named relations is read up front when those relations include every table it reads, and is skipped quietly when it cannot be read or used. `exclude` drops views by name, and a listing that fails lists no views. `warehouse` is the catalog every case reads, all in ANALYTICS.PUBLIC, whose current namespace it is.",
+    "description": "Which semantic views a `tables` selection reads up front, which it leaves as stubs, and which relations remain tables. A view an entry names exactly is read up front and keeps the label it was named by, and one that cannot be used fails the selection. A namespace's views are stubs, read only when inspected or used, so one that cannot be used is found out then. A view over exactly named relations is read up front when those relations include every table it reads, and is skipped quietly when it cannot be read or used, or when a table it reads names no table. `exclude` drops views by name, and a listing that fails lists no views. Views count toward the object limit with relations, as `catalog-merge.json` sets it; a case's `object_limit` lowers it, and the views listed beside an exact relation count before any is read. `warehouse` is the catalog every case reads, all in ANALYTICS.PUBLIC, whose current namespace it is.",
     "warehouse": {
       "relations": [
         "SALES",
@@ -921,7 +921,9 @@
       "semantic_views": {
         "REVENUE_MODEL": "name: revenue\ntables:\n  - name: orders\n    base_table: {database: ANALYTICS, schema: PUBLIC, table: ORDERS}\n    metrics:\n      - name: revenue\n",
         "ACROSS_MODEL": "tables:\n  - name: orders\n    base_table: {database: ANALYTICS, schema: PUBLIC, table: ORDERS}\n    metrics:\n      - name: revenue\n  - name: sales\n    base_table: {database: ANALYTICS, schema: PUBLIC, table: SALES}\n",
-        "PAYLOAD_MODEL": "variables:\n  - name: payload\n    data_type: VARIANT\ntables:\n  - name: orders\n    base_table: {database: ANALYTICS, schema: PUBLIC, table: ORDERS}\n    metrics:\n      - name: revenue\n"
+        "PAYLOAD_MODEL": "variables:\n  - name: payload\n    data_type: VARIANT\ntables:\n  - name: orders\n    base_table: {database: ANALYTICS, schema: PUBLIC, table: ORDERS}\n    metrics:\n      - name: revenue\n",
+        "BROKEN_MODEL": "tables: [orders\n",
+        "PARTIAL_MODEL": "tables:\n  - name: orders\n    base_table: {database: ANALYTICS, schema: PUBLIC, table: ORDERS}\n    metrics:\n      - name: revenue\n  - name: other\n    base_table: {database: ANALYTICS, schema: PUBLIC}\n"
       }
     },
     "cases": [
@@ -937,7 +939,9 @@
           "stubs": [
             "ANALYTICS.PUBLIC.REVENUE_MODEL",
             "ANALYTICS.PUBLIC.ACROSS_MODEL",
-            "ANALYTICS.PUBLIC.PAYLOAD_MODEL"
+            "ANALYTICS.PUBLIC.PAYLOAD_MODEL",
+            "ANALYTICS.PUBLIC.BROKEN_MODEL",
+            "ANALYTICS.PUBLIC.PARTIAL_MODEL"
           ]
         }
       },
@@ -1014,7 +1018,9 @@
           ],
           "models": [],
           "stubs": [
-            "ANALYTICS.PUBLIC.ACROSS_MODEL"
+            "ANALYTICS.PUBLIC.ACROSS_MODEL",
+            "ANALYTICS.PUBLIC.BROKEN_MODEL",
+            "ANALYTICS.PUBLIC.PARTIAL_MODEL"
           ]
         }
       },
@@ -1057,6 +1063,49 @@
           "mentions": [
             "ANALYTICS.PUBLIC.PAYLOAD_MODEL",
             "VARIANT"
+          ]
+        }
+      },
+      {
+        "name": "exclude drops an exactly named view",
+        "tables": [
+          "ANALYTICS.PUBLIC.REVENUE_MODEL",
+          "ANALYTICS.PUBLIC.ORDERS"
+        ],
+        "exclude": [
+          "REVENUE*"
+        ],
+        "expected": {
+          "tables": [
+            "ANALYTICS.PUBLIC.ORDERS"
+          ],
+          "models": [],
+          "stubs": []
+        }
+      },
+      {
+        "name": "a namespace's listed views count toward the object limit",
+        "tables": null,
+        "object_limit": 6,
+        "expected": {
+          "error": "object limit",
+          "mentions": [
+            "7 objects",
+            "limit of 6"
+          ]
+        }
+      },
+      {
+        "name": "the views listed beside an exact relation count toward the object limit before they are read",
+        "tables": [
+          "ANALYTICS.PUBLIC.ORDERS"
+        ],
+        "object_limit": 5,
+        "expected": {
+          "error": "object limit",
+          "mentions": [
+            "6 objects",
+            "limit of 5"
           ]
         }
       },
