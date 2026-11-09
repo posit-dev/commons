@@ -1,5 +1,7 @@
 # commons (development version)
 
+* `data_source()` errors when a `dictionary` file has no top-level `tables` field, rather than silently loading an empty dictionary (#473).
+
 * `data_source()` imports Databricks metric views from Unity Catalog through ODBC. It previously listed them as plain views and could not read their definitions (#496).
 
 * `describe_table` shows at most 50 columns and reports how many additional columns it omits, keeping wide-table descriptions compact. Columns documented in the data dictionary are shown first. The system prompt no longer limits the agent to columns that `describe_table` or `search_context` confirmed (#475).

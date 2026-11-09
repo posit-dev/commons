@@ -1,10 +1,21 @@
 """Reading data-dict.yaml and rendering its three channels."""
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from commons._data_dictionary import DataDictionary, as_data_dictionary
+
+from ._shared import load_shared_fixture
+
+READ_CASES: list[dict[str, Any]] = load_shared_fixture("data-dictionary-read")[
+    "read_dictionary_file"
+]["cases"]
+
+# The fixture pins the refusal as a slug; the wording belongs to each
+# language.
+READ_ERRORS: dict[str, str] = {"missing_tables": "no top-level `tables`"}
 
 RETAIL = """
 name: retail sales
@@ -50,6 +61,27 @@ def retail(tmp_path: Path) -> DataDictionary:
 
 
 # ---- reading -------------------------------------------------------------
+
+
+def test_shared_read_fixture_covers_every_outcome() -> None:
+    assert READ_CASES
+    assert any("tables" in case for case in READ_CASES)
+    assert {case["error"] for case in READ_CASES if "error" in case} == set(READ_ERRORS)
+
+
+@pytest.mark.parametrize("case", READ_CASES, ids=lambda case: case["name"])
+def test_reading_a_file_matches_the_shared_fixture(
+    case: dict[str, Any], tmp_path: Path
+) -> None:
+    path = tmp_path / "data-dict.yaml"
+    path.write_text(case["yaml"], encoding="utf-8")
+
+    if "error" in case:
+        with pytest.raises(ValueError, match=READ_ERRORS[case["error"]]):
+            DataDictionary.from_path(path)
+        return
+
+    assert list(DataDictionary.from_path(path).tables) == case["tables"]
 
 
 def test_tables_and_columns_are_keyed_by_name(retail: DataDictionary) -> None:
@@ -110,13 +142,6 @@ def test_a_typed_column_missing_its_range_is_not_an_error(
 ) -> None:
     # The reader ignores the parts of the spec it never inspects.
     assert retail.tables["sales"].columns["revenue"].range is None
-
-
-def test_an_empty_file_reads_as_an_empty_dictionary(tmp_path: Path) -> None:
-    path = tmp_path / "d.yaml"
-    path.write_text("", encoding="utf-8")
-
-    assert DataDictionary.from_path(path).tables == {}
 
 
 def test_multi_line_prose_is_kept_as_authored(tmp_path: Path) -> None:

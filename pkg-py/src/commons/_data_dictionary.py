@@ -177,7 +177,13 @@ class DataDictionary(_Permissive):
     def from_path(cls, path: str | Path) -> DataDictionary:
         """Read a data-dict.yaml file. The YAML is the only input."""
         text = Path(path).read_text(encoding="utf-8")
-        return cls.model_validate(yaml.safe_load(text) or {})
+        raw = yaml.safe_load(text) or {}
+        if not isinstance(raw, dict) or "tables" not in raw:
+            raise ValueError(
+                f"The data dictionary at {path} has no top-level `tables` field. "
+                "List each table, with its columns, under `tables:`."
+            )
+        return cls.model_validate(raw)
 
     # ---- channel 1: always in the prompt ---------------------------------
 
