@@ -908,17 +908,14 @@ test_that("verified queries run as the shared fixture says", {
       semantic_views = list(REVENUE_MODEL = case$yaml)
     )
     source <- test_source()
+    state <- data_source_state(source)
     reply <- fixture_snowflake_reply(warehouse)
-    catalog <- c(
-      "SELECT CURRENT_DATABASE()",
-      "SHOW OBJECTS",
-      "SHOW SEMANTIC VIEWS",
-      "SELECT SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW"
-    )
     sent <- NULL
+    # The catalog is read over DBI::ANSI(); the calculation runs on the
+    # source's own connection.
     local_mocked_bindings(
       dbGetQuery = function(con, sql, ...) {
-        if (any(startsWith(sql, catalog))) {
+        if (!identical(con, state$con)) {
           return(reply(con, sql, ...))
         }
         sent <<- sql
@@ -932,7 +929,6 @@ test_that("verified queries run as the shared fixture says", {
       }
     )
     registry <- snowflake_table_registry(DBI::ANSI())
-    state <- data_source_state(source)
     state$semantic_stubs <- registry$semantic_stubs
     call_calculation_impl(
       list(warehouse = source),
