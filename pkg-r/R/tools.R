@@ -856,6 +856,8 @@ search_context_tool <- function(context, query) {
   )
 }
 
+describe_table_max_columns <- 50L
+
 describe_table_tool <- function(
   source,
   table,
@@ -894,7 +896,7 @@ describe_table_tool <- function(
       sprintf(
         "Columns of `%s`:\n\n%s",
         table,
-        df_to_markdown(d$schema, max_rows = nrow(d$schema))
+        describe_schema_text(d$schema)
       ),
       sep = "\n\n"
     )
@@ -922,7 +924,7 @@ describe_table_tool <- function(
       sprintf(
         "Columns of `%s`:\n\n%s",
         table,
-        df_to_markdown(d$schema, max_rows = nrow(d$schema))
+        describe_schema_text(d$schema)
       ),
       context
     )
@@ -930,7 +932,11 @@ describe_table_tool <- function(
     columns <- sprintf(
       "Columns of `%s`:\n\n%s",
       table,
-      dictionary_columns_text(entry$columns, live = d$schema)
+      dictionary_columns_text(
+        entry$columns,
+        live = d$schema,
+        max_columns = describe_table_max_columns
+      )
     )
     parts <- c(
       relation,
@@ -952,6 +958,18 @@ describe_table_tool <- function(
     icon = maybe_icon("table"),
     markdown = body
   )
+}
+
+describe_schema_text <- function(schema) {
+  shown <- utils::head(schema, describe_table_max_columns)
+  paste0(
+    df_to_markdown(shown, max_rows = nrow(shown)),
+    omitted_columns_note(nrow(schema) - nrow(shown))
+  )
+}
+
+omitted_columns_note <- function(n) {
+  if (n > 0) sprintf("\n\nAdditional columns not shown: %d", n) else ""
 }
 
 run_sql_tool <- function(

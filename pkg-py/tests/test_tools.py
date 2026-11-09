@@ -18,6 +18,7 @@ from commons._catalog import (
     session_snapshot,
 )
 from commons._citations import CitationRequest
+from commons._data_dictionary import DataDictionary
 from commons._data_source import TableId
 from commons._definitions import ExportRecord, Registry
 from commons._handles import HandleStore
@@ -399,7 +400,7 @@ def test_describe_table_reports_native_types_without_exposing_row_values() -> No
         assert value not in body
 
 
-def test_describe_table_reports_every_column_in_wide_tables() -> None:
+def test_describe_table_caps_wide_table_schemas() -> None:
     spec = load_shared_fixture("describe-table")["wide_duckdb"]
     column_names = [
         spec["column_name_template"] % index
@@ -418,13 +419,32 @@ def test_describe_table_reports_every_column_in_wide_tables() -> None:
         )
         tools = build_commons_tools(ToolContext(sources={"sales_db": source}))
         body = call(find(tools, "describe_table"), table=spec["table"])
+        source.dictionary = DataDictionary(
+            tables={
+                spec["table"]: {
+                    "columns": {
+                        spec["documented_column"]: {
+                            "description": spec["documented_description"]
+                        }
+                    }
+                }
+            }
+        )
+        documented = call(find(tools, "describe_table"), table=spec["table"])
     finally:
         connection.close()
 
     expected = [
-        {"column": column, "type": spec["column_type"]} for column in column_names
+        {"column": column, "type": spec["column_type"]}
+        for column in column_names[: spec["max_columns"]]
     ]
-    assert rows_to_markdown(expected, max_rows=len(expected)) in body
+    assert rows_to_markdown(expected, max_rows=spec["max_columns"]) in body
+    assert spec["omission_note"] in body
+    assert column_names[-1] not in body
+
+    assert spec["omission_note"] in documented
+    assert spec["documented_description"] in documented
+    assert spec["omitted_when_documented"] not in documented
 
 
 def test_describe_table_delivers_the_dictionary_entry(documented: DataSource) -> None:
