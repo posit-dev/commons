@@ -3,6 +3,11 @@
 ## commons (development version)
 
 - [`data_source()`](https://posit-dev.github.io/commons/r/dev/reference/data_source.md)
+  errors when a `dictionary` file has no top-level `tables` field,
+  rather than silently loading an empty dictionary
+  ([\#473](https://github.com/posit-dev/commons/issues/473)).
+
+- [`data_source()`](https://posit-dev.github.io/commons/r/dev/reference/data_source.md)
   imports Databricks metric views from Unity Catalog through ODBC. It
   previously listed them as plain views and could not read their
   definitions
