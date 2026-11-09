@@ -2,6 +2,12 @@
 
 ## commons (development version)
 
+- [`data_source()`](https://posit-dev.github.io/commons/r/dev/reference/data_source.md)
+  imports Databricks metric views from Unity Catalog through ODBC. It
+  previously listed them as plain views and could not read their
+  definitions
+  ([\#496](https://github.com/posit-dev/commons/issues/496)).
+
 - `describe_table` shows at most 50 columns and reports how many
   additional columns it omits, keeping wide-table descriptions compact.
   Columns documented in the data dictionary are shown first. The system
