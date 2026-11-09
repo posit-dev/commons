@@ -83,13 +83,14 @@ def test_resolution(case: dict[str, Any]) -> None:
 @pytest.mark.parametrize("case", cases("metric_origin"), ids=lambda c: c["name"])
 def test_metric_origin(case: dict[str, Any]) -> None:
     definitions = [_definition(spec) for spec in SPEC["models"]["definitions"]]
+    unread = [stub["label"] for stub in SPEC["models"]["stubs"]]
     if "error" in case["expected"]:
         with pytest.raises(ValueError) as raised:
-            metric_origin(case["name"], definitions, _members())
+            metric_origin(case["name"], definitions, _members(), unread)
         assert_fixture_error(raised.value, case["expected"])
         return
     assert (
-        metric_origin(case["name"], definitions, _members())
+        metric_origin(case["name"], definitions, _members(), unread)
         == case["expected"]["origin"]
     )
 

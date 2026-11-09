@@ -377,7 +377,7 @@
     ]
   },
   "metric_origin": {
-    "description": "Which pool a metric name belongs to when data-dict metric definitions and native semantic metrics share a source. A definition answers to `name` or `table::name`. A name both pools answer to is ambiguous, and must be qualified.",
+    "description": "Which pool a metric name belongs to when data-dict metric definitions and native semantic metrics share a source. A definition answers to `name` or `table::name`. A name both pools answer to is ambiguous, and must be qualified. A name no pool answers to is refused with the metrics available and, when the source lists models it has not read, those models' labels, since only a `MODEL::metric` name reaches their metrics.",
     "cases": [
       {
         "name": "net_revenue",
@@ -436,7 +436,10 @@
             "nothing",
             "net_revenue",
             "order_count",
-            "revenue"
+            "revenue",
+            "ANALYTICS.PUBLIC.LEDGER_MODEL",
+            "ANALYTICS.PUBLIC.EMPTY_MODEL",
+            "MODEL::metric"
           ]
         }
       }

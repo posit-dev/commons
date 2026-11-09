@@ -271,7 +271,8 @@ def call_metrics(
     defs = registry.for_source(label)
     hydrate(source, metrics)
     members = semantic_registry({label: source}).members
-    origins = {metric_origin(name, defs, members) for name in metrics}
+    unread = [s for s in source.semantic_stubs if s not in source.semantic_models]
+    origins = {metric_origin(name, defs, members, unread) for name in metrics}
     if len(origins) > 1:
         raise ValueError(
             "Metrics in one call must come from either data-dict definitions or "

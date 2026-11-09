@@ -55,7 +55,9 @@ query_metrics <- function(
   semantic_models <- semantic_models_registry(sources)
   defs <- registry_defs(registry, label)
   semantic_members <- registry_semantic_members(semantic_models, label)
-  origins <- resolve_metric_origins(metrics, defs, semantic_members)
+  state <- data_source_state(source)
+  unread <- setdiff(names(state$semantic_stubs), names(state$semantic_models))
+  origins <- resolve_metric_origins(metrics, defs, semantic_members, unread)
   if (length(unique(origins)) > 1L) {
     cli::cli_abort(
       "Metrics in one call must come from either data-dict definitions or one native semantic model."
@@ -171,7 +173,12 @@ query_metrics <- function(
   )
 }
 
-resolve_metric_origins <- function(metrics, definitions, semantic_members) {
+resolve_metric_origins <- function(
+  metrics,
+  definitions,
+  semantic_members,
+  unread = character()
+) {
   metrics <- strip_token_braces(metrics %||% character())
   if (length(metrics) == 0L) {
     cli::cli_abort("{.arg metrics} must contain at least one metric name.")
@@ -181,11 +188,19 @@ resolve_metric_origins <- function(metrics, definitions, semantic_members) {
     metric_origin,
     character(1),
     definitions = definitions,
-    semantic_members = semantic_members
+    semantic_members = semantic_members,
+    unread = unread
   )
 }
 
-metric_origin <- function(name, definitions, semantic_members) {
+# `unread` are the labels of models listed but not read, whose metrics only a
+# `MODEL::metric` name reaches.
+metric_origin <- function(
+  name,
+  definitions,
+  semantic_members,
+  unread = character()
+) {
   definition_named <- pool_name_candidates(name, definitions)
   definition_metrics <- definition_named[
     definition_named$kind == "metric",
@@ -231,6 +246,12 @@ metric_origin <- function(name, definitions, semantic_members) {
         "Available metrics: {.val {available}}."
       } else {
         "No governed metrics are defined."
+      },
+      "i" = if (length(unread)) {
+        paste(
+          "Semantic models not read yet: {.val {unread}}.",
+          "Name a metric on one as {.code MODEL::metric}, or inspect one with describe_table."
+        )
       }
     ))
   }

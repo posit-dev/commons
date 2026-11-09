@@ -459,8 +459,17 @@ def resolve_filters(names: list[str] | None, rows: list[MemberRow]) -> list[Memb
     return resolve_members(names, filters, "filter")
 
 
-def metric_origin(name: str, definitions: Sequence[Any], rows: list[MemberRow]) -> str:
-    """Whether a metric name is a data-dict definition or a native metric."""
+def metric_origin(
+    name: str,
+    definitions: Sequence[Any],
+    rows: list[MemberRow],
+    unread: Sequence[str] = (),
+) -> str:
+    """Whether a metric name is a data-dict definition or a native metric.
+
+    `unread` are the labels of models listed but not read, whose metrics
+    only a `MODEL::metric` name reaches.
+    """
     from ._pool import _candidates
 
     name = _strip_braces(name)
@@ -488,13 +497,18 @@ def metric_origin(name: str, definitions: Sequence[Any], rows: list[MemberRow]) 
     available = [d.name for d in definitions if d.kind == "metric"] + [
         row.name for row in rows if row.kind == "metric"
     ]
-    if available:
-        raise ValueError(
-            f"No governed metric is named {name!r}. Available metrics: {_vals(available)}."
-        )
-    raise ValueError(
-        f"No governed metric is named {name!r}. No governed metrics are defined."
+    listed = (
+        f"Available metrics: {_vals(available)}."
+        if available
+        else "No governed metrics are defined."
     )
+    unread_text = (
+        f" Semantic models not read yet: {_vals(list(unread))}. Name a metric on "
+        "one as `MODEL::metric`, or inspect one with describe_table."
+        if unread
+        else ""
+    )
+    raise ValueError(f"No governed metric is named {name!r}. {listed}{unread_text}")
 
 
 _NUMERIC = re.compile(r"-?[0-9]+(\.[0-9]+)?")

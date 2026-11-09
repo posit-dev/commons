@@ -500,7 +500,12 @@ test_that("metric origins follow the shared fixture", {
   expect_gt(length(cases), 0)
   for (case in cases) {
     result <- tryCatch(
-      metric_origin(strip_token_braces(case$name), defs, members),
+      metric_origin(
+        strip_token_braces(case$name),
+        defs,
+        members,
+        unread = vapply(spec$models$stubs, `[[`, character(1), "label")
+      ),
       error = function(err) err
     )
     if (is.null(case$expected$error)) {
