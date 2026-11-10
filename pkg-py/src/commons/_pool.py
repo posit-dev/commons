@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any
 from chatlas import ContentToolResult
 from sqlglot import expressions as exp
 
+from ._catalog import _databricks, _snowflake
 from ._catalog import _databricks_semantic as databricks_semantic
 from ._catalog._snowflake_semantic import metric_sql
 from ._citations import tool_result
@@ -596,4 +597,9 @@ def _quote_name(name: str, dialect: str | None) -> str:
 
 
 def _quote_string(value: str, dialect: str | None) -> str:
+    """A string literal, written by the warehouse's own rule where it has one."""
+    if dialect == "snowflake":
+        return _snowflake._quote_string(value)
+    if dialect == "databricks":
+        return _databricks._quote_string(value)
     return exp.Literal.string(value).sql(dialect=dialect)

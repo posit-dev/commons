@@ -1,0 +1,41 @@
+{
+  "description": "The string literal a `where` value becomes when call_metrics compares a column to it. DuckDB reads a backslash literally and escapes a quote by doubling it. Snowflake and Databricks read a backslash as an escape, so it is doubled. Databricks also joins adjacent literals, so `'O''Brien'` reads as `OBrien` there, and a quote is escaped with a backslash instead. A value the model writes therefore filters on the same string in either package.",
+  "cases": [
+    {
+      "name": "a plain word",
+      "value": "north",
+      "literals": {
+        "duckdb": "'north'",
+        "snowflake": "'north'",
+        "databricks": "'north'"
+      }
+    },
+    {
+      "name": "a quote",
+      "value": "O'Brien",
+      "literals": {
+        "duckdb": "'O''Brien'",
+        "snowflake": "'O''Brien'",
+        "databricks": "'O\\'Brien'"
+      }
+    },
+    {
+      "name": "backslashes, one of them last",
+      "value": "C:\\temp\\",
+      "literals": {
+        "duckdb": "'C:\\temp\\'",
+        "snowflake": "'C:\\\\temp\\\\'",
+        "databricks": "'C:\\\\temp\\\\'"
+      }
+    },
+    {
+      "name": "a backslash before a quote",
+      "value": "a\\'b",
+      "literals": {
+        "duckdb": "'a\\''b'",
+        "snowflake": "'a\\\\''b'",
+        "databricks": "'a\\\\\\'b'"
+      }
+    }
+  ]
+}
