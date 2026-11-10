@@ -84,6 +84,8 @@ Reconcile new evidence with earlier assumptions and decisions as it appears. Sur
 
    When the environment has several data layers or sources, create a legible data-flow HTML diagram showing the relevant end-to-end flow and where the commons agent would operate. Ask the user to correct or confirm the resulting understanding.
 
+   When two sources, tables, or trusted artifacts could answer the same question, such as a curated mart and the raw tables beneath it, compute the answer each way and compare. If they disagree, trace the cause and ask the user which is right; recommend fixing it upstream, such as by retiring a stale table, rather than working around it in commons. If both sources stay, record which one should answer which questions in their dictionary entries.
+
 5. **Confirm trust, scope, and the data boundary.** Identify which layer or layers the agent could access, such as warehouse tables, views, pins, or pipeline outputs. Present the tradeoffs and recommend the cleanest ready-to-analyze source that fits the user's environment.
 
    Prefer data whose preparation and quality controls are managed outside commons. A commons agent is not a data preparation pipeline: measures should implement analysis, not routine cleaning or substantial reshaping. For example, prefer a maintained table or view that already applies the required preparation over reimplementing that preparation inside a measure, unless ownership or control requirements point elsewhere.

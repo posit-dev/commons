@@ -47,7 +47,7 @@ The user decides which artifacts and calculations are trusted. Do not treat code
 
 6. Draft free-text context. Knowledge that is neither a callable calculation nor table/column-scoped — methodology prose, business rules, terminology — goes to `context/<artifact>.md`, one file per artifact. Carry the provenance string in YAML frontmatter (`context_layer()` strips frontmatter before indexing, so it never reaches the model).
 
-7. Reconcile against existing context. Classify each candidate against what the agent already has:
+7. Reconcile against existing context. Judge "same concept" by what a result means, not by its name: compare each candidate with existing measures and definitions that read the same tables or answer a similar question, running both where they overlap. Classify each candidate against what the agent already has:
    - **new** — add it.
    - **duplicate** — same concept, same computation: do not create another contribution. For a measure, add `@provenance` to the existing measure.
    - **extension** — same concept, superset behavior: propose editing the existing contribution. For a measure, add the relevant `@param` and `@provenance` entries. Never create `revenue2`.
@@ -58,3 +58,5 @@ The user decides which artifacts and calculations are trusted. Do not treat code
 9. Validate. Confirm `semantic_layer("measures/")` loads without error. Validate dictionary edits and governed definitions using the [data dictionary reference](data-dictionaries.md).
 
    Run each accepted measure and governed definition against the live source with representative inputs. Compare its value, shape, grouping, filtering, and missing-value behavior with the original artifact computation. Resolve mismatches before treating extraction as complete. If the original and extracted computations cannot both be run, record that fidelity remains unverified.
+
+   Then check that the agent reaches for each accepted measure: ask a fresh agent one or two questions a user might ask, without naming the measure, and look in `agent$get_turns()` for a `call_measure` request naming it. If the agent misses it, improve the measure's documentation, not by adding wording that only matches the test question.
