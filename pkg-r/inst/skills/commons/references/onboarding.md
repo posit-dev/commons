@@ -80,6 +80,8 @@ Reconcile new evidence with earlier assumptions and decisions as it appears. Sur
 
    If supplied materials include domains or artifacts whose relevance to the intended scope is unclear, surface that uncertainty. When a smaller first scope would materially reduce implementation risk or help the user validate the design sooner, explain that benefit and recommend what to defer. Treat this as a decision point, not a prerequisite: if the user chooses to implement the full scope now, accept that decision and proceed without repeatedly pushing to narrow it. Do not treat distribution across multiple repositories as a reason by itself to reduce scope.
 
+   Encourage fewer agents rather than more. When the user already has a commons agent, consider extending it to a new domain before creating a separate one. Most of what an agent knows, such as measures, table details, and context, is retrieved only when a question needs it, so covering more domains adds little to every conversation as long as dataset-level dictionary text and instructions stay concise. A separate agent makes sense when there is a concrete reason, such as a different audience or different data permissions.
+
 4. **Investigate the data and artifacts.** Inspect the supplied data, documentation, schemas, source code, and data pipelines. Run scratch code to understand table grain, joins, transformations, update processes, and surprising behavior that may need to appear in a data dictionary.
 
    When the environment has several data layers or sources, create a legible data-flow HTML diagram showing the relevant end-to-end flow and where the commons agent would operate. Ask the user to correct or confirm the resulting understanding.
