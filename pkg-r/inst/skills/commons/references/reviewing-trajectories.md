@@ -18,10 +18,14 @@ Map recorded provenance tags A/B/C to the outcomes **Trusted / Cited / Untrusted
 
 ## Plot trust over time
 
-Plot daily or weekly shares of each outcome, including Unclassified. Show counts and denominators, widen sparse bins, and distinguish missing data from zero counts.
+Prefer an interactive 100% stacked area chart of daily or weekly outcome shares, including Unclassified. Put counts and denominators in hover details, not labels on every segment. Widen sparse bins and distinguish missing data from zero counts.
 
 `last_active` is a conversation timestamp, not each answer's time. If using it, label the chart as exchanges grouped by conversation last activity; do not invent exchange timestamps. True answer-time trends require the corresponding raw span timestamps. State the read window and any `n` limit: recent conversations are not a representative sample of all usage.
 
 ## Build the smallest useful reviewer
 
-Prefer self-contained HTML with date/outcome filters, a searchable question list, and a selected transcript showing tool activity and citation decisions. Keep exchanges identifiable and long results expandable. Add persistent flags or notes only if requested.
+Prefer self-contained HTML with a question list and a selected transcript showing tool activity and citation decisions, as well as any other features requested by the user. Keep exchanges identifiable and long results expandable.
+
+Make it as simple as possible unless otherwise requested. Do not add unnecessary styling, filters, buttons, etc.
+
+The purpose is to make a tool for the user that makes it easy for them to look through the trajectories.
