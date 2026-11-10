@@ -4,12 +4,19 @@
 
 /* ---- Chat-level polish ---------------------------------------------- */
 
-/* Wraps a plot or table so a share button can sit at its corner. Loaded with
- * the chat, not the share assets, so outputs lay out the same everywhere. */
+/* Wraps a plot or table so a share button can sit beside its top-right
+ * corner. Loaded with the chat, not the share assets, so outputs lay out the
+ * same everywhere. */
 .commons-shareable {
-  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
   width: fit-content;
   max-width: 100%;
+}
+
+.commons-shareable > :not(.commons-share-output) {
+  min-width: 0;
 }
 
 /* Set shinychat CSS variables */

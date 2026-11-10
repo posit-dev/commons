@@ -17,9 +17,9 @@
       button.type = "button";
       button.className = "commons-share-output";
       button.setAttribute("aria-label", `Share this ${noun}`);
+      button.title = `Share this ${noun}`;
       // The icon comes from the toolbar's share button, so both match.
-      const icon = config().querySelector("svg")?.outerHTML ?? "";
-      button.innerHTML = `${icon}<span>Share</span>`;
+      button.innerHTML = config().querySelector("svg")?.outerHTML ?? "Share";
       el.appendChild(button);
     }
   };

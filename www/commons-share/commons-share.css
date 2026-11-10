@@ -1,33 +1,39 @@
+/* Faint rather than hidden, so it can be found without hovering. */
 .commons-share-output {
-  position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
   display: inline-flex;
+  flex: none;
   align-items: center;
-  gap: 0.3rem;
-  padding: 0.15rem 0.5rem;
+  padding: 0.25rem 0.35rem;
   font-size: 0.8rem;
-  color: var(--bs-body-color);
+  line-height: 1.4;
+  color: var(--bs-secondary-color);
   background: var(--bs-body-bg);
   border: 1px solid var(--bs-border-color);
   border-radius: 0.375rem;
-  opacity: 0;
-  pointer-events: none;
+  opacity: 0.35;
   transition: opacity 0.15s;
 }
 
 .commons-shareable:hover > .commons-share-output,
 .commons-shareable:focus-within > .commons-share-output {
   opacity: 1;
-  pointer-events: auto;
 }
 
-/* Touch screens can't hover, so the button stays visible. */
+.commons-share-output:hover {
+  color: var(--bs-body-color);
+}
+
+/* Touch screens can't hover, so the button stays at full strength. */
 @media (hover: none) {
   .commons-share-output {
     opacity: 1;
-    pointer-events: auto;
   }
+}
+
+/* A plot's own cap of `min(100%, 34rem)` can't size the wrapper, which would
+   otherwise take the image's full width and leave the button adrift. */
+.commons-shareable:has(> .commons-run-plot, > .commons-measure-plot) {
+  max-width: calc(min(100%, 34rem) + 2.25rem);
 }
 
 .commons-share-empty {
