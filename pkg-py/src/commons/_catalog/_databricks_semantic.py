@@ -27,7 +27,7 @@ __all__ = [
     "dependencies",
     "metric_sql",
     "model_from_spec",
-    "probe_sql",
+    "probe_statement",
     "qualified_name_parts",
     "read_semantic_model",
     "relation_kind",
@@ -381,7 +381,7 @@ def relation_reference(model: SemanticModel, names: list[str]) -> str:
     return relation
 
 
-def probe_sql(model: SemanticModel, names: list[str]) -> str | None:
+def probe_statement(model: SemanticModel, names: list[str]) -> str | None:
     """A zero-row query over the view's first measure or dimension."""
     relation = relation_reference(model, names)
     if model.metrics:
