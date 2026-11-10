@@ -8,6 +8,7 @@ without I/O; tests/shared/snowflake-semantic-views.json pins what they read.
 from __future__ import annotations
 
 import re
+from collections import Counter
 from dataclasses import dataclass, replace
 from typing import Any
 
@@ -47,7 +48,7 @@ __all__ = [
     "member_reference",
     "metric_sql",
     "model_from_spec",
-    "probe_sql",
+    "probe_statement",
     "read_semantic_model",
     "relationship_text",
     "select_semantic_views",
@@ -358,7 +359,7 @@ def variables_clause(
     return "VARIABLES " + ", ".join(entries), binds
 
 
-def probe_sql(model: SemanticModel, names: list[str]) -> str | None:
+def probe_statement(model: SemanticModel, names: list[str]) -> str | None:
     """A zero-row query over the view's first public member, if it has one."""
     for role, members in (
         ("METRICS", model.metrics),
@@ -414,11 +415,13 @@ def select_semantic_views(
     # A view named exactly keeps the label it was named by, so the same view
     # reached through its namespace too is found by its warehouse identity.
     keys = [view.identity or view.id for view in views]
+    label_counts = Counter(labels)
+    key_counts = Counter(keys)
     duplicated = list(
         dict.fromkeys(
             label
             for label, key in zip(labels, keys)
-            if labels.count(label) > 1 or keys.count(key) > 1
+            if label_counts[label] > 1 or key_counts[key] > 1
         )
     )
     if duplicated:

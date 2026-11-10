@@ -410,7 +410,7 @@ def probe_semantic_model(backend: Any, model: Any) -> Probe:
     required = [name for name, p in model.parameters.items() if not p.has_default]
     sql = None
     if model.backend == _snowflake_semantic.BACKEND:
-        sql = _snowflake_semantic.probe_sql(model, required)
+        sql = _snowflake_semantic.probe_statement(model, required)
     if sql is None:
         return Probe(
             "unknown", ValueError("The semantic model has no queryable public member.")
