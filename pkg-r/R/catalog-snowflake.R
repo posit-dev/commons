@@ -615,7 +615,7 @@ snowflake_semantic_model_from_spec <- function(
   # A base table without a namespace is in the view's own, which the label a
   # caller wrote need not spell out.
   dependencies <- snowflake_semantic_dependencies(identity, specification)
-  relationships <- specification$relationships %||% list()
+  relationships <- semantic_spec_entries(specification$relationships)
   parameters <- semantic_parameters_from_spec(
     specification$variables,
     "Snowflake"

@@ -230,7 +230,7 @@ def model_from_spec(
             parameters[entry["name"]], sql_type=sql_type(declared)
         )
 
-    relationships = list(spec.get("relationships") or [])
+    relationships = spec_entries(spec.get("relationships"))
     found, complete = dependencies(identity or view_id, spec)
     context = semantic_context(spec, dimensions, facts, filters, relationships)
     name = spec.get("name")

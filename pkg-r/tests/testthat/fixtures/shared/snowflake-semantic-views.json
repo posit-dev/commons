@@ -454,6 +454,44 @@
         }
       },
       {
+        "name": "relationships in the mapping form are named by their keys",
+        "id": {
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "REVENUE_MODEL"
+        },
+        "description": null,
+        "yaml": "metrics:\n  - name: revenue\nrelationships:\n  orders_to_customers:\n    left_table: orders\n    right_table: customers\n    relationship_columns:\n      - left_column: customer_id\n        right_column: id\n",
+        "expected": {
+          "name": "REVENUE_MODEL",
+          "description": null,
+          "dimensions": [],
+          "metrics": [
+            {
+              "name": "revenue",
+              "kind": "metric",
+              "parent": null,
+              "label": null,
+              "description": null,
+              "type": null,
+              "synonyms": [],
+              "filter": false
+            }
+          ],
+          "facts": [],
+          "filters": [],
+          "parameters": {},
+          "dependencies": [],
+          "dependencies_complete": false,
+          "first_touch": [
+            "Semantic relationship `orders_to_customers` links `orders` to `customers` on customer_id = id."
+          ],
+          "retrieval": [
+            "Semantic relationship `orders_to_customers` links `orders` to `customers` on customer_id = id."
+          ]
+        }
+      },
+      {
         "name": "typed variables keep a safe declared SQL type and coerce defaults",
         "id": {
           "catalog": "ANALYTICS",
