@@ -110,7 +110,8 @@ fixture_parameters <- function(specs) {
   stats::setNames(parameters, vapply(specs, `[[`, character(1), "name"))
 }
 
-# Whether an error matches a shared fixture's pinned kind and mentions.
+# Whether an error's message names what a shared fixture pins, and omits
+# what it must not.
 expect_fixture_error <- function(err, expected, info = NULL) {
   expect_s3_class(err, "error")
   message <- cli::ansi_strip(conditionMessage(err))
