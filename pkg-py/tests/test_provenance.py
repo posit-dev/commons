@@ -72,7 +72,7 @@ def test_tag_values_are_the_bare_strings_r_uses() -> None:
 
 def test_tag_formats_as_the_bare_string() -> None:
     # A plain `enum.Enum` formats as "Tag.A", so writing a tag into the span
-    # attribute with an f-string would emit a value the R trajectory reviewer
+    # attribute with an f-string would emit a value a trace reader
     # cannot match, and nothing would error.
     assert str(Tag.A) == "A"
     assert f"{Tag.A}" == "A"

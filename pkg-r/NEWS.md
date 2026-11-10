@@ -1,5 +1,7 @@
 # commons (development version)
 
+* `trajectory_review()` has been removed. The coding-agent skill now includes a brief reference for plotting trust levels over time and building project-specific reviewer apps or read-only reviewer agents from `trajectory_read()` output.
+
 * `data_source()` errors when a `dictionary` file has no top-level `tables` field, rather than silently loading an empty dictionary (#473).
 
 * `data_source()` imports Databricks metric views from Unity Catalog through ODBC. It previously listed them as plain views and could not read their definitions (#496).

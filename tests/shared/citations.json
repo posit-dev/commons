@@ -300,7 +300,7 @@
     ]
   },
   "citation_decision": {
-    "description": "One entry of the commons.citation.candidates JSON array recorded on the provenance span, so the R trajectory reviewer can read a Python trace. label and kind are present only when the quote verified; a malformed body records a null quote.",
+    "description": "One entry of the commons.citation.candidates JSON array recorded on the provenance span, so trajectory_read() can read traces from either implementation. label and kind are present only when the quote verified; a malformed body records a null quote.",
     "cases": [
       {
         "name": "an accepted citation records its source",

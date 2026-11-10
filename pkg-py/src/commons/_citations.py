@@ -115,7 +115,7 @@ class CitationDecision:
     kind: CitationKind | None = None
 
     def __post_init__(self) -> None:
-        # The R reviewer reads this record back out of the span, so a decision
+        # Trace readers use this record's verdict, so a decision
         # that misreports its verdict must not be constructible. Literal is not
         # enforced at runtime, so the vocabulary is checked here too.
         if self.status not in _DECISION_STATUSES:
@@ -144,7 +144,7 @@ class CitationDecision:
             )
 
     def as_record(self) -> dict[str, Any]:
-        """Serialize to the JSON shape the R trajectory reviewer reads."""
+        """Serialize to the shared citation-decision trace record shape."""
         record: dict[str, Any] = {"quote": self.quote, "status": self.status}
         if self.label is not None:
             record["label"] = self.label

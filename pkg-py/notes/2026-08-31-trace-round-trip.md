@@ -2,6 +2,8 @@
 
 Date: 2026-08-31, revised 2026-09-01 after chatlas 0.22.0.
 
+Historical note: the built-in Shiny reviewer has since been removed in favor of coding-agent guidance for project-specific review tools. The trace round-trip findings still apply to `trajectory_read()`; the reviewer plans below are superseded.
+
 ## The question
 
 Decision D5 keeps the Shiny trajectory reviewer in R through the transition. That only works if R's `commons::trajectory_read()` can read traces a Python agent wrote. The envelope format was already known to match on both sides. What was untested is the layer above it: whether R rebuilds `ellmer::Turn` objects from the way chatlas serializes `gen_ai.input.messages` and `gen_ai.output.messages`.
