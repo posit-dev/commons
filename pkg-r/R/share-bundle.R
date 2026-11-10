@@ -5,7 +5,7 @@
 write_conversation_bundle <- function(
   client,
   dir,
-  app_url = NULL,
+  app = list(),
   title = conversation_title(client$get_turns())
 ) {
   store <- client$artifact_store()
@@ -16,7 +16,7 @@ write_conversation_bundle <- function(
   documents <- list()
   for (id in ids) {
     path <- file.path("documents", paste0(id, ".html"))
-    write_document_page(artifact_get(store, id), file.path(dir, path), app_url)
+    write_document_page(artifact_get(store, id), file.path(dir, path), app)
     documents[[id]] <- path
   }
 
@@ -27,7 +27,7 @@ write_conversation_bundle <- function(
     theme = commons_theme(),
     sidebar = FALSE,
     drawer = FALSE,
-    footer = htmltools::HTML(share_footer_html(app_url))
+    footer = htmltools::HTML(share_footer_html(app))
   )
   # Asset URLs carry the version of the deployment that streamed them, which
   # a restored conversation may outlive.
@@ -61,29 +61,29 @@ write_conversation_bundle <- function(
   write_static_manifest(dir)
 }
 
-write_document_bundle <- function(artifact, dir, app_url = NULL) {
-  write_document_page(artifact, file.path(dir, "index.html"), app_url)
+write_document_bundle <- function(artifact, dir, app = list()) {
+  write_document_page(artifact, file.path(dir, "index.html"), app)
   write_static_manifest(dir)
 }
 
-write_document_page <- function(artifact, path, app_url = NULL) {
+write_document_page <- function(artifact, path, app = list()) {
   write_static_page(
     artifact$title,
-    c(artifact$html, share_footer_html(app_url)),
+    c(artifact$html, share_footer_html(app)),
     path
   )
 }
 
 # A shared plot or table: the output, the code that reproduces it, folded,
 # and where it came from.
-write_output_bundle <- function(output, dir, app_url = NULL) {
+write_output_bundle <- function(output, dir, app = list()) {
   write_static_page(
     output$title,
     c(
       paste0("<header><h1>", html_escape(output$title), "</h1></header>"),
       output$html,
-      share_code_html(output$kind, output$code, app_url),
-      share_footer_html(app_url)
+      share_code_html(output$kind, output$code, app$url),
+      share_footer_html(app)
     ),
     file.path(dir, "index.html")
   )
@@ -113,13 +113,28 @@ share_code_html <- function(kind, code, app_url = NULL) {
   )
 }
 
-share_footer_html <- function(app_url = NULL, date = Sys.Date()) {
+share_footer_html <- function(app = list(), date = Sys.Date()) {
   paste0(
     "<footer class=\"commons-share-footer\">Shared ",
     share_date(date),
-    " from a ",
-    share_app_link("data agent", app_url),
+    " from ",
+    share_footer_source(app),
     ". Results reflect the data as of that date.</footer>"
+  )
+}
+
+# "the [Sales explorer](url) agent", or "a [data agent](url)" for an app
+# without a title.
+share_footer_source <- function(app = list()) {
+  title <- app$title
+  if (is.null(title) || !nzchar(trimws(title))) {
+    return(paste("a", share_app_link("data agent", app$url)))
+  }
+  title <- trimws(title)
+  paste0(
+    "the ",
+    share_app_link(html_escape(title), app$url),
+    if (!grepl("\\bagent$", title, ignore.case = TRUE)) " agent"
   )
 }
 

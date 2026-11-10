@@ -19,7 +19,7 @@ test_that("a shared conversation shows what the user saw, without Shiny", {
   agent <- shared_agent()
   dir <- withr::local_tempdir()
 
-  write_conversation_bundle(agent, dir, app_url = "https://connect.example.com/app/")
+  write_conversation_bundle(agent, dir, app = list(url = "https://connect.example.com/app/"))
 
   messages <- jsonlite::fromJSON(
     wire_messages_json(shared_messages(agent)),
@@ -40,7 +40,7 @@ test_that("a shared conversation shows what the user saw, without Shiny", {
     artifact_document_html("Orders", c(
       "<p>By region</p>",
       "<p>Done</p>",
-      share_footer_html("https://connect.example.com/app/")
+      share_footer_html(list(url = "https://connect.example.com/app/"))
     ))
   )
   expect_match(html, 'from a <a href="https://connect.example.com/app/"', fixed = TRUE)
@@ -53,6 +53,28 @@ test_that("the share footer dates the snapshot", {
       "<footer class=\"commons-share-footer\">Shared November 9, 2026 from a ",
       "data agent. Results reflect the data as of that date.</footer>"
     )
+  )
+})
+
+test_that("the share footer names the app it came from", {
+  date <- as.Date("2026-11-09")
+  expect_identical(
+    share_footer_html(list(title = "Biodiversity explorer", url = "https://c.example/app/"), date),
+    paste0(
+      "<footer class=\"commons-share-footer\">Shared November 9, 2026 from the ",
+      "<a href=\"https://c.example/app/\" target=\"_blank\" rel=\"noopener\">",
+      "Biodiversity explorer</a> agent. Results reflect the data as of that date.</footer>"
+    )
+  )
+  expect_match(
+    share_footer_html(list(title = "Sales Agent"), date),
+    "from the Sales Agent. Results",
+    fixed = TRUE
+  )
+  expect_match(
+    share_footer_html(list(title = "R&D"), date),
+    "from the R&amp;D agent.",
+    fixed = TRUE
   )
 })
 
@@ -141,7 +163,7 @@ test_that("a shared plot or table folds its code above the footer", {
     code = "commons$run_sql(\"SELECT 1 < 2\")"
   )
 
-  write_output_bundle(output, dir, app_url = "https://connect.example.com/app/")
+  write_output_bundle(output, dir, app = list(url = "https://connect.example.com/app/"))
 
   html <- read_utf8(file.path(dir, "index.html"))
   expect_match(html, "<details class=\"commons-share-code\"><summary>Code</summary>", fixed = TRUE)

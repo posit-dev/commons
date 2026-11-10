@@ -58,7 +58,6 @@ share_server <- function(id, client, chat, session) {
   ids <- share_ids_for(id)
   receipts <- share_receipts(chat)
   app <- connect_app_info()
-  app_url <- app$url
   input <- session$input
   output <- session$output
   ns <- session$ns
@@ -286,7 +285,7 @@ share_server <- function(id, client, chat, session) {
       deployed <- connect_share_deploy(
         share$visitor,
         share$content$guid,
-        share_archive(client, target, app_url)
+        share_archive(client, target, app)
       )
       promises::then(deployed, function(...) fingerprint)
     })
@@ -756,21 +755,21 @@ share_stale_text <- function(kind) {
   )
 }
 
-share_archive <- function(client, target, app_url = NULL) {
+share_archive <- function(client, target, app = list()) {
   dir <- tempfile("commons-share-")
   dir.create(dir)
   switch(
     target$kind,
-    conversation = write_conversation_bundle(client, dir, app_url, target$title),
+    conversation = write_conversation_bundle(client, dir, app, target$title),
     document = write_document_bundle(
       artifact_get(client$artifact_store(), target$id),
       dir,
-      app_url
+      app
     ),
     output = write_output_bundle(
       list(kind = target$noun, title = target$title, html = target$html, code = target$code),
       dir,
-      app_url
+      app
     )
   )
   bundle_archive(dir)
