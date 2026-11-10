@@ -88,7 +88,7 @@ Reconcile new evidence with earlier assumptions and decisions as it appears. Sur
 
 5. **Confirm trust, scope, and the data boundary.** Identify which layer or layers the agent could access, such as warehouse tables, views, pins, or pipeline outputs. Present the tradeoffs and recommend the cleanest ready-to-analyze source that fits the user's environment.
 
-   Prefer data whose preparation and quality controls are managed outside commons. A commons agent is not a data preparation pipeline: measures should implement analysis, not routine cleaning or substantial reshaping. For example, prefer a maintained table or view that already applies the required preparation over reimplementing that preparation inside a measure, unless ownership or control requirements point elsewhere.
+   Prefer data whose preparation and quality controls are managed outside commons. A commons agent is not a data preparation pipeline: measures should implement analysis, not routine cleaning or substantial reshaping. For example, prefer a maintained table or view that already applies the required preparation over reimplementing that preparation inside a measure, unless ownership or control requirements point elsewhere. If no such table exists, recommend preparing one elsewhere, such as by materializing views over the raw data, and making that the data source.
 
    Map each selected artifact's data inputs to the proposed data sources. Before building, make sure it is clear which data sources will form the agent's data layer, which selected artifacts and files contain computations the user considers trusted, and how those artifacts map to the selected sources.
 
