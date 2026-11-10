@@ -711,6 +711,7 @@ test_that("Snowflake semantic YAML reads as the shared fixture says", {
     )
     expected <- case$expected
     if (length(expected$parameters) == 0L) {
+      expect_length(actual$parameters, 0L)
       expected$parameters <- list()
       actual$parameters <- list()
     }

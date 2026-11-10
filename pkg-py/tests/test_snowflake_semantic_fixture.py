@@ -149,6 +149,11 @@ def test_metric_sql() -> None:
             assert_fixture_error(error, case["expected"])
             continue
         assert "sql" in case["expected"], case["name"]
+        # The fixture pins positional `?` binds, so the named ones must run
+        # `:p0`, `:p1`, ... in argument order before they are compared as `?`.
+        arguments = case.get("arguments") or []
+        binds = re.findall(r":p(\d+)", sql)
+        assert binds == [str(i) for i in range(len(arguments))], case["name"]
         assert re.sub(r":p\d+", "?", sql) == case["expected"]["sql"], case["name"]
 
 

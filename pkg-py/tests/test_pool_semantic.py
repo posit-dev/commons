@@ -5,6 +5,8 @@ when a listed model is read by tests/shared/snowflake-semantic-views.json;
 these cover the run itself: the query sent and the values bound.
 """
 
+import re
+
 from commons import DataSource
 from commons._definitions import Registry
 from commons._handles import HandleStore
@@ -74,3 +76,15 @@ def test_call_metrics_binds_arguments() -> None:
     run(source, metrics=["revenue"], arguments={"REGION": "EMEA"})
     assert 'VARIABLES "REGION" => CAST(:p0 AS VARCHAR(16))' in warehouse.queries[-1]
     assert warehouse.params[-1] == {"p0": "EMEA"}
+
+
+def test_call_metrics_binds_each_argument_to_its_variable() -> None:
+    warehouse = FakeWarehouse(semantic_views={"REVENUE_MODEL": PARAMETERIZED})
+    source = warehouse_source(warehouse, [VIEW])
+    arguments = {"SINCE": "2024-06-01", "REGION": "EMEA"}
+    run(source, metrics=["revenue"], arguments=arguments)
+    binds = re.findall(r'"(\w+)" => CAST\(:(p\d+) AS', warehouse.queries[-1])
+    assert len(binds) == 2
+    params = warehouse.params[-1]
+    assert params is not None
+    assert {name: params[bind] for name, bind in binds} == arguments
