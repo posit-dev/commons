@@ -281,6 +281,26 @@ test_that("the worker cannot see parent-only environment variables", {
   expect_match(res@value, "FALSE")
 })
 
+test_that("the worker skips the host's R startup files", {
+  project <- withr::local_tempdir()
+  writeLines("COMMONS_TEST_SECRET=s3cret", file.path(project, ".Renviron"))
+  writeLines(
+    "Sys.setenv(COMMONS_TEST_PROFILE = 'ran')",
+    file.path(project, ".Rprofile")
+  )
+  withr::local_dir(project)
+  worker <- local_worker()
+  store <- new_handle_store()
+
+  res <- sync_promise(run_r_tool(
+    worker,
+    store,
+    "unname(Sys.getenv(c('COMMONS_TEST_SECRET', 'COMMONS_TEST_PROFILE'), NA))"
+  ))
+
+  expect_match(res@value, "[1] NA NA", fixed = TRUE)
+})
+
 test_that("run_r interrupts code exceeding the time limit, keeping the session", {
   withr::local_options(commons.run_r_timeout = 2)
   worker <- local_worker()

@@ -1,5 +1,7 @@
 # commons (development version)
 
+* The `run_r` worker reads no R startup files, so variables set in a `.Renviron` file, like API keys, stay out of reach of model-written code.
+
 * `describe_table` works on SQL Server, Oracle, and other databases whose SQL has no `LIMIT` clause (#468).
 
 * `trajectory_review()` has been removed. The coding-agent skill provides guidance for building interactive reviews and trust-over-time plots from `trajectory_read()` output.
