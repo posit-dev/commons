@@ -69,7 +69,7 @@ Reconcile new evidence with earlier assumptions and decisions as it appears. Sur
 
    If some supplied domains or artifacts seem outside the intended scope, say so. When a smaller first scope would reduce implementation risk or let the user validate the design sooner, recommend what to defer; if the user wants the full scope now, proceed without pushing again. Distribution across multiple repositories is not by itself a reason to reduce scope.
 
-   Encourage fewer agents rather than more. When the user already has a commons agent, consider extending it to a new domain before creating a separate one. Most measures, table details, and context are retrieved only when needed. Supporting more domains therefore adds little to the prompt sent with every conversation, provided dataset-level dictionary text and instructions stay concise. A separate agent makes sense when there is a concrete reason, such as a different audience or different data permissions.
+   Encourage fewer agents rather than more. When the user already has a commons agent, consider extending it to a new domain before creating a separate one. Most measures, table details, and context are retrieved only when needed. Supporting more domains therefore adds little to the prompt sent with every conversation, provided dataset-level dictionary text and instructions stay concise. A separate agent makes sense when there is a concrete reason, such as a different audience or different data permissions that are not addressed by table/row-level security (e.g. with `odbc::databricks()` or `odbc::snowflake()`.).
 
 4. **Investigate the data and artifacts.** Inspect the supplied data, documentation, schemas, source code, and data pipelines. Run scratch code to understand table grain, joins, transformations, update processes, and surprising behavior that may need to appear in a data dictionary.
 
@@ -79,7 +79,7 @@ Reconcile new evidence with earlier assumptions and decisions as it appears. Sur
 
 5. **Confirm trust, scope, and the data boundary.** Identify which layer or layers the agent could access, such as warehouse tables, views, pins, or pipeline outputs. Present the tradeoffs and recommend the cleanest ready-to-analyze source that fits the user's environment.
 
-   Prefer data whose preparation and quality controls are managed outside commons. A commons agent is not a data preparation pipeline: measures should implement analysis, not routine cleaning or substantial reshaping. For example, prefer a maintained table or view that already applies the required preparation over reimplementing that preparation inside a measure, unless ownership or control requirements point elsewhere. If no such table exists, recommend preparing one elsewhere, such as by materializing views over the raw data, and making that the data source.
+   Prefer data whose preparation and quality controls are managed outside commons. A commons agent is not a data preparation pipeline: measures should implement analysis, not routine cleaning or substantial reshaping. For example, prefer a maintained table or view that already applies the required preparation over reimplementing that preparation inside a measure, unless ownership or control requirements point elsewhere. If no such table exists, recommend preparing one elsewhere, such as by materializing views over the raw data, and making that the data source, but do so inside of the commons if the user recommends doing so.
 
    Map each selected artifact's data inputs to the proposed data sources. Before building, make sure it is clear which data sources will form the agent's data layer, which selected artifacts and files contain computations the user considers trusted, and how those artifacts map to the selected sources.
 
@@ -101,7 +101,7 @@ Reconcile new evidence with earlier assumptions and decisions as it appears. Sur
 
 10. **Complete the agent.** Fill in `DESCRIPTION`, `agent.R`, and `app.R`. Ensure each Shiny session receives a fresh agent, as required by `commons_server()`. Construct it directly inside the server function or call reusable construction code from `agent.R`; do not pass one global agent object to every session. Ask the user which model provider the agent should use, since that decides where their data is sent; if one is already configured, recommend it. Enable thinking in the ellmer chat passed to `agent()`. If the agent should answer only from trusted calculations and never write its own SQL or R, pass `mode = "trusted only"`.
 
-   A commons chat app must list `bsicons`, `htmltools`, `shiny`, and `shinychat` in `DESCRIPTION` under `Imports`. List any other packages the app calls directly rather than relying on transitive dependencies or `requireNamespace()` calls in `deploy.R` to make rsconnect discover them.
+   A commons chat app **must** list `bsicons`, `htmltools`, `tidyverse`, `shiny`, and `shinychat` in `DESCRIPTION` under `Imports`. List any other packages the app calls directly rather than relying on transitive dependencies or `requireNamespace()` calls in `deploy.R` to make rsconnect discover them.
 
    Use or adapt this basic structure for `app.R`, adapting the title and agent construction as needed. In this example `build_agent()` (from `agent.R`) constructs and returns the complete commons agent.
 
