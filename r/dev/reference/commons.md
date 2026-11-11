@@ -86,6 +86,10 @@ A `commons` object with methods:
 
 All arguments must be named.
 
+To share a commons across projects, put its setup code in an R package;
+see
+[`vignette("sharing", package = "commons")`](https://posit-dev.github.io/commons/r/dev/articles/sharing.md).
+
 ## Using commons with other coding agents
 
 `commons()` is the entry point to use commons with external coding

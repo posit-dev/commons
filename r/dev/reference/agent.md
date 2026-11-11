@@ -99,9 +99,8 @@ agent(
   An optional character vector of Connect usernames granted access to
   this content's trajectories when running on Posit Connect. Reading
   traces requires editor-level access, so named users are added as
-  collaborators on the content. Note that users whose Connect *account*
-  role is viewer cannot read traces even when named here; trace readers
-  need at least a publisher account.
+  collaborators on the content. Named users must have at least a
+  publisher account.
 
 ## Value
 

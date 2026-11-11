@@ -2,6 +2,12 @@
 
 ## commons (development version)
 
+- `trajectory_review()` has been removed. The coding-agent skill
+  provides guidance for building interactive reviews and trust-over-time
+  plots from
+  [`trajectory_read()`](https://posit-dev.github.io/commons/r/dev/reference/trajectory_read.md)
+  output.
+
 - [`data_source()`](https://posit-dev.github.io/commons/r/dev/reference/data_source.md)
   errors when a `dictionary` file has no top-level `tables` field,
   rather than silently loading an empty dictionary

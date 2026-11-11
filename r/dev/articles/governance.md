@@ -191,10 +191,8 @@ content process restarts.
 
 Content owners and collaborators can read Connect trajectories with
 [`trajectory_read()`](https://posit-dev.github.io/commons/r/dev/reference/trajectory_read.md).
-If a conversation is flagged or annotated in
-[`trajectory_review()`](https://posit-dev.github.io/commons/r/dev/reference/trajectory_review.md),
-the reviewer writes a Markdown document containing the complete
-reviewer-visible conversation and its tool activity. Store these files
+The coding-agent skill includes guidance for visual and interactive
+review of these traces. Store any exported transcripts and review notes
 only in an appropriately protected location, and carry out reviews in an
 environment trusted to handle internal user data, such as [Posit
 Workbench](https://posit.co/products/enterprise/workbench). Retention

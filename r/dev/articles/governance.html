@@ -42,6 +42,7 @@
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles">
 <li><a class="dropdown-item" href="../articles/governance.html">Security and governance for commons agents</a></li>
     <li><a class="dropdown-item" href="../articles/reproducibility.html">Reproducing an analysis from trajectories</a></li>
+    <li><a class="dropdown-item" href="../articles/sharing.html">Sharing a commons across projects</a></li>
   </ul>
 </li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
@@ -253,12 +254,11 @@ commons enables <a href="https://docs.posit.co/connect/user/content-settings/#co
 Observability</a> for the content item when needed, although capture
 begins only after the content process restarts.</p>
 <p>Content owners and collaborators can read Connect trajectories with
-<code><a href="../reference/trajectory_read.html">trajectory_read()</a></code>. If a conversation is flagged or
-annotated in <code><a href="../reference/trajectory_review.html">trajectory_review()</a></code>, the reviewer writes a
-Markdown document containing the complete reviewer-visible conversation
-and its tool activity. Store these files only in an appropriately
-protected location, and carry out reviews in an environment trusted to
-handle internal user data, such as <a href="https://posit.co/products/enterprise/workbench" class="external-link">Posit
+<code><a href="../reference/trajectory_read.html">trajectory_read()</a></code>. The coding-agent skill includes guidance
+for visual and interactive review of these traces. Store any exported
+transcripts and review notes only in an appropriately protected
+location, and carry out reviews in an environment trusted to handle
+internal user data, such as <a href="https://posit.co/products/enterprise/workbench" class="external-link">Posit
 Workbench</a>. Retention and access controls for the underlying
 OpenTelemetry data are determined by Connect or the configured exporter,
 not by commons.</p>

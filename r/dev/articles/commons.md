@@ -384,6 +384,10 @@ the context index and pins cache ahead of deployment. This example
 assumes that `observations` and `site_area` are data frames loaded when
 the app starts.
 
+To reuse the same trusted calculations in reports, apps, and other
+projects, see [Sharing a commons across
+projects](https://posit-dev.github.io/commons/r/dev/articles/sharing.md).
+
 [^1]: commons expands definitions used in custom SQL to expressions
     compiled for the data source. Because this is still custom SQL, the
     provenance outcome is `Cited` or `Untrusted`, rather than `Trusted`.

@@ -29,9 +29,7 @@ Put a commons agent inside of an interactive chat app.
 
 ## Trajectories
 
-Read and annotate conversation histories.
+Read logged conversation histories.
 
 - [`trajectory_read()`](https://posit-dev.github.io/commons/r/dev/reference/trajectory_read.md)
   : Read commons trajectories
-- [`trajectory_review()`](https://posit-dev.github.io/commons/r/dev/reference/trajectory_review.md)
-  : Review commons trajectories

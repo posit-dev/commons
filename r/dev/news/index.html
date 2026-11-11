@@ -21,6 +21,7 @@
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles"><li><a class="dropdown-item" href="../articles/governance.html">Security and governance for commons agents</a></li>
     <li><a class="dropdown-item" href="../articles/reproducibility.html">Reproducing an analysis from trajectories</a></li>
+    <li><a class="dropdown-item" href="../articles/sharing.html">Sharing a commons across projects</a></li>
   </ul></li>
 <li class="active nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
       </ul><ul class="navbar-nav"><li class="nav-item"><form class="form-inline" role="search">
@@ -40,7 +41,8 @@
 
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="development version" id="commons-development-version">commons (development version)<a class="anchor" aria-label="anchor" href="#commons-development-version"></a></h2>
-<ul><li><p><code><a href="../reference/data_source.html">data_source()</a></code> errors when a <code>dictionary</code> file has no top-level <code>tables</code> field, rather than silently loading an empty dictionary (<a href="https://github.com/posit-dev/commons/issues/473" class="external-link">#473</a>).</p></li>
+<ul><li><p><code>trajectory_review()</code> has been removed. The coding-agent skill provides guidance for building interactive reviews and trust-over-time plots from <code><a href="../reference/trajectory_read.html">trajectory_read()</a></code> output.</p></li>
+<li><p><code><a href="../reference/data_source.html">data_source()</a></code> errors when a <code>dictionary</code> file has no top-level <code>tables</code> field, rather than silently loading an empty dictionary (<a href="https://github.com/posit-dev/commons/issues/473" class="external-link">#473</a>).</p></li>
 <li><p><code><a href="../reference/data_source.html">data_source()</a></code> imports Databricks metric views from Unity Catalog through ODBC. It previously listed them as plain views and could not read their definitions (<a href="https://github.com/posit-dev/commons/issues/496" class="external-link">#496</a>).</p></li>
 <li><p><code>describe_table</code> shows at most 50 columns and reports how many additional columns it omits, keeping wide-table descriptions compact. Columns documented in the data dictionary are shown first. The system prompt no longer limits the agent to columns that <code>describe_table</code> or <code>search_context</code> confirmed (<a href="https://github.com/posit-dev/commons/issues/475" class="external-link">#475</a>).</p></li>
 <li><p><code>describe_table</code> describes any table the connection can query, not only the data source’s tables, so it agrees with <code>run_sql</code>. The result notes when a table is outside the data source. Agents in <code>mode = "trusted only"</code> still describe only the data source’s tables (<a href="https://github.com/posit-dev/commons/issues/469" class="external-link">#469</a>).</p></li>
