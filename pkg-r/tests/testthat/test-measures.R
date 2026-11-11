@@ -76,6 +76,22 @@ test_that("validate_measure_args coerces valid arguments", {
   expect_identical(args$revenue_under, 1000)
 })
 
+test_that("validate_measure_args coerces arrays by their item type", {
+  td <- ellmer::tool(
+    function(tags, sizes) NULL,
+    "arrays",
+    arguments = list(
+      tags = ellmer::type_array(ellmer::type_string()),
+      sizes = ellmer::type_array(ellmer::type_integer())
+    ),
+    name = "arrays"
+  )
+  args <- validate_measure_args(td, list(tags = list("a", "b"), sizes = list(1, 2)))
+
+  expect_identical(args$tags, c("a", "b"))
+  expect_identical(args$sizes, c(1L, 2L))
+})
+
 test_that("validate_measure_args rejects out-of-vocabulary enum values", {
   expect_snapshot(
     validate_measure_args(count_measure_tool(), list(region = "LATAM")),

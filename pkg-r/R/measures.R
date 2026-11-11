@@ -420,12 +420,12 @@ validate_measure_args <- function(td, args, call = rlang::caller_env()) {
 coerce_arg <- function(td, nm, type, value, call = rlang::caller_env()) {
   kind <- type_kind(type)
 
-  if (kind %in% c("enum", "array")) {
-    allowed <- if (kind == "enum") {
-      type_values(type)
-    } else {
-      type_values(S7::prop(type, "items"))
-    }
+  if (kind == "array") {
+    return(coerce_arg(td, nm, S7::prop(type, "items"), unlist(value), call = call))
+  }
+
+  if (kind == "enum") {
+    allowed <- type_values(type)
     bad <- setdiff(as.character(value), allowed)
     if (length(bad)) {
       cli::cli_abort(
