@@ -114,9 +114,7 @@ def test_parsed_citations_are_immutable() -> None:
 
 @pytest.mark.parametrize("case", DECISION_CASES, ids=lambda case: case["name"])
 def test_decisions_record_the_shared_shape(case: dict[str, Any]) -> None:
-    # Trace readers use this JSON from the span, so the field
-    # names and the omissions are the contract. The scanner is what records a
-    # decision, so it is driven here rather than building one by hand.
+    # Drive the scanner rather than constructing decisions by hand.
     expected = case["decision"]
     if expected["status"] == "malformed":
         text = "<citation>\n\nno blockquote\n\n</citation>"
@@ -151,8 +149,6 @@ def test_citation_decisions_are_immutable() -> None:
 
 
 def test_only_an_accepted_decision_names_a_source() -> None:
-    # Trace readers use the span record, so a decision that claims a
-    # source it does not have must not be constructible.
     with pytest.raises(ValueError, match="accepted"):
         CitationDecision(quote=SAMPLE_QUOTE, status="accepted")
 
@@ -181,8 +177,6 @@ def test_only_a_malformed_decision_has_no_quote() -> None:
 
 
 def test_an_unknown_status_is_rejected() -> None:
-    # Literal is not enforced at runtime, so the class is the only place a
-    # status a trace reader cannot interpret can be caught.
     with pytest.raises(ValueError, match="status"):
         CitationDecision(quote=SAMPLE_QUOTE, status="Accepted")  # type: ignore[arg-type]
 

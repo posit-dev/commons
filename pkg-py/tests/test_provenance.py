@@ -55,7 +55,6 @@ def test_display_copy_matches_the_shared_fixture(name: str) -> None:
     assert entry.label == expected["label"]
     assert entry.body == expected["body"]
     assert entry.icon == expected["icon"]
-    assert entry.pill_class == expected["pill_class"]
 
 
 def test_every_tag_has_display_copy() -> None:
@@ -71,9 +70,7 @@ def test_tag_values_are_the_bare_strings_r_uses() -> None:
 
 
 def test_tag_formats_as_the_bare_string() -> None:
-    # A plain `enum.Enum` formats as "Tag.A", so writing a tag into the span
-    # attribute with an f-string would emit a value a trace reader
-    # cannot match, and nothing would error.
+    # A plain enum.Enum formats as "Tag.A" instead of the recorded bare tag.
     assert str(Tag.A) == "A"
     assert f"{Tag.A}" == "A"
 
@@ -136,7 +133,7 @@ def test_ignores_a_tag_value_that_is_not_a_valid_tag() -> None:
 def test_the_marker_follows_the_shared_fixture(case: dict[str, Any]) -> None:
     tag = None if case["tag"] is None else Tag(case["tag"])
 
-    aside = provenance_aside(tag, include_cited=case["include_cited"])
+    aside = provenance_aside(tag)
 
     if not case["emits"]:
         assert aside == ""
@@ -147,7 +144,7 @@ def test_the_marker_follows_the_shared_fixture(case: dict[str, Any]) -> None:
     assert display.body in aside
 
 
-def test_the_shared_fixture_covers_both_outcomes_of_every_tag() -> None:
+def test_the_shared_fixture_covers_every_tag_and_emission_result() -> None:
     # A fixture that lost its emits: false cases would still pass every
     # assertion above.
     assert {case["emits"] for case in ASIDE_CASES} == {True, False}
@@ -178,12 +175,3 @@ def test_a_served_bundle_puts_the_outcome_icon_on_the_marker(
 
     assert icon is not None
     assert f'icon="{served_bundle}/figs/{icon}"' in provenance_aside(tag)
-
-
-def test_the_outcome_with_no_icon_of_its_own_renders_without_one(
-    served_bundle: str,
-) -> None:
-    marker = provenance_aside(Tag.B, include_cited=True)
-
-    assert marker
-    assert "icon=" not in marker

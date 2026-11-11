@@ -2,8 +2,7 @@ provenance_display <- list(
   A = list(
     label = "Trusted",
     icon = "trusted-icon.svg",
-    body = "This answer comes from a trusted calculation.",
-    pill_class = "trusted"
+    body = "This answer comes from a trusted calculation."
   ),
   B = list(
     label = "Cited",
@@ -11,8 +10,7 @@ provenance_display <- list(
     body = paste(
       "This answer cites context from a trusted source that supports",
       "its approach."
-    ),
-    pill_class = "cited"
+    )
   ),
   C = list(
     label = "Untrusted",
@@ -20,8 +18,7 @@ provenance_display <- list(
     body = paste(
       "This answer was not produced by a trusted calculation and does not",
       "cite trusted context."
-    ),
-    pill_class = "caution"
+    )
   )
 )
 
@@ -37,12 +34,10 @@ derive_provenance_tag <- function(tags, verified) {
   }
 }
 
-# Live answers omit the "Cited" marker: their verified citation asides
-# already say as much. Review contexts set include_cited = TRUE so every
-# classified answer carries its outcome.
-provenance_aside <- function(tag, include_cited = FALSE) {
+# Verified citation asides already identify cited answers.
+provenance_aside <- function(tag) {
   entry <- provenance_display[[tag]]
-  if (is.null(entry) || (identical(tag, "B") && !include_cited)) {
+  if (is.null(entry) || identical(tag, "B")) {
     return("")
   }
   icon <- commons_icon_url(entry$icon)
