@@ -19,6 +19,7 @@ BugReports: https://github.com/posit-dev/commons/issues
 Depends:
     R (>= 4.1.0)
 Imports:
+    bsicons,
     bslib (>= 0.11.0),
     callr (>= 3.8.0),
     cli,
@@ -50,7 +51,6 @@ Imports:
     yaml
 Suggests:
     bit64,
-    bsicons,
     chromote,
     dbplyr,
     dplyr,

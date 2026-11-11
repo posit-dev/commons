@@ -32,7 +32,7 @@ tool_edit_artifact <- function(private) {
     name = "edit_artifact",
     annotations = ellmer::tool_annotations(
       title = "Editing a document",
-      icon = maybe_icon("file-earmark-text"),
+      icon = bsicons::bs_icon("file-earmark-text"),
       read_only_hint = FALSE
     )
   )
@@ -621,7 +621,7 @@ artifact_edit_result <- function(store, artifact, version, result) {
   tool_result(
     value,
     title = sprintf("Edited %s", artifact$title),
-    icon = maybe_icon("file-earmark-text"),
+    icon = bsicons::bs_icon("file-earmark-text"),
     html = artifact_link_html(store, artifact$id)
   )
 }
