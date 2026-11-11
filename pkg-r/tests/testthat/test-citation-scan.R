@@ -9,7 +9,10 @@ test_that("parse_commons_citation matches the shared cases", {
     } else {
       expect_identical(
         out,
-        list(explanation = case$expected$explanation, quote = case$expected$quote),
+        list(
+          explanation = case$expected$explanation,
+          quote = case$expected$quote
+        ),
         info = case$name
       )
     }
@@ -17,8 +20,7 @@ test_that("parse_commons_citation matches the shared cases", {
 })
 
 test_that("citation decisions match the shared record shape", {
-  # The shape is what the trajectory reviewer reads back out of the span, so
-  # drive the real producers rather than asserting on a hand-built list.
+  # Drive the real producers rather than asserting on a hand-built list.
   cases <- shared_fixture("citations")$citation_decision$cases
   expect_setequal(
     vapply(cases, function(case) case$decision$status, character(1)),
@@ -35,7 +37,11 @@ test_that("citation decisions match the shared record shape", {
       corpus <- if (identical(want$status, "accepted")) {
         list(list(label = want$label, kind = want$kind, text = want$quote))
       } else {
-        list(list(label = "documentation", kind = "prose", text = "No support."))
+        list(list(
+          label = "documentation",
+          kind = "prose",
+          text = "No support."
+        ))
       }
       render_citation_aside(want$quote, "why", corpus)$decision
     }

@@ -278,17 +278,6 @@ test_that("conversation users come from the earliest recorded non-title chat", {
   expect_identical(trajectories[["conv-a"]]$user, NA_character_)
 })
 
-test_that("rebuilt turns can be set on an ellmer chat", {
-  json <- test_turn_json()
-  spans <- parse_otlp_lines(otlp_test_line(list(
-    chat_test_span("t1", "s1", input_messages = json$input)
-  )))
-
-  turns <- build_trajectories(spans)[[1]]$turns
-  chat <- test_client()
-  expect_no_error(chat$set_turns(turns))
-})
-
 test_that("chat spans group by their conversation id across traces", {
   json <- test_turn_json()
   lines <- c(

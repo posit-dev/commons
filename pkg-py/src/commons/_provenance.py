@@ -51,12 +51,11 @@ class Tag(enum.StrEnum):
 
 @dataclass(frozen=True)
 class ProvenanceDisplay:
-    """The words and styling one tag's pill renders with."""
+    """Display text and icon for a provenance outcome."""
 
     label: str
     icon: str | None
     body: str
-    pill_class: str
 
 
 PROVENANCE_DISPLAY: dict[Tag, ProvenanceDisplay] = {
@@ -64,7 +63,6 @@ PROVENANCE_DISPLAY: dict[Tag, ProvenanceDisplay] = {
         label="Trusted",
         icon="trusted-icon.svg",
         body="This answer comes from a trusted calculation.",
-        pill_class="trusted",
     ),
     Tag.B: ProvenanceDisplay(
         label="Cited",
@@ -73,7 +71,6 @@ PROVENANCE_DISPLAY: dict[Tag, ProvenanceDisplay] = {
             "This answer cites context from a trusted source that supports its "
             "approach."
         ),
-        pill_class="cited",
     ),
     Tag.C: ProvenanceDisplay(
         label="Untrusted",
@@ -82,7 +79,6 @@ PROVENANCE_DISPLAY: dict[Tag, ProvenanceDisplay] = {
             "This answer was not produced by a trusted calculation and does not "
             "cite trusted context."
         ),
-        pill_class="caution",
     ),
 }
 
@@ -140,17 +136,16 @@ _INFO_CONTROL: Final = (
 )
 
 
-def provenance_aside(tag: Tag | None, *, include_cited: bool = False) -> str:
+def provenance_aside(tag: Tag | None) -> str:
     """Render the marker that follows a classified answer.
 
     Which outcomes render is a cross-language contract pinned by
     ``tests/shared/provenance.json``. A live answer omits the "Cited" marker,
-    because the verified citation's own aside already says as much; a review
-    context passes ``include_cited`` to see every outcome.
+    because the verified citation's own aside already says as much.
 
     The outcome's icon is omitted when no asset bundle serves it.
     """
-    if tag is None or (tag is Tag.B and not include_cited):
+    if tag is None or tag is Tag.B:
         return ""
     display = PROVENANCE_DISPLAY[tag]
     icon = icon_url(display.icon)
