@@ -1,6 +1,6 @@
 # commons (development version)
 
-* The coding-agent skill gains a reference for interactive conversation review and trust-over-time plots using `trajectory_read()`.
+* `trajectory_review()` has been removed. The coding-agent skill provides guidance for building interactive reviews and trust-over-time plots from `trajectory_read()` output.
 
 * `data_source()` errors when a `dictionary` file has no top-level `tables` field, rather than silently loading an empty dictionary (#473).
 
