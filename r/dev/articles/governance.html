@@ -211,7 +211,8 @@ deployment.</p>
 <h3 id="communication-with-the-main-app-process">Communication with the main app process<a class="anchor" aria-label="anchor" href="#communication-with-the-main-app-process"></a>
 </h3>
 <p>The subprocess starts with a small allowlist of environment variables
-rather than inheriting the application’s complete environment. In
+rather than inheriting the application’s complete environment, and it
+reads no <code>.Renviron</code> or <code>.Rprofile</code> files. In
 particular, API keys, session tokens, and database URLs are not
 inherited.</p>
 <p>Communication happens through <a href="https://callr.r-lib.org/" class="external-link">callr</a>. commons serializes registered

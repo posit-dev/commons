@@ -57,6 +57,11 @@ object.
 
 ## Details
 
+The agent writes R code at runtime, so deployment tools can't detect the
+packages it uses. Include them in the deployment, e.g. by listing the
+tidyverse in the app's `DESCRIPTION`; see
+[`vignette("commons", package = "commons")`](https://posit-dev.github.io/commons/r/dev/articles/commons.md).
+
 Documents the agent writes open in the chat's drawer, which
 [`shinychat::page_chat()`](https://posit-dev.github.io/shinychat/r/reference/page_chat.html)
 and

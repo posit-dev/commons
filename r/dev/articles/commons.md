@@ -384,6 +384,11 @@ the context index and pins cache ahead of deployment. This example
 assumes that `observations` and `site_area` are data frames loaded when
 the app starts.
 
+When deploying, include the packages that the agent’s R code should be
+able to use, such as the tidyverse, by listing them under `Imports` in
+`DESCRIPTION` or loading them in `app.R`. The agent writes its code at
+runtime, so rsconnect can’t detect the packages that code uses.
+
 To reuse the same trusted calculations in reports, apps, and other
 projects, see [Sharing a commons across
 projects](https://posit-dev.github.io/commons/r/dev/articles/sharing.md).

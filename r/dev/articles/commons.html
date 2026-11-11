@@ -514,6 +514,11 @@ post-startup idle time; <code>agent$prewarm()</code> warms the context
 index and pins cache ahead of deployment. This example assumes that
 <code>observations</code> and <code>site_area</code> are data frames
 loaded when the app starts.</p>
+<p>When deploying, include the packages that the agent’s R code should
+be able to use, such as the tidyverse, by listing them under
+<code>Imports</code> in <code>DESCRIPTION</code> or loading them in
+<code>app.R</code>. The agent writes its code at runtime, so rsconnect
+can’t detect the packages that code uses.</p>
 <p>To reuse the same trusted calculations in reports, apps, and other
 projects, see <a href="sharing.html">Sharing a commons across
 projects</a>.</p>

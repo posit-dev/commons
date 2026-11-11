@@ -145,9 +145,9 @@ sandbox or security boundary and should not be enabled in a deployment.
 ### Communication with the main app process
 
 The subprocess starts with a small allowlist of environment variables
-rather than inheriting the application’s complete environment. In
-particular, API keys, session tokens, and database URLs are not
-inherited.
+rather than inheriting the application’s complete environment, and it
+reads no `.Renviron` or `.Rprofile` files. In particular, API keys,
+session tokens, and database URLs are not inherited.
 
 Communication happens through [callr](https://callr.r-lib.org/). commons
 serializes registered result handles and measure source into the
