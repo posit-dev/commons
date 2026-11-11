@@ -47,13 +47,13 @@ The user decides which artifacts and calculations are trusted. Do not treat code
 
 6. Draft free-text context. Knowledge that is neither a callable calculation nor table/column-scoped — methodology prose, business rules, terminology — goes to `context/<artifact>.md`, one file per artifact. Carry the provenance string in YAML frontmatter (`context_layer()` strips frontmatter before indexing, so it never reaches the model).
 
-7. Reconcile against existing context. Judge "same concept" by what a result means, not by its name: compare each candidate with existing measures and definitions that read the same tables or answer a similar question, running both where they overlap. Classify each candidate against what the agent already has:
+7. Reconcile against existing context. Two measures are the same concept if their results mean the same thing, even if their names differ. Compare each candidate with existing measures and definitions that read the same tables or answer a similar question, running both where they overlap. Classify each candidate against what the agent already has:
    - **new** — add it.
    - **duplicate** — same concept, same computation: do not create another contribution. For a measure, add `@provenance` to the existing measure.
    - **extension** — same concept, superset behavior: propose editing the existing contribution. For a measure, add the relevant `@param` and `@provenance` entries. Never create `revenue2`.
    - **conflict** — same concept but a different computation, or a contradiction with an existing dictionary caveat: surface to the user with both sides. Do not resolve silently.
 
-8. Wait before editing. Present proposals highest-value first (mirroring the iterate reference) and apply only what the user confirms. The data scientist should confirm any new business definition, canonical table, exclusion rule, or dictionary caveat.
+8. Wait before editing. Present proposals highest-value first (mirroring the iterate reference) and apply only what the user confirms. For each proposed measure, say briefly how it relates to the closest existing measures. The data scientist should confirm any new business definition, canonical table, exclusion rule, or dictionary caveat.
 
 9. Validate. Confirm `semantic_layer("measures/")` loads without error. Validate dictionary edits and governed definitions using the [data dictionary reference](data-dictionaries.md).
 
