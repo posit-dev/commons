@@ -9,7 +9,7 @@ tool_load_skill <- function(tool_names = character()) {
       tool_result(
         skill$body,
         title = paste("Read up on", skill$topic),
-        icon = maybe_icon("book")
+        icon = bsicons::bs_icon("book")
       )
     },
     load_skill_description(skills),
@@ -19,7 +19,7 @@ tool_load_skill <- function(tool_names = character()) {
     ),
     annotations = ellmer::tool_annotations(
       title = "Reading up",
-      icon = maybe_icon("book"),
+      icon = bsicons::bs_icon("book"),
       read_only_hint = TRUE
     )
   )

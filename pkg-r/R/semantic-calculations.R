@@ -173,7 +173,7 @@ call_calculation_impl <- function(
   tool_result(
     paste(c(df_to_markdown(result), advert), collapse = "\n\n"),
     title = "Ran a trusted calculation",
-    icon = maybe_icon("shield-check"),
+    icon = bsicons::bs_icon("shield-check"),
     markdown = sprintf(
       "```sql\n%s\n```\n\n%s",
       prepared$sql,

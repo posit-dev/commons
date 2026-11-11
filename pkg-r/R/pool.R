@@ -324,7 +324,7 @@ metric_tool_result <- function(
   tool_result(
     paste(c(df_to_markdown(result), note, advert), collapse = "\n\n"),
     title = "Ran a trusted calculation",
-    icon = maybe_icon("shield-check"),
+    icon = bsicons::bs_icon("shield-check"),
     markdown = sprintf("```sql\n%s\n```\n\n%s", sql, df_to_markdown(result)),
     html = measure_display_html(args, result, metadata),
     tag = "A",

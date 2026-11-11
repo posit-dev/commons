@@ -5,8 +5,7 @@ its own ``ToolResultDisplay`` or a plain mapping it splats into one. commons
 builds the mapping, so a result carries its presentation whether or not the
 ``shiny`` extra is installed and nothing here imports shinychat.
 
-Icons are left out. R fills them from bsicons and renders these rows without
-one when bsicons is absent, so an iconless row is a branch R already has.
+Icons are left out. R fills them from bsicons.
 """
 
 from __future__ import annotations
