@@ -520,13 +520,16 @@ worker_run_code <- function(
     }
     add(
       "plot",
-      path = render_plot(plot_pixel_ratio),
-      model_path = render_plot(1L)
+      png = render_plot(plot_pixel_ratio),
+      model_png = render_plot(1L)
     )
     last_plot <<- NULL
   }
+  # Return the image's bytes rather than its path: the host reads no file the
+  # worker names, since a path could point anywhere outside the sandbox.
   render_plot <- function(pixel_ratio) {
     path <- tempfile("plot-", fileext = ".png")
+    on.exit(unlink(path), add = TRUE)
     # HTML displays this 2x image at half its pixel dimensions, giving browsers
     # two image pixels per CSS pixel. Scaling resolution too preserves text and
     # point sizes at the logical display size.
@@ -541,7 +544,7 @@ worker_run_code <- function(
       grDevices::replayPlot(last_plot),
       finally = grDevices::dev.off()
     )
-    path
+    readBin(path, "raw", file.size(path))
   }
 
   handler <- new_output_handler(
