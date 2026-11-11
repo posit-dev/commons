@@ -62,6 +62,22 @@ jobs:
           r-version: ${{ matrix.config.r }}
           http-user-agent: ${{ matrix.config.http-user-agent }}
           use-public-rspm: true
+      # pak finds no Posit Package Manager binaries for R-devel, whatever the
+      # user agent, but R-universe builds them.
+      - name: Use R-universe binaries on R-devel
+        if: matrix.config.r == 'devel'
+        shell: Rscript {0}
+        run: |
+          codename <- system2("lsb_release", c("--short", "--codename"), stdout = TRUE)
+          url <- sprintf(
+            "https://cran.r-universe.dev/bin/linux/%s-%s/%s/",
+            codename, R.version$arch, as.character(getRversion()[, 1:2])
+          )
+          cat(
+            sprintf('local({\n  repos <- getOption("repos")\n  repos[["RSPM"]] <- "%s"\n  options(repos = repos)\n})\n', url),
+            file = "~/.Rprofile",
+            append = TRUE
+          )
       # BEGIN odbc workaround: remove this step once mac.cran.dev serves a
       # gzip odbc binary (posit-dev/commons#388). pak cannot extract the
       # Zstandard file it serves now, but pak keeps an installed copy whose
