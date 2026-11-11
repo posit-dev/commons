@@ -2,6 +2,10 @@
 
 ## commons (development version)
 
+- `describe_table` works on SQL Server, Oracle, and other databases
+  whose SQL has no `LIMIT` clause
+  ([\#468](https://github.com/posit-dev/commons/issues/468)).
+
 - `trajectory_review()` has been removed. The coding-agent skill
   provides guidance for building interactive reviews and trust-over-time
   plots from
