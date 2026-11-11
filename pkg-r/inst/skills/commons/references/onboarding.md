@@ -19,14 +19,14 @@ Onboarding should:
 
 - Give the coding agent the commons knowledge needed to do the work.
 - Develop an evidence-based understanding of the user's data, code, and existing artifacts.
-- Give the user what they need to make the trust and scope decisions that only they can make.
+- Help the user decide what the agent should cover and which sources and calculations to trust.
 - Produce a functional commons agent from that shared understanding.
 
 ## Work with the user
 
 Work from what the user provides. Do routine investigation and implementation without interrupting them, and ask only for what you cannot discover from supplied files, repositories, or connections. When you need several things, ask for them together.
 
-Stop and wait for the user only on decisions about trust and meaning: the agent's scope and data boundary, which artifacts and calculations are trusted, which source is right when sources disagree, any new business definition, canonical table, exclusion rule, or dictionary caveat, the contents of `instructions`, and the model provider, which decides where the user's data is sent. For each, summarize the evidence and options, recommend one, and ask a clearly scoped question. Group decisions that are ready at the same time.
+Wait for user approval only on the agent's scope and data access; which artifacts, calculations, and sources to trust; and any new business definition, canonical table, exclusion rule, or dictionary caveat. Also confirm the contents of `instructions` and the model provider, since the provider determines where the user's data is sent. Summarize the evidence and options, recommend an approach, and ask a specific question. Group decisions that are ready at the same time.
 
 For reversible choices, such as file layout or where content goes among the dictionaries, semantic layer, and context layer, proceed with a sensible default, say what you assumed, and let the user correct it.
 
@@ -48,9 +48,9 @@ Reconcile new evidence with earlier assumptions and decisions as it appears. Sur
 
 2. **Scaffold the project.** Create the project layout in `SKILL.md`, including `DESCRIPTION`, `app.R`, `agent.R`, `deploy.R`, and the relevant agent instruction file. Add only boilerplate at this stage: create the directories and required fields, but do not invent domain content or calculations. If the applicable instruction file already exists, preserve its instructions and add commons-specific guidance only as it becomes known.
 
-3. **Discovery: Collect the source material.** Start from the strongest scope anchor available: an existing app, report, or set of questions that represents what the agent should support. If the user has not given one, ask for it, or for 2-3 representative questions. Keep representative questions for scoping and later testing.
+3. **Discovery: Collect the source material.** Start with an existing app, report, or set of questions that best represents what the agent should support. If the user has not given one, ask for it, or for 2-3 representative questions. Keep representative questions for scoping and later testing.
 
-   After inspecting the scope anchor, collect only the missing information:
+   After reviewing it, collect only the missing information:
    1. Clarify who should use the agent and what they should be able to ask.
    2. Locate the underlying data and establish how it can be accessed.
    3. Locate documentation for the selected data.
@@ -69,13 +69,13 @@ Reconcile new evidence with earlier assumptions and decisions as it appears. Sur
 
    If some supplied domains or artifacts seem outside the intended scope, say so. When a smaller first scope would reduce implementation risk or let the user validate the design sooner, recommend what to defer; if the user wants the full scope now, proceed without pushing again. Distribution across multiple repositories is not by itself a reason to reduce scope.
 
-   Encourage fewer agents rather than more. When the user already has a commons agent, consider extending it to a new domain before creating a separate one. Most of what an agent knows, such as measures, table details, and context, is retrieved only when a question needs it, so covering more domains adds little to every conversation as long as dataset-level dictionary text and instructions stay concise. A separate agent makes sense when there is a concrete reason, such as a different audience or different data permissions.
+   Encourage fewer agents rather than more. When the user already has a commons agent, consider extending it to a new domain before creating a separate one. Most measures, table details, and context are retrieved only when needed. Supporting more domains therefore adds little to the prompt sent with every conversation, provided dataset-level dictionary text and instructions stay concise. A separate agent makes sense when there is a concrete reason, such as a different audience or different data permissions.
 
 4. **Investigate the data and artifacts.** Inspect the supplied data, documentation, schemas, source code, and data pipelines. Run scratch code to understand table grain, joins, transformations, update processes, and surprising behavior that may need to appear in a data dictionary.
 
    When the environment has several data layers or sources, create a legible data-flow HTML diagram showing the relevant end-to-end flow and where the commons agent would operate, and include it in the step 5 summary.
 
-   When two sources, tables, or trusted artifacts could answer the same question, such as a curated mart and the raw tables beneath it, compute the answer each way and compare. If they disagree, trace the cause and raise it in the step 5 summary for the user to decide which is right; recommend fixing it upstream, such as by retiring a stale table, rather than working around it in commons. If both sources stay, record which one should answer which questions in their dictionary entries.
+   When two sources, tables, or trusted artifacts could answer the same question, such as a curated mart and the raw tables beneath it, compute the answer each way and compare. If the answers differ, investigate why and summarize the discrepancy in step 5. Ask the user which source or definition the agent should use. If the discrepancy comes from an error, recommend fixing it upstream rather than working around it in commons. If both sources stay, record which one should answer which questions in their dictionary entries.
 
 5. **Confirm trust, scope, and the data boundary.** Identify which layer or layers the agent could access, such as warehouse tables, views, pins, or pipeline outputs. Present the tradeoffs and recommend the cleanest ready-to-analyze source that fits the user's environment.
 
@@ -85,11 +85,11 @@ Reconcile new evidence with earlier assumptions and decisions as it appears. Sur
 
    Do not ask the user to design the detailed division among the dictionary, semantic layer, and remaining context. Steps 6 through 8 determine that placement from the available evidence.
 
-   Before building, present one design summary: the intended users and questions, selected sources and trusted artifacts, the data flow and source mapping, any conflicts found in step 4, and the recommended initial scope. Include any foundational choices that remain open, with a recommendation for each. This is the main checkpoint before building; wait for the user to confirm or correct it. If one open choice determines others, such as which source is canonical, settle it on its own first. Then add the confirmed high-level scope, data boundary, source mapping, and trusted artifacts to the agent instruction file; omit example questions and the history of how the decisions were reached.
+   Before building, present one design summary: the intended users and questions, selected sources and trusted artifacts, the data flow and source mapping, any conflicts found in step 4, and the recommended initial scope. Include any unresolved decisions, with a recommendation for each. This is the main checkpoint before building; wait for the user to confirm or correct it. If one open choice determines others, such as which source is canonical, settle it on its own first. Then add the confirmed high-level scope, data boundary, source mapping, and trusted artifacts to the agent instruction file; omit example questions and the history of how the decisions were reached.
 
 6. **Build the data dictionaries.** Create one `data-dict.yaml` for each selected data source. Follow the [data dictionary reference](data-dictionaries.md) for commons-specific behavior and the upstream data-dict documentation for the general format. Use existing dictionaries, schemas, notes, verified exploration, and trusted code. Use joins demonstrated by trusted code to document relationships. Before extraction, review each draft dictionary against the evidence again. Look specifically for surprising facts that are not yet represented and claims that are not supported by verified sources; correct them or surface the uncertainty. Preserve existing governed definitions, but defer adding or redesigning them until step 7, when trusted artifacts can establish their meaning and computation.
 
-7. **Extract from selected trusted artifacts.** For each artifact selected during discovery and mapped to a confirmed data source, follow the [extraction reference](extracting-from-artifacts.md). Use it to draft and reconcile measures, governed definitions, dictionary edits, and free-text context. Group proposals where that keeps each one easy to review, such as all small proposals from one artifact, and apply only those the user confirms. Add an unresolved gap to the agent instruction file only when it constrains future implementation.
+7. **Extract from selected trusted artifacts.** For each artifact selected during discovery and mapped to a confirmed data source, follow the [extraction reference](extracting-from-artifacts.md). Use it to draft and reconcile measures, governed definitions, dictionary edits, and free-text context. Group related small proposals for review, for example those from one artifact, and apply only what the user approves. Add an unresolved gap to the agent instruction file only when it constrains future implementation.
 
    If the selected artifacts do not contain trusted computation for a needed calculation, leave that part of the semantic layer incomplete. Record the gap rather than authoring new calculation or data-processing logic.
 
@@ -167,6 +167,6 @@ Reconcile new evidence with earlier assumptions and decisions as it appears. Sur
 
    `agent$prewarm()` finishes building the context index before it returns. It also starts pin downloads in a background process; do not claim that pins are bundled unless the board cache is project-local and those downloads are known to have finished before deployment.
 
-   Verify that the agent starts, that representative context searches retrieve the intended guidance, and that it can answer a few representative questions.
+   Verify that the agent starts, that representative context searches retrieve the intended guidance, and that it can answer a few representative questions. Check that it reaches for each extracted measure, as described at the end of extraction step 9.
 
    Give the user a working way to try out the agent. Ask them to check that representative answers, business meanings, source choices, and stated limitations match their expectations, and address what they find. Add only unresolved implementation constraints to the agent instruction file; do not record the review itself. Follow the scope the user confirmed, whether incremental or comprehensive. Once the user chooses a comprehensive first version, do not defer confirmed material merely to produce a smaller agent.
