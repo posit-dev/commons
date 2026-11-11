@@ -66,6 +66,11 @@ commons_app <- function(client, ...) {
 #' with [shinychat::page_chat()] or [shinychat::chat_ui()], passing
 #' `theme = commons_theme()` so the commons chat assets are on the page.
 #'
+#' The agent writes R code at runtime, so deployment tools can't detect the
+#' packages it uses. Include them in the deployment, e.g. by listing the
+#' tidyverse in the app's `DESCRIPTION`; see
+#' `vignette("commons", package = "commons")`.
+#'
 #' Documents the agent writes open in the chat's drawer, which
 #' [shinychat::page_chat()] and [shinychat::chat_ui()] enable by default. An app
 #' that passes `drawer = FALSE` gets no documents in view, though the agent
