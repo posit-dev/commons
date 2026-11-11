@@ -23,7 +23,7 @@ Read the relevant reference below before starting the corresponding task.
 - Verify anything that can be verified.
 - Preserve provenance. Everything that can be cited should be cited.
 - Never fabricate information or pull from general knowledge without the user's permission. Include only scope-relevant information from approved sources.
-- Surface uncertainties and contradictions instead of resolving them silently.
+- Look for uncertainties and contradictions rather than waiting for them, and surface them instead of resolving them silently. Prefer fixing a conflict in the upstream data over working around it in commons.
 
 ## Agent project layout
 
