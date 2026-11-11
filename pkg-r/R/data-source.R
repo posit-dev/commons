@@ -807,14 +807,7 @@ fallback_describe_relation <- function(
   call = rlang::caller_env()
 ) {
   sample <- tryCatch(
-    DBI::dbGetQuery(
-      con,
-      sprintf(
-        "SELECT * FROM %s LIMIT %d",
-        DBI::dbQuoteIdentifier(con, id),
-        n_fallback_rows
-      )
-    ),
+    fallback_sample(con, DBI::dbQuoteIdentifier(con, id), n_fallback_rows),
     error = function(err) {
       cli::cli_abort(
         "Failed to infer the selected relation's column types.",
@@ -827,6 +820,20 @@ fallback_describe_relation <- function(
     column = names(sample),
     type = vapply(sample, function(x) class(x)[[1]], character(1)),
     row.names = NULL
+  )
+}
+
+# The zero-row query is portable, but some drivers infer column classes from
+# row values, so a few rows are sampled where the dialect accepts `LIMIT`.
+# Dialects without it, like T-SQL and Oracle, keep the zero-row result.
+fallback_sample <- function(con, relation, n) {
+  empty <- DBI::dbGetQuery(con, paste("SELECT * FROM", relation, "WHERE 1 = 0"))
+  if (n == 0L) {
+    return(empty)
+  }
+  tryCatch(
+    DBI::dbGetQuery(con, sprintf("SELECT * FROM %s LIMIT %d", relation, n)),
+    error = function(err) empty
   )
 }
 
