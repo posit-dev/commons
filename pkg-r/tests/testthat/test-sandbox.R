@@ -147,9 +147,7 @@ sandboxed_worker_probes <- function(
   withr::defer(unlink(callr_dir, recursive = TRUE), envir = env)
 
   rs <- callr::r_session$new(
-    callr::r_session_options(
-      env = worker_scrubbed_env(work_dir, worker_single_thread(sandbox_mode))
-    )
+    worker_session_options(work_dir, worker_single_thread(sandbox_mode))
   )
   withr::defer(rs$close(), envir = env)
   withr::local_envvar(CALLR_TMPDIR = callr_dir, .local_envir = env)

@@ -306,9 +306,7 @@ worker_ensure <- function(worker, fn_sources = character()) {
   callr_dir <- tempfile("commons-callr-")
   dir.create(callr_dir, recursive = TRUE)
   rs <- callr::r_session$new(
-    callr::r_session_options(
-      env = worker_scrubbed_env(work_dir, worker_single_thread("auto"))
-    ),
+    worker_session_options(work_dir, worker_single_thread("auto")),
     wait = TRUE
   )
   # Load the worker runtime before engaging the sandbox. No user-provided code
@@ -419,6 +417,17 @@ close_worker_session <- function(rs) {
   try(rs$close(), silent = TRUE)
   .Call(c_kill_group, pid)
   invisible()
+}
+
+# R startup files would re-add what the scrub removes (`.Renviron` often holds
+# API keys), so the worker reads none. callr still passes the host's
+# .libPaths(), so libraries a `.Rprofile` activates, like renv's, stay visible.
+worker_session_options <- function(work_dir, single_thread = FALSE) {
+  callr::r_session_options(
+    env = worker_scrubbed_env(work_dir, single_thread),
+    user_profile = FALSE,
+    cmdargs = c(callr::r_session_options()$cmdargs, "--no-environ")
+  )
 }
 
 # The content environment holds credentials (API keys, session tokens,
