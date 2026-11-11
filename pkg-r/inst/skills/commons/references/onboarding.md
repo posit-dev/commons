@@ -101,7 +101,7 @@ Reconcile new evidence with earlier assumptions and decisions as it appears. Sur
 
 10. **Complete the agent.** Fill in `DESCRIPTION`, `agent.R`, and `app.R`. Ensure each Shiny session receives a fresh agent, as required by `commons_server()`. Construct it directly inside the server function or call reusable construction code from `agent.R`; do not pass one global agent object to every session. Ask the user which model provider the agent should use, since that decides where their data is sent; if one is already configured, recommend it. Enable thinking in the ellmer chat passed to `agent()`. If the agent should answer only from trusted calculations and never write its own SQL or R, pass `mode = "trusted only"`.
 
-   A commons chat app **must** list `bsicons`, `htmltools`, `tidyverse`, `shiny`, and `shinychat` in `DESCRIPTION` under `Imports`. List any other packages the app calls directly rather than relying on transitive dependencies or `requireNamespace()` calls in `deploy.R` to make rsconnect discover them.
+   A commons chat app **must** list `tidyverse` in `DESCRIPTION` under `Imports`: the agent writes R code at runtime, so rsconnect can't detect the packages that code uses. List any other packages the app calls directly rather than relying on transitive dependencies or `requireNamespace()` calls in `deploy.R` to make rsconnect discover them.
 
    Use or adapt this basic structure for `app.R`, adapting the title and agent construction as needed. In this example `build_agent()` (from `agent.R`) constructs and returns the complete commons agent.
 

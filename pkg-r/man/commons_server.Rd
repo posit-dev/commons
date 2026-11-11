@@ -34,6 +34,11 @@ with \code{\link[shinychat:page_chat]{shinychat::page_chat()}} or \code{\link[sh
 \code{theme = commons_theme()} so the commons chat assets are on the page.
 }
 \details{
+The agent writes R code at runtime, so deployment tools can't detect the
+packages it uses. Include them in the deployment, e.g. by listing the
+tidyverse in the app's \code{DESCRIPTION}; see
+\code{vignette("commons", package = "commons")}.
+
 Documents the agent writes open in the chat's drawer, which
 \code{\link[shinychat:page_chat]{shinychat::page_chat()}} and \code{\link[shinychat:chat_ui]{shinychat::chat_ui()}} enable by default. An app
 that passes \code{drawer = FALSE} gets no documents in view, though the agent

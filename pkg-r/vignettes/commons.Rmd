@@ -293,4 +293,6 @@ commons_app(agent)
 
 Use `commons_app()` to run the agent in a local or single-user Shiny app. For multi-user deployments, compose shinychat's UI with `commons_theme()` on the page and `commons_server()` in the server, and create a new agent for each Shiny session. `commons_server()` warms the agent during post-startup idle time; `agent$prewarm()` warms the context index and pins cache ahead of deployment. This example assumes that `observations` and `site_area` are data frames loaded when the app starts.
 
+When deploying, include the packages that the agent's R code should be able to use, such as the tidyverse, by listing them under `Imports` in `DESCRIPTION` or loading them in `app.R`. The agent writes its code at runtime, so rsconnect can't detect the packages that code uses.
+
 To reuse the same trusted calculations in reports, apps, and other projects, see [Sharing a commons across projects](sharing.html).
