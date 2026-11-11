@@ -84,6 +84,39 @@ test_that("worker entry points stay outside the model environment", {
   expect_no_match(res@value, "secret", fixed = TRUE)
 })
 
+test_that("run_r never reads a file the worker names as a plot", {
+  worker <- local_worker()
+  store <- new_handle_store()
+  outside <- withr::local_tempfile(tmpdir = dirname(tempdir()))
+  writeLines("secret", outside)
+  path <- encodeString(outside, quote = "'")
+  code <- sprintf(
+    paste0(
+      "for (frame in sys.frames()) ",
+      "if (exists('segments', frame, inherits = FALSE)) ",
+      "assign('segments', list(list(type = 'plot', path = %s, ",
+      "model_path = %s)), frame)"
+    ),
+    path,
+    path
+  )
+
+  res <- sync_promise(run_r_tool(worker, store, code))
+
+  expect_match(res@value, "isn't a PNG image", fixed = TRUE)
+  expect_no_match(
+    res@extra$display$html,
+    plot_base64_data(readBin(outside, "raw", file.size(outside))),
+    fixed = TRUE
+  )
+})
+
+test_that("run_r accepts only PNG data as plots", {
+  not_png <- list(type = "plot", png = charToRaw("x"), model_png = raw())
+  res <- run_r_result("plot(1)", list(segments = list(not_png)))
+  expect_match(res@value, "isn't a PNG image", fixed = TRUE)
+})
+
 test_that("run_r prepends a worker-local package library", {
   worker <- local_guardrail_worker()
   worker_ensure(worker)

@@ -142,6 +142,9 @@ run_r_tool <- function(worker, handles, code, fn_sources = character()) {
 }
 
 run_r_result <- function(code, res) {
+  if (is.null(res$failure) && !run_r_plots_valid(res$segments)) {
+    res <- list(failure = "the R session returned a plot that isn't a PNG image.")
+  }
   if (!is.null(res$failure)) {
     return(tool_result(
       sprintf("Error: %s", res$failure),
@@ -168,6 +171,17 @@ run_r_result <- function(code, res) {
   )
 }
 
+# Plots arrive as bytes rather than paths, so the host reads no file the
+# worker names.
+run_r_plots_valid <- function(segments) {
+  plots <- Filter(function(seg) identical(seg$type, "plot"), segments)
+  all(vapply(
+    plots,
+    function(seg) is_png_data(seg$png) && is_png_data(seg$model_png),
+    logical(1)
+  ))
+}
+
 # The model-facing value: text segments merged in order, plots as inline
 # images so the model sees what it plotted. Source segments are dropped —
 # the model already knows what it wrote.
@@ -189,7 +203,10 @@ run_r_value <- function(segments) {
       source = NULL,
       plot = {
         flush()
-        out[[length(out) + 1L]] <- model_plot_image(seg$model_path)
+        out[[length(out) + 1L]] <- ellmer::ContentImageInline(
+          "image/png",
+          plot_base64_data(seg$model_png)
+        )
       },
       warning = buffer <- c(buffer, paste0("Warning: ", seg$text)),
       error = buffer <- c(buffer, paste0("Error: ", seg$text)),
@@ -233,7 +250,7 @@ run_r_html <- function(code, segments) {
           "<img class=\"commons-run-plot\" src=\"data:image/png;base64,%s\" ",
           "alt=\"Plot produced by R code\" width=\"%d\" height=\"%d\"/>"
         ),
-        plot_image_data(seg$path),
+        plot_base64_data(seg$png),
         dims$width,
         dims$height
       ))
