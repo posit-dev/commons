@@ -355,3 +355,141 @@ test_that("a failed integration check isn't remembered", {
   local_mocked_bindings(connect_visitor_integration = function(...) "publisher")
   expect_identical(connect_share_audience(), "publisher")
 })
+
+test_that("a first share publishes a copy that stays once the viewer uses it", {
+  connect <- local_fake_connect()
+  s <- share_test_chat()
+  session <- ShareSession$new()
+
+  shiny::testServer(share_test_app(s), session = session, {
+    settle(session)
+    open_output_share(session, s)
+
+    expect_contains(connect$requests, c("POST content", "POST content/copy1/bundles", "POST content/copy1/deploy"))
+    expect_identical(s$receipt()$guid, "copy1")
+    expect_type(s$receipt()$fingerprint, "character")
+    expect_gt(s$hooks$saves, 0)
+    expect_match(output$chat_share_link$html, "data-url=\"https://connect.example.com/content/copy1/\"", fixed = TRUE)
+
+    session$setInputs(chat_share_copy = 1)
+    session$setInputs(chat_share_done = 1)
+    settle(session)
+    expect_false("DELETE content/copy1" %in% connect$requests)
+    expect_identical(s$receipt()$guid, "copy1")
+  })
+})
+
+test_that("a first share closed before anyone could use it is deleted", {
+  connect <- local_fake_connect()
+  s <- share_test_chat()
+  session <- ShareSession$new()
+
+  shiny::testServer(share_test_app(s), session = session, {
+    settle(session)
+    open_output_share(session, s)
+    session$setInputs(chat_share_done = 1)
+    settle(session)
+
+    expect_contains(connect$requests, "DELETE content/copy1")
+    expect_null(connect$content$copy1)
+    expect_null(s$receipt())
+  })
+})
+
+test_that("sharing again reuses the viewer's copy, or replaces one that's gone", {
+  connect <- local_fake_connect()
+  s <- share_test_chat()
+  session <- ShareSession$new()
+
+  shiny::testServer(share_test_app(s), session = session, {
+    settle(session)
+    open_output_share(session, s)
+    session$setInputs(chat_share_copy = 1, chat_share_done = 1)
+    settle(session)
+
+    connect$requests <- character()
+    open_output_share(session, s, nonce = 2)
+    expect_contains(connect$requests, c("GET content/copy1", "GET content/copy1/permissions"))
+    expect_false("POST content" %in% connect$requests)
+    # Nothing changed, so nothing is redeployed or offered for update.
+    expect_false("POST content/copy1/bundles" %in% connect$requests)
+    expect_null(output$chat_share_status)
+    session$setInputs(chat_share_done = 2)
+    settle(session)
+
+    connect$content$copy1 <- NULL
+    open_output_share(session, s, nonce = 3)
+    expect_contains(connect$requests, c("POST content", "POST content/copy2/bundles"))
+    expect_identical(s$receipt()$guid, "copy2")
+  })
+})
+
+test_that("general access grants the app's people and takes back only those grants", {
+  connect <- local_fake_connect()
+  s <- share_test_chat()
+  session <- ShareSession$new()
+
+  shiny::testServer(share_test_app(s), session = session, {
+    settle(session)
+    open_output_share(session, s)
+
+    session$setInputs(chat_share_access = "app")
+    settle(session)
+    expect_contains(connect$requests, "PATCH content/copy1")
+    expect_identical(fake_connect_viewers(connect, "copy1"), c("bob", "olive"))
+    expect_identical(s$receipt()$general, "app")
+    expect_setequal(names(s$receipt()$inherited), c("bob", "olive"))
+
+    # Adding someone who already has access through the app keeps their grant
+    # when the copy is restricted again.
+    session$setInputs(chat_share_search = "bob")
+    session$elapse(300)
+    settle(session)
+    session$setInputs(chat_share_add = list(guid = "bob", nonce = 1))
+    settle(session)
+
+    session$setInputs(chat_share_access = "restricted")
+    settle(session)
+    expect_identical(fake_connect_viewers(connect, "copy1"), "bob")
+    expect_identical(s$receipt()$general, "restricted")
+    expect_length(s$receipt()$inherited, 0)
+  })
+})
+
+test_that("a failed access change is rolled back", {
+  connect <- local_fake_connect()
+  s <- share_test_chat()
+  session <- ShareSession$new()
+
+  shiny::testServer(share_test_app(s), session = session, {
+    settle(session)
+    open_output_share(session, s)
+
+    connect$fail[["PATCH content/copy1"]] <- 500L
+    session$setInputs(chat_share_access = "app")
+    expect_warning(settle(session), "Changing who can see the copy")
+    expect_length(connect$permissions$copy1, 0)
+    expect_null(s$receipt()$general)
+    expect_match(output$chat_share_status$html, "Couldn't share to Posit Connect.", fixed = TRUE)
+    expect_match(output$chat_share_note$html, "Only people with access", fixed = TRUE)
+  })
+})
+
+test_that("an expired Connect session tells the viewer to reload", {
+  connect <- local_fake_connect()
+  connect$fail[["POST oauth/integrations/credentials"]] <- "session"
+  s <- share_test_chat()
+  session <- ShareSession$new()
+
+  shiny::testServer(share_test_app(s), session = session, {
+    settle(session)
+    open_output_share(session, s)
+
+    expect_false("POST content" %in% connect$requests)
+    expect_match(
+      session$modals[[length(session$modals)]]$html,
+      share_error_messages$session,
+      fixed = TRUE
+    )
+  })
+})
