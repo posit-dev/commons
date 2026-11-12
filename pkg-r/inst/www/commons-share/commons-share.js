@@ -36,6 +36,40 @@
   }).observe(document.body, { childList: true, subtree: true });
   decorate();
 
+  const $ = window.jQuery;
+
+  // renderUI replaces the dialog's buttons, which would drop focus to <body>.
+  // Focus moves to the button now in the same place, or to the search box.
+  $?.(document).on("shiny:value", (event) => {
+    const output = event.target;
+    const focused = document.activeElement;
+    const modal = output.closest?.(".commons-share-modal");
+    if (!modal || !output.contains(focused)) return;
+    const index = [...output.querySelectorAll("button")].indexOf(focused);
+    setTimeout(() => {
+      if (output.contains(document.activeElement)) return;
+      const buttons = output.querySelectorAll("button:not([disabled])");
+      const next = buttons[Math.min(index, buttons.length - 1)] ??
+        modal.querySelector(".commons-share-dialog input");
+      next?.focus();
+    });
+  });
+
+  // Shiny's dialogs don't return focus to what opened them, which can be an
+  // output button far down the chat.
+  let opener = null;
+  $?.(document).on("show.bs.modal", (event) => {
+    const active = document.activeElement;
+    if (event.target.classList.contains("commons-share-modal") && !active?.closest(".modal")) {
+      opener = active;
+    }
+  });
+  $?.(document).on("hidden.bs.modal", (event) => {
+    if (!event.target.classList.contains("commons-share-modal")) return;
+    if (opener?.isConnected) opener.focus();
+    opener = null;
+  });
+
   // An app on Connect runs in a frame that may not allow the clipboard API.
   const copyText = async (text, within) => {
     try {

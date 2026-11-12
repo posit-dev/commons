@@ -1,4 +1,5 @@
-/* Faint rather than hidden, so it can be found without hovering. */
+/* Muted rather than faded, so the icon keeps a 3:1 contrast in both color
+   modes and can be found without hovering. */
 .commons-share-output {
   display: inline-flex;
   flex: none;
@@ -10,24 +11,10 @@
   background: var(--bs-body-bg);
   border: 1px solid var(--bs-border-color);
   border-radius: 0.375rem;
-  opacity: 0.35;
-  transition: opacity 0.15s;
-}
-
-.commons-shareable:hover > .commons-share-output,
-.commons-shareable:focus-within > .commons-share-output {
-  opacity: 1;
 }
 
 .commons-share-output:hover {
   color: var(--bs-body-color);
-}
-
-/* Touch screens can't hover, so the button stays at full strength. */
-@media (hover: none) {
-  .commons-share-output {
-    opacity: 1;
-  }
 }
 
 /* A plot's own cap of `min(100%, 34rem)` can't size the wrapper, which would

@@ -802,12 +802,30 @@ share_dialog <- function(target, access, ids, ns, first = TRUE) {
     find("input")$
     addAttrs(autocomplete = "off", `aria-label` = "Add people and groups")$
     allTags()
-  shiny::modalDialog(
+  access_label <- paste0(ns(ids$access), "-label")
+  access_input <- shiny::selectInput(
+    ns(ids$access),
+    label = NULL,
+    choices = c(
+      "Restricted" = "restricted",
+      "Anyone who can access this app" = "app"
+    ),
+    selected = access,
+    selectize = FALSE,
+    width = "fit-content"
+  )
+  access_input <- htmltools::tagQuery(access_input)$
+    find("select")$
+    addAttrs(`aria-labelledby` = access_label)$
+    allTags()
+  # Live regions sit outside renderUI, which would recreate them with their
+  # text already in place, and screen readers don't announce that.
+  share_modal_dialog(
     title = sprintf("Share \u201c%s\u201d", truncate_title(target$title, 60)),
     htmltools::div(
       class = "commons-share-dialog",
       search,
-      shiny::uiOutput(ns(ids$results)),
+      shiny::uiOutput(ns(ids$results), role = "status"),
       htmltools::h6("People with access"),
       # Shiny replaces the placeholder once the people are known.
       htmltools::div(
@@ -815,29 +833,20 @@ share_dialog <- function(target, access, ids, ns, first = TRUE) {
         class = "shiny-html-output",
         share_people_ui(NULL, list(), NULL, loading = TRUE)
       ),
-      htmltools::h6("General access"),
+      htmltools::h6(id = access_label, "General access"),
       htmltools::div(
         class = "commons-share-access",
-        shiny::selectInput(
-          ns(ids$access),
-          label = NULL,
-          choices = c(
-            "Restricted" = "restricted",
-            "Anyone who can access this app" = "app"
-          ),
-          selected = access,
-          selectize = FALSE,
-          width = "fit-content"
-        ),
+        access_input,
         shiny::uiOutput(ns(ids$note))
       ),
-      shiny::uiOutput(ns(ids$status))
+      shiny::uiOutput(ns(ids$status), role = "status")
     ),
     footer = htmltools::div(
       class = "commons-share-actions",
       htmltools::div(
         id = ns(ids$link),
         class = "shiny-html-output",
+        role = "status",
         share_copy_button(NULL, NULL)
       ),
       shiny::actionButton(ns(ids$done), if (first) "Cancel" else "Done", class = "btn-primary")
@@ -898,7 +907,7 @@ share_results_ui <- function(results, add_id, empty = NULL) {
     if (is.null(empty)) {
       return(NULL)
     }
-    return(htmltools::p(class = "commons-share-empty", role = "status", empty))
+    return(htmltools::p(class = "commons-share-empty", empty))
   }
   htmltools::div(
     class = "list-group commons-share-results",
@@ -978,7 +987,6 @@ share_status_ui <- function(status, update_id = NULL) {
       "commons-share-status",
       if (isTRUE(status$error)) "text-danger" else "text-body-secondary"
     ),
-    role = "status",
     if (isTRUE(status$busy)) share_spinner(),
     htmltools::span(status$text),
     if (isTRUE(status$update)) {
@@ -1014,12 +1022,23 @@ commons_share_dependency <- function() {
 }
 
 share_modal <- function(title, text) {
-  shiny::showModal(shiny::modalDialog(
+  shiny::showModal(share_modal_dialog(
     title = title,
     htmltools::p(text),
     footer = shiny::modalButton("Close"),
     easyClose = TRUE
   ))
+}
+
+# Shiny's dialog has no accessible name. The class tells commons-share.js to
+# return focus to whatever opened the dialog once it closes.
+share_modal_dialog <- function(...) {
+  htmltools::tagQuery(shiny::modalDialog(...))$
+    addClass("commons-share-modal")$
+    addAttrs(`aria-labelledby` = "commons-share-modal-title")$
+    find(".modal-title")$
+    addAttrs(id = "commons-share-modal-title")$
+    allTags()
 }
 
 share_abort <- function(reason, parent = NULL, call = rlang::caller_env()) {
