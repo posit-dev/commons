@@ -1,3 +1,13 @@
+json_response <- function(req, body, status = 200L) {
+  httr2::new_response(
+    req$method %||% "GET",
+    req$url,
+    status,
+    headers = list(`Content-Type` = "application/json"),
+    body = charToRaw(jsonlite::toJSON(body, auto_unbox = TRUE))
+  )
+}
+
 # A Posit Connect server held in memory, for driving share_server() through
 # its HTTP requests. `fail` maps "METHOD /path" to a response status (or
 # "session" for an expired session token) so a test can make one call fail.

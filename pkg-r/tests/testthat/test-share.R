@@ -1,13 +1,3 @@
-json_response <- function(req, body, status = 200L) {
-  httr2::new_response(
-    req$method %||% "GET",
-    req$url,
-    status,
-    headers = list(`Content-Type` = "application/json"),
-    body = charToRaw(jsonlite::toJSON(body, auto_unbox = TRUE))
-  )
-}
-
 test_that("sharing is off outside Connect", {
   withr::local_envvar(POSIT_PRODUCT = NA, CONNECT_CONTENT_GUID = NA)
   session <- list(request = list(HTTP_POSIT_CONNECT_USER_SESSION_TOKEN = "t"))
