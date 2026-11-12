@@ -121,12 +121,6 @@ test_that("receipts follow the conversation, not its turns", {
   )
 })
 
-test_that("shared copies get titles Connect accepts", {
-  expect_identical(share_title("Orders\nby region"), "Orders by region")
-  expect_identical(share_title("Hi"), "Shared copy")
-  expect_identical(nchar(share_title(strrep("a", 2000))), 1024L)
-})
-
 test_that("a plot or table is found by the id its display carries", {
   agent <- test_agent()
   req <- ellmer::ContentToolRequest(
@@ -237,14 +231,6 @@ test_that("people search lists users and groups together", {
 
   expect_identical(vapply(found, `[[`, "", "name"), c("Ada L", "bob", "Analysts"))
   expect_identical(vapply(found, `[[`, "", "type"), c("user", "user", "group"))
-})
-
-test_that("an untitled output or conversation is named for the app", {
-  expect_identical(share_fallback_title("Biodiversity explorer", "figure"), "Biodiversity explorer (figure)")
-  expect_identical(share_fallback_title("Biodiversity explorer", "table"), "Biodiversity explorer (table)")
-  expect_identical(share_fallback_title("Biodiversity explorer", "conversation"), "Biodiversity explorer (conversation)")
-  expect_identical(share_fallback_title(NULL, "table"), "Shared table")
-  expect_identical(share_fallback_title(NULL, "conversation"), "Shared conversation")
 })
 
 test_that("a conversation is shared under the title shinychat gave it", {

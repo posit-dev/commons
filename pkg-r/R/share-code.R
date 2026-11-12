@@ -28,7 +28,8 @@ share_clean_title <- function(title) {
   if (is.null(title) || inherits(title, "waiver") || length(title) != 1) {
     return(NULL)
   }
-  title <- gsub("<[^>]+>", "", as.character(title))
+  # Only tag-like spans, so "rate < 5 vs > 3" keeps its comparison.
+  title <- gsub("</?[A-Za-z][^<>]*>", "", as.character(title))
   title <- trimws(gsub("\\s+", " ", title))
   if (is.na(title) || !nzchar(title)) NULL else title
 }

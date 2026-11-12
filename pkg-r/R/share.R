@@ -138,12 +138,7 @@ share_server <- function(id, client, chat, session) {
         icon = share_icon(),
         tooltip = "Share conversation"
       ),
-    htmltools::span(
-      class = "commons-share-config",
-      hidden = NA,
-      `data-output-input` = ns(ids$output),
-        share_icon()
-      ),
+      share_config_tag(ns(ids$output)),
       commons_share_dependency()
     )
   })
@@ -997,6 +992,17 @@ share_status_ui <- function(status, update_id = NULL) {
         "Update copy"
       )
     }
+  )
+}
+
+# Tells commons-share.js where an output button's click goes, and gives it the
+# icon to draw.
+share_config_tag <- function(output_input) {
+  htmltools::span(
+    class = "commons-share-config",
+    hidden = NA,
+    `data-output-input` = output_input,
+    share_icon()
   )
 }
 

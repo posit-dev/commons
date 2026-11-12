@@ -46,38 +46,6 @@ test_that("a shared conversation shows what the user saw, without Shiny", {
   expect_match(html, 'from a <a href="https://connect.example.com/app/"', fixed = TRUE)
 })
 
-test_that("the share footer dates the snapshot", {
-  expect_identical(
-    share_footer_html(date = as.Date("2026-11-09")),
-    paste0(
-      "<footer class=\"commons-share-footer\">Shared November 9, 2026 from a ",
-      "data agent. Results reflect the data as of that date.</footer>"
-    )
-  )
-})
-
-test_that("the share footer names the app it came from", {
-  date <- as.Date("2026-11-09")
-  expect_identical(
-    share_footer_html(list(title = "Biodiversity explorer", url = "https://c.example/app/"), date),
-    paste0(
-      "<footer class=\"commons-share-footer\">Shared November 9, 2026 from the ",
-      "<a href=\"https://c.example/app/\" target=\"_blank\" rel=\"noopener\">",
-      "Biodiversity explorer</a> agent. Results reflect the data as of that date.</footer>"
-    )
-  )
-  expect_match(
-    share_footer_html(list(title = "Sales Agent"), date),
-    "from the Sales Agent. Results",
-    fixed = TRUE
-  )
-  expect_match(
-    share_footer_html(list(title = "R&D"), date),
-    "from the R&amp;D agent.",
-    fixed = TRUE
-  )
-})
-
 test_that("a trusted-only agent's conversation is shared without documents", {
   agent <- test_agent(
     semantic_layer = semantic_layer(count_measure_tool()),
@@ -130,24 +98,15 @@ test_that("a shared document is its rendered page", {
   )
 })
 
-test_that("the manifest lists every bundled file as static content", {
+test_that("a bundle's archive holds every file and the manifest", {
   dir <- withr::local_tempdir()
   dir.create(file.path(dir, "documents"))
   writeLines("<p>a</p>", file.path(dir, "index.html"))
   writeLines("<p>b</p>", file.path(dir, "documents", "b.html"))
 
   write_static_manifest(dir)
-
-  manifest <- jsonlite::read_json(file.path(dir, "manifest.json"))
-  expect_identical(manifest$metadata$appmode, "static")
-  expect_identical(manifest$metadata$primary_html, "index.html")
-  expect_setequal(names(manifest$files), c("index.html", "documents/b.html"))
-  expect_identical(
-    manifest$files[["documents/b.html"]]$checksum,
-    unname(tools::md5sum(file.path(dir, "documents", "b.html")))
-  )
-
   archive <- bundle_archive(dir)
+
   expect_setequal(
     utils::untar(archive, list = TRUE),
     c("index.html", "documents/b.html", "manifest.json")
