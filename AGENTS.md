@@ -8,6 +8,8 @@ Use soft wrapping for prose in Markdown files, including skills and vignettes.
 
 Both packages are first-class implementations. Never describe the Python package as a port, translation, or mirror of the R one, in code comments, docstrings, documentation, commit messages, or package metadata. Where one implementation needs to point at the other, name the shared contract that governs them both, or refer to the sibling file plainly.
 
+`pkg-py/docs/03-feature-parity.qmd` tracks the features that the R package has and the Python package does not have yet. When a pull request adds a user-facing feature to the R package only, add a row for it in the same pull request. Remove the row in the pull request that adds the feature to the Python package.
+
 Anything both implementations must agree on belongs in `tests/shared/` as an executable fixture read by both suites, not as prose and not as a per-language copy. A Python-only or R-only copy of a shared behavior is a review defect. See `tests/shared/README.md`.
 
 Artifacts both packages ship, rather than behavior both must implement, live at the repository root instead: `prompts/` today. Neither an R package nor a wheel can read a file outside its own directory, so `scripts/sync-shared.sh` copies each source into the packages, the copies are committed, and CI fails when one is stale. Edit the root source and re-run the script; a hand-edited copy is a review defect. See `prompts/README.md`.
