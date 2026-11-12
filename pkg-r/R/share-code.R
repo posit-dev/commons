@@ -121,7 +121,8 @@ share_output_find <- function(turns, id) {
 }
 
 share_result_html <- function(result) {
-  html <- if (!is.null(result)) result@extra$display$html
+  display <- if (!is.null(result)) result@extra$display
+  html <- display$html %||% display$markdown
   if (is.null(html)) "" else paste(as.character(html), collapse = "")
 }
 

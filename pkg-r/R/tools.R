@@ -993,10 +993,11 @@ run_sql_tool <- function(
 ) {
   res <- source_query(source, sql)
   body <- df_to_markdown(res)
-  display_html <- paste0(
-    "<pre class=\"commons-run-code\"><code class=\"language-sql\">",
-    html_escape(sql),
-    "</code></pre>",
+  # Markdown gets shinychat's code highlighting, copy button, and table
+  # styling; the table stays HTML so the share wrapper survives.
+  display_md <- sprintf(
+    "```sql\n%s\n```\n\n%s",
+    sql,
     share_wrap(df_to_html(res), "table")
   )
   advert <- register_handle(handles, res)
@@ -1006,7 +1007,7 @@ run_sql_tool <- function(
     paste(c(body, note, advert, entries), collapse = "\n\n"),
     title = "Retrieved data",
     icon = maybe_icon("code-square"),
-    html = display_html,
+    markdown = display_md,
     tag = "B",
     open = FALSE,
     show_tag = FALSE

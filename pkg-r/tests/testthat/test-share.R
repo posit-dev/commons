@@ -134,17 +134,16 @@ test_that("a plot or table is found by the id its display carries", {
     name = "run_sql",
     arguments = list(sql = "SELECT region FROM sales")
   )
-  html <- share_wrap("<table></table>", "table")
+  # run_sql's display is markdown, which carries the table as HTML.
+  result <- run_sql_tool(test_source(), "SELECT region FROM sales")
+  result@request <- req
   agent$set_turns(list(
     ellmer::UserTurn(list(ellmer::ContentText("Which regions?"))),
     ellmer::AssistantTurn(list(req)),
-    ellmer::UserTurn(list(ellmer::ContentToolResult(
-      value = "region",
-      request = req,
-      extra = list(display = list(html = html))
-    )))
+    ellmer::UserTurn(list(result))
   ))
-  id <- regmatches(html, regexpr("[0-9a-f]{16}", html))
+  markdown <- result@extra$display$markdown
+  id <- regmatches(markdown, regexpr("[0-9a-f]{16}", markdown))
 
   target <- share_output_target(agent, id)
 
