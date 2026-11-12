@@ -16,8 +16,9 @@ A \code{\link[shiny:uiOutput]{shiny::uiOutput()}}.
 \code{commons_share_button()} places a button that publishes a read-only copy of
 the conversation to Posit Connect. Put it in the page's toolbar, e.g.
 \code{page_chat(toolbar_global = bslib::toolbar(commons_share_button()))};
-\code{\link[=commons_app]{commons_app()}} includes it. Documents the agent writes get the same
-control in the chat's drawer, and plots and tables get one when hovered.
+\code{\link[=commons_app]{commons_app()}} includes it. While the button is on the page, documents the
+agent writes get the same control in the chat's drawer, and plots and
+tables get one beside them. Without it, nothing can be shared.
 }
 \details{
 The button appears only when the app runs on Posit Connect and its

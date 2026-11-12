@@ -9,5 +9,7 @@ While both Python and R packages are first-class implementations of `commons`, t
 | Snowflake semantic views and Databricks metric views as trusted calculations, with the `Trusted` outcome | Imports the catalog of a Snowflake or Databricks engine, but answers these questions with custom SQL, so `Cited` or `Untrusted` |
 | `trajectory_read()` and `trajectory_review()`, for reading and annotating logged conversations | No equivalent yet |
 | The commons agent skill for coding agents | Ships with the R package only |
+| Reports written as Quarto documents, shown in the chat's drawer and revised with `edit_artifact` | Answers in the chat only |
+| Sharing a conversation, document, plot, or table to Posit Connect | No equivalent yet ([#517](https://github.com/posit-dev/commons/issues/517)) |
 
 This page will shrink (and eventually disappear) as the Python package matures.
