@@ -661,18 +661,22 @@ share_conversation_target <- function(title = NULL) {
 # Reads shinychat internals as a workaround until it exposes the title:
 # https://github.com/posit-dev/shinychat/issues/471
 shinychat_title <- function(id, session) {
-  record <- tryCatch(
-    utils::getFromNamespace("get_session_chat_bookmark_info", "shinychat")(
-      session,
-      paste0(id, ".history-controller")
-    )$record,
+  # Any change to those internals falls back to the default title rather than
+  # erroring in the observer, which would end the session.
+  tryCatch(
+    {
+      record <- utils::getFromNamespace("get_session_chat_bookmark_info", "shinychat")(
+        session,
+        paste0(id, ".history-controller")
+      )$record
+      # Without a `title_source`, the title is a placeholder: the first message.
+      if (is.null(record$title_source) || !rlang::is_string(record$title)) {
+        return(NULL)
+      }
+      record$title
+    },
     error = function(e) NULL
   )
-  # Without a `title_source`, the title is a placeholder: the first message.
-  if (is.null(record$title_source) || !rlang::is_string(record$title)) {
-    return(NULL)
-  }
-  record$title
 }
 
 share_document_target <- function(artifact) {

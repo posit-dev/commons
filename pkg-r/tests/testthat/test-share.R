@@ -305,6 +305,9 @@ test_that("the people search says when no one matches", {
 })
 
 test_that("a re-shared copy offers an update only when what it shows changed", {
+  # A conversation's fingerprint reads shinychat internals; skipped on CRAN so
+  # shinychat's reverse dependency checks don't fail.
+  skip_on_cran()
   agent <- test_agent()
   agent$set_turns(list(
     ellmer::UserTurn(list(ellmer::ContentText("How many orders?"))),

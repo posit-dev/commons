@@ -29,14 +29,6 @@ write_conversation_bundle <- function(
     drawer = FALSE,
     footer = htmltools::HTML(share_footer_html(app))
   )
-  # Asset URLs carry the version of the deployment that streamed them, which
-  # a restored conversation may outlive.
-  dep <- commons_chat_dependency()
-  wire <- gsub(
-    "commons-chat-[0-9.]+/",
-    paste0(dep$name, "-", dep$version, "/"),
-    wire_messages_json(messages)
-  )
   # shiny-chat-container is private to shinychat. Without it, the copy would
   # publish with no messages, so the share fails instead.
   container <- htmltools::tagQuery(page)$find("shiny-chat-container")
@@ -45,6 +37,14 @@ write_conversation_bundle <- function(
       "Can't find shinychat's {.code shiny-chat-container} to write the conversation into."
     )
   }
+  # Asset URLs carry the version of the deployment that streamed them, which
+  # a restored conversation may outlive.
+  dep <- commons_chat_dependency()
+  wire <- gsub(
+    "commons-chat-[0-9.]+/",
+    paste0(dep$name, "-", dep$version, "/"),
+    wire_messages_json(messages)
+  )
   page <- container$
     addAttrs(`data-initial-messages` = wire)$
     allTags()
