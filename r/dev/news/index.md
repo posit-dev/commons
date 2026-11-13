@@ -134,6 +134,12 @@
   classes. App CSS that targets the old `commons-run-r-*` names needs
   updating.
 
+- On Posit Connect, users can now share conversations, documents, plots,
+  or tables as static content they own. Existing apps need no changes to
+  enable this feature. A shared plot or table includes the code that
+  made it, the date it was created, and a link back to the original
+  agent.
+
 ## commons 0.1.1
 
 CRAN release: 2026-10-07

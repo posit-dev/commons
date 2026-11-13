@@ -169,6 +169,14 @@ see a fact, use separate applications with separate context or place the
 facts behind viewer credentials rather than asking the model to hide it
 from that audience.
 
+## Sharing results
+
+Viewers can publish a copy of a conversation, a document, a plot, or a
+table as static content they own. A copy holds what the viewer saw,
+including the results of queries run with their credentials, and anyone
+the copy is shared with sees those results without needing access to the
+data behind them. The dialog offers only people who can access the app.
+
 ## Logging trajectories
 
 Trajectory logging is disabled by default. With `agent(log = TRUE)`,
