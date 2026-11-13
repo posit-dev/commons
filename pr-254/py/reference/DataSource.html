@@ -613,7 +613,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </div>
 <div class="doc-usage-source">
 <p>Usage</p>
-<p><a href="https://github.com/posit-dev/commons/blob/main/pkg-py/src/commons/_data_source.py#L113-L397" target="_blank" rel="noopener">Source</a></p>
+<p><a href="https://github.com/posit-dev/commons/blob/main/pkg-py/src/commons/_data_source.py#L115-L440" target="_blank" rel="noopener">Source</a></p>
 </div>
 <div class="doc-signature doc-Kind.CLASS">
 <div class="sourceCode" id="cb1"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="sig-name">DataSource</span>(</span>
@@ -625,8 +625,10 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="va">relations</span><span class="op">=</span><span class="cn-none">None</span>,</span>
 <span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="va">manifest</span><span class="op">=</span><span class="cn-none">None</span>,</span>
 <span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="va">session</span><span class="op">=</span><span class="cn-none">None</span>,</span>
-<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="va">definition_bindings</span><span class="op">=</span><span class="cn-none">None</span></span>
-<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="va">definition_bindings</span><span class="op">=</span><span class="cn-none">None</span>,</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="va">semantic_models</span><span class="op">=</span><span class="bu">dict</span>(),</span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="va">semantic_stubs</span><span class="op">=</span><span class="bu">dict</span>()</span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div>
 </div>
 <section id="parameter-attributes" class="level2 doc-parameter-attributes">
 <h2 class="doc-parameter-attributes">Parameter Attributes</h2>
@@ -665,6 +667,14 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 
 </dd>
 <dt><code><span class="doc-parameter-name">definition_bindings</span><span class="doc-parameter-annotation-sep">:</span> <span class="doc-parameter-annotation">dict[str, Any] | None</span> <span class="doc-parameter-default-sep op">=</span> <span class="doc-parameter-default">None</span></code></dt>
+<dd>
+
+</dd>
+<dt><code><span class="doc-parameter-name">semantic_models</span><span class="doc-parameter-annotation-sep">:</span> <span class="doc-parameter-annotation">dict[str, SemanticModel]</span> <span class="doc-parameter-default-sep op">=</span> <span class="doc-parameter-default">dict()</span></code></dt>
+<dd>
+
+</dd>
+<dt><code><span class="doc-parameter-name">semantic_stubs</span><span class="doc-parameter-annotation-sep">:</span> <span class="doc-parameter-annotation">dict[str, SemanticStub]</span> <span class="doc-parameter-default-sep op">=</span> <span class="doc-parameter-default">dict()</span></code></dt>
 <dd>
 
 </dd>

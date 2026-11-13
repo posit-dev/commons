@@ -16,7 +16,9 @@ DataSource(
     relations=None,
     manifest=None,
     session=None,
-    definition_bindings=None
+    definition_bindings=None,
+    semantic_models=dict(),
+    semantic_stubs=dict()
 )
 ```
 
@@ -40,4 +42,8 @@ DataSource(
 
 `session: SessionSnapshot | None = None`  
 
-`definition_bindings: dict[str, Any] | None = None`
+`definition_bindings: dict[str, Any] | None = None`  
+
+`semantic_models: dict[str, SemanticModel] = dict()`  
+
+`semantic_stubs: dict[str, SemanticStub] = dict()`
