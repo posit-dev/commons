@@ -242,7 +242,7 @@ Annotated(*args, **kwargs)
 Runtime representation of an annotated type.
 
 At its core 'Annotated[t, dec1, dec2, ...]' is an alias for the type 't'
-with extra annotations. The alias behaves like a normal typing alias.
+with extra metadata. The alias behaves like a normal typing alias.
 Instantiating is the same as instantiating the underlying type; binding
 it to types is also the same.
 
@@ -813,7 +813,7 @@ While both Python and R packages are first-class implementations of `commons`, t
 | R-only feature | What a Python agent does instead |
 |---|---|
 | Snowflake semantic views and Databricks metric views as trusted calculations, with the `Trusted` outcome | Imports the catalog of a Snowflake or Databricks engine, but answers these questions with custom SQL, so `Cited` or `Untrusted` |
-| `trajectory_read()` and `trajectory_review()`, for reading and annotating logged conversations | No equivalent yet |
+| `trajectory_read()`, for reading logged conversations | No equivalent yet |
 | The commons agent skill for coding agents | Ships with the R package only |
 
 This page will shrink (and eventually disappear) as the Python package matures.
