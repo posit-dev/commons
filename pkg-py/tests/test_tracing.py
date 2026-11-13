@@ -201,13 +201,34 @@ def test_logging_on_with_capture_turned_off_is_not_stamped(
     assert os.environ[CAPTURE_VAR] == "false"
 
 
+# Fails the child on a warning or log record from commons or OpenTelemetry.
+# Other stderr output is allowed: onnxruntime (a magika dependency) logs a
+# device-probe warning on the Linux CI runners, and total silence is not
+# commons' to guarantee.
+_QUIET_PREAMBLE = """
+import logging
+import warnings
+
+warnings.filterwarnings("error", module=r"(commons|opentelemetry)(\\.|$)")
+
+
+class _FailOnRecord(logging.Handler):
+    def emit(self, record):
+        raise SystemExit(f"{record.name} logged: {record.getMessage()}")
+
+
+for _name in ("commons", "opentelemetry"):
+    logging.getLogger(_name).addHandler(_FailOnRecord(logging.WARNING))
+"""
+
+
 def run_in_fresh_interpreter(body: str, **env: str) -> str:
     """Run `body` in a new process, where no tracer provider is installed."""
     # Drop the caller's OpenTelemetry settings: OTEL_PYTHON_TRACER_PROVIDER,
     # for one, would install a provider on first use.
     inherited = {k: v for k, v in os.environ.items() if not k.startswith("OTEL_")}
     result = subprocess.run(
-        [sys.executable, "-c", textwrap.dedent(body)],
+        [sys.executable, "-c", _QUIET_PREAMBLE + textwrap.dedent(body)],
         capture_output=True,
         text=True,
         check=False,
@@ -215,12 +236,6 @@ def run_in_fresh_interpreter(body: str, **env: str) -> str:
         timeout=60,
     )
     assert result.returncode == 0, result.stderr
-    # Native code writes to stderr outside Python's warnings system:
-    # onnxruntime (a magika dependency) logs a device-probe warning on the
-    # Linux CI runners. Assert only that commons and OpenTelemetry stay
-    # quiet; total silence is not commons' to guarantee.
-    assert "opentelemetry" not in result.stderr
-    assert "commons" not in result.stderr
     return result.stdout
 
 
