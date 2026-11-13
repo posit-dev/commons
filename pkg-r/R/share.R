@@ -169,6 +169,8 @@ share_server <- function(id, client, chat, session) {
       # Remembering new content before its deploy means a retry after a
       # failure updates it rather than making another.
       if (opened$created) {
+        # A replaced copy's access choices don't carry over to the new one.
+        receipts$forget(target)
         receipts$remember(target, opened$content)
         share$inherited <- list()
         share$access <- "restricted"

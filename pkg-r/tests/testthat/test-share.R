@@ -418,13 +418,39 @@ test_that("sharing again reuses the viewer's copy, or replaces one that's gone",
     # Nothing changed, so nothing is redeployed or offered for update.
     expect_false("POST content/copy1/bundles" %in% connect$requests)
     expect_null(output$chat_share_status)
+    session$setInputs(chat_share_access = "app")
+    settle(session)
+    expect_identical(s$receipt()$general, "app")
     session$setInputs(chat_share_done = 2)
     settle(session)
 
+    # The replacement starts restricted, without the old copy's grants.
     connect$content$copy1 <- NULL
     open_output_share(session, s, nonce = 3)
     expect_contains(connect$requests, c("POST content", "POST content/copy2/bundles"))
     expect_identical(s$receipt()$guid, "copy2")
+    expect_null(s$receipt()$general)
+    expect_null(s$receipt()$inherited)
+  })
+})
+
+test_that("a copy that can't be read for now isn't replaced", {
+  connect <- local_fake_connect()
+  s <- share_test_chat()
+  session <- ShareSession$new()
+
+  shiny::testServer(share_test_app(s), session = session, {
+    settle(session)
+    open_output_share(session, s)
+    session$setInputs(chat_share_copy = 1, chat_share_done = 1)
+    settle(session)
+
+    connect$requests <- character()
+    connect$fail[["GET content/copy1"]] <- 503L
+    session$setInputs(chat_share_output = list(id = s$output_id, nonce = 2))
+    expect_warning(settle(session), "Sharing")
+    expect_false("POST content" %in% connect$requests)
+    expect_identical(s$receipt()$guid, "copy1")
   })
 })
 

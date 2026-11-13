@@ -654,9 +654,12 @@ connect_owned_content <- function(client, guid, user_guid) {
   req <- connect_req(client, "content", guid) |>
     httr2::req_error(is_error = function(resp) FALSE)
   promises::then(httr2::req_perform_promise(req), function(resp) {
-    if (httr2::resp_status(resp) != 200) {
+    # Only a copy that's gone or out of reach is replaced; other failures
+    # would orphan the copy people already have links to.
+    if (httr2::resp_status(resp) %in% c(403L, 404L)) {
       return(NULL)
     }
+    httr2::resp_check_status(resp)
     content <- httr2::resp_body_json(resp)
     if (identical(content$owner_guid, user_guid)) content else NULL
   })
