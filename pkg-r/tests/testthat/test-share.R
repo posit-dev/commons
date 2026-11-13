@@ -353,6 +353,20 @@ test_that("a viewer who can share gets the share script and a toolbar button", {
   })
 })
 
+test_that("a reconnected session replaces the share UI rather than adding a second copy", {
+  local_fake_connect()
+  s <- share_test_chat()
+  session <- ShareSession$new()
+
+  shiny::testServer(share_test_app(s), session = session, {
+    settle(session)
+
+    expect_identical(session$removes, ".commons-share-config, .commons-share-toolbar")
+    expect_match(session$inserts[[1]]$html, "class=\"commons-share-config\"", fixed = TRUE)
+    expect_match(session$inserts[[2]]$html, "commons-share-toolbar", fixed = TRUE)
+  })
+})
+
 test_that("an app without a visitor key integration is given the least privileged one", {
   connect <- local_fake_connect()
   connect$integrations <- list(

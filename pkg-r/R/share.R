@@ -578,6 +578,14 @@ share_ids_for <- function(id) {
 # The config and script go in the body rather than the toolbar, so documents,
 # plots, and tables can be shared even when the toolbar can't be found.
 share_insert_ui <- function(ns, ids, session) {
+  # A session that reconnects after the integration restart keeps its page, so
+  # replace the UI the previous process inserted.
+  shiny::removeUI(
+    ".commons-share-config, .commons-share-toolbar",
+    multiple = TRUE,
+    immediate = TRUE,
+    session = session
+  )
   shiny::insertUI(
     "body",
     where = "beforeEnd",
@@ -598,7 +606,8 @@ share_insert_ui <- function(ns, ids, session) {
         icon = share_icon(),
         tooltip = "Share conversation"
       )
-    ),
+    ) |>
+      htmltools::tagAppendAttributes(class = "commons-share-toolbar"),
     immediate = TRUE,
     session = session
   )

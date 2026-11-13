@@ -176,6 +176,7 @@ ShareSession <- R6::R6Class(
   public = list(
     modals = list(),
     inserts = list(),
+    removes = character(),
     reconnect = NULL,
     initialize = function() {
       super$initialize()
@@ -193,6 +194,11 @@ ShareSession <- R6::R6Class(
       unlockBinding("sendInsertUI", self)
       self$sendInsertUI <- function(selector, multiple, where, content) {
         inserts <<- c(inserts, list(list(selector = selector, html = content$html)))
+        invisible()
+      }
+      unlockBinding("sendRemoveUI", self)
+      self$sendRemoveUI <- function(selector, multiple) {
+        removes <<- c(removes, selector)
         invisible()
       }
     }
