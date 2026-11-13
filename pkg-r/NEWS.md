@@ -51,7 +51,7 @@
 
 * The CSS classes on `run_r`'s display are now `commons-run-display`, `commons-run-details`, `commons-run-code`, and `commons-run-plot`, without the `-r`, because the Python package's code tool uses the same classes. App CSS that targets the old `commons-run-r-*` names needs updating.
 
-* On Posit Connect, users can now share conversations, documents, plots, or tables as static content they own. Existing apps need no changes to enable this feature. A shared plot or table includes the code that made it, the date it was created, and a link back to the original agent. To turn sharing on, add Connect's "Connect Visitor API Key" integration to the app under **Runtime** > **Integrations** in its settings.
+* On Posit Connect, users can now share conversations, documents, plots, or tables as static content they own. Existing apps need no changes to enable this feature. A shared plot or table includes the code that made it, the date it was created, and a link back to the original agent.
 
 # commons 0.1.1
 

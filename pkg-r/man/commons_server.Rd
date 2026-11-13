@@ -56,9 +56,6 @@ document, plot, or table. Sharing is available only when the app runs on
 Posit Connect. Shared items are published as the viewer who shares it, so
 only viewers whose Connect account can publish content can share. Items
 can only be shared with people who can view the commons apps.
-
-To turn sharing on, add Connect's "Connect Visitor API Key" integration to
-the deployed app under \strong{Runtime} > \strong{Integrations} in its settings.
 }
 
 \examples{

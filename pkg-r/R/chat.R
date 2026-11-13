@@ -88,9 +88,6 @@ commons_app <- function(client, ...) {
 #' only viewers whose Connect account can publish content can share. Items
 #' can only be shared with people who can view the commons apps.
 #'
-#' To turn sharing on, add Connect's "Connect Visitor API Key" integration to
-#' the deployed app under **Runtime** > **Integrations** in its settings.
-#'
 #' @param client An [agent()]. In a deployed app, create the agent
 #'   inside the server function and pass it to `commons_server()` so each
 #'   Shiny session gets its own agent state.
