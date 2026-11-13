@@ -145,12 +145,16 @@ def test_who_gets_a_grant_matches_the_shared_fixture(case: dict[str, Any]) -> No
 def test_what_a_second_share_looks_up_matches_the_shared_fixture(
     case: dict[str, Any],
 ) -> None:
-    client, seen = connect_double(refused=case["refused"])
+    refused = list(case["refused"])
+    client, seen = connect_double(refused=refused)
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         share_trajectory_access(case["usernames"], client=client)
-        before = len(seen)
+    before = len(seen)
+    refused.clear()
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
         share_trajectory_access(case["again"], client=client)
 
     looked_up = [
@@ -159,6 +163,8 @@ def test_what_a_second_share_looks_up_matches_the_shared_fixture(
         if request.url.path.endswith("/users")
     ]
     assert looked_up == case["looked_up"]
+    granted = [grant["principal_guid"] for grant in grants(seen[before:])]
+    assert granted == case["granted"]
 
 
 def test_a_username_repeated_in_one_call_is_looked_up_once() -> None:

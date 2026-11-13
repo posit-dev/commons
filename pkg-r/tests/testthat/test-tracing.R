@@ -192,8 +192,8 @@ test_that("share_trajectory_access warns off Connect", {
 
 # A Connect server for the shared sharing cases. Username `x` resolves to
 # `guid-x` unless it is in `case$unknown`, and a grant for a principal in
-# `case$refused` gets a 400. `state` records the grants that went through and
-# the usernames looked up.
+# `state$refused` gets a 400; it starts as `case$refused`. `state` records the
+# grants that went through and the usernames looked up.
 local_connect_double <- function(case, state, env = parent.frame()) {
   withr::local_envvar(
     CONNECT_CONTENT_GUID = "content-guid",
@@ -203,6 +203,7 @@ local_connect_double <- function(case, state, env = parent.frame()) {
   )
   state$added <- character()
   state$looked_up <- character()
+  state$refused <- unlist(case$refused)
   json_response <- function(req, body) {
     httr2::new_response(
       "GET", req$url, 200L,
@@ -215,7 +216,7 @@ local_connect_double <- function(case, state, env = parent.frame()) {
     function(req) {
       if (!is.null(req$body)) {
         principal <- req$body$data$principal_guid
-        if (principal %in% unlist(case$refused)) {
+        if (principal %in% state$refused) {
           return(httr2::response(400L, request = req))
         }
         state$added <- c(state$added, principal)
@@ -276,11 +277,18 @@ test_that("a second share looks up who the shared fixture says", {
 
     suppressWarnings(share_trajectory_access(unlist(case$usernames)))
     state$looked_up <- character()
-    suppressWarnings(share_trajectory_access(unlist(case$again)))
+    state$added <- character()
+    state$refused <- character()
+    expect_no_warning(share_trajectory_access(unlist(case$again)))
 
     expect_equal(
       state$looked_up,
       unlist(case$looked_up) %||% character(),
+      info = case$name
+    )
+    expect_equal(
+      state$added,
+      unlist(case$granted) %||% character(),
       info = case$name
     )
   }
