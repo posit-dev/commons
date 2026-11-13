@@ -176,8 +176,14 @@ ShareSession <- R6::R6Class(
   public = list(
     modals = list(),
     inserts = list(),
+    reconnect = NULL,
     initialize = function() {
       super$initialize()
+      unlockBinding("allowReconnect", self)
+      self$allowReconnect <- function(value) {
+        reconnect <<- value
+        invisible()
+      }
       unlockBinding("sendModal", self)
       self$sendModal <- function(type, message) {
         html <- as.character(message$html %||% "")

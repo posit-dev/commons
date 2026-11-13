@@ -370,14 +370,15 @@ connect_add_collaborator <- function(client, guid, principal_guid) {
 }
 
 # Failures aren't cached, so a later session checks again.
-connect_share_audience <- function() {
+connect_share_audience <- function(before_attach = function() NULL) {
   if (exists("audience", envir = share_cache)) {
     return(share_cache$audience)
   }
   tryCatch(
     share_cache$audience <- connect_visitor_integration(
       connect_client(),
-      connect_content_guid()
+      connect_content_guid(),
+      before_attach
     ),
     error = function(err) {
       cli::cli_warn(
@@ -394,7 +395,7 @@ share_cache <- new.env(parent = emptyenv())
 # An integration capped at the Viewer role can't publish. Connect ships a
 # suitable integration, but each content item must be associated with it, so
 # commons associates one when none is, rather than asking the publisher to.
-connect_visitor_integration <- function(client, guid) {
+connect_visitor_integration <- function(client, guid, before_attach = function() NULL) {
   if (!nzchar(guid)) {
     return(NULL)
   }
@@ -419,7 +420,7 @@ connect_visitor_integration <- function(client, guid) {
       return(association$oauth_integration_guid)
     }
   }
-  attached <- connect_attach_visitor_integration(client, guid, associations)
+  attached <- connect_attach_visitor_integration(client, guid, associations, before_attach)
   if (is.null(attached)) {
     cli::cli_warn(
       "Posit Connect has no Visitor API Key integration that can publish, so sharing is off."
@@ -429,8 +430,14 @@ connect_visitor_integration <- function(client, guid) {
 }
 
 # Associating replaces the content's associations, so the existing ones are
-# sent along with the new one.
-connect_attach_visitor_integration <- function(client, guid, associations) {
+# sent along with the new one. Connect then restarts the content's processes,
+# so `before_attach` can prepare the session that triggers it.
+connect_attach_visitor_integration <- function(
+  client,
+  guid,
+  associations,
+  before_attach = function() NULL
+) {
   integrations <- connect_req(client, "oauth", "integrations") |>
     httr2::req_perform() |>
     httr2::resp_body_json()
@@ -454,6 +461,7 @@ connect_attach_visitor_integration <- function(client, guid, associations) {
     vapply(associations, function(x) x$oauth_integration_guid, character(1)),
     chosen$guid
   )
+  before_attach()
   connect_req(client, "content", guid, "oauth", "integrations", "associations") |>
     httr2::req_method("PUT") |>
     httr2::req_body_json(lapply(guids, function(g) list(oauth_integration_guid = g))) |>

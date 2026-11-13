@@ -371,6 +371,22 @@ test_that("an app without a visitor key integration is given the least privilege
   expect_length(connect$requests, 0)
 })
 
+test_that("only the session that attaches an integration may reconnect", {
+  connect <- local_fake_connect()
+  connect$associations <- character()
+  s <- share_test_chat()
+
+  first <- ShareSession$new()
+  shiny::testServer(share_test_app(s), session = first, settle(first))
+  expect_identical(first$reconnect, "force")
+  expect_identical(connect$associations, "publisher")
+
+  rm(list = ls(share_cache), envir = share_cache)
+  later <- ShareSession$new()
+  shiny::testServer(share_test_app(s), session = later, settle(later))
+  expect_null(later$reconnect)
+})
+
 test_that("an app that can't get a visitor key integration shows no share buttons", {
   connect <- local_fake_connect()
   connect$associations <- character()

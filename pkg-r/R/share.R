@@ -14,7 +14,11 @@ share_server <- function(id, client, chat, session) {
   if (is.null(token)) {
     return(NULL)
   }
-  audience <- connect_share_audience()
+  # Attaching an integration restarts the app, so let this session reconnect
+  # to the new process rather than show as disconnected.
+  audience <- connect_share_audience(
+    before_attach = function() session$allowReconnect("force")
+  )
   if (is.null(audience)) {
     return(NULL)
   }
