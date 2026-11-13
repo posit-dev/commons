@@ -231,7 +231,10 @@ test_that("share_trajectory_access grants who the shared fixture says", {
     })
 
     if (isTRUE(case$warns)) {
-      expect_warning(share_trajectory_access(unlist(case$usernames)))
+      expect_warning(
+        share_trajectory_access(unlist(case$usernames)),
+        "Could not share"
+      )
     } else {
       expect_no_warning(share_trajectory_access(unlist(case$usernames)))
     }

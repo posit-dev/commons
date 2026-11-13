@@ -119,7 +119,8 @@ def test_who_gets_a_grant_matches_the_shared_fixture(case: dict[str, Any]) -> No
         share_trajectory_access(case["usernames"], client=client)
 
     assert [grant["principal_guid"] for grant in grants(seen)] == case["expected"]
-    assert bool(caught) == case.get("warns", False)
+    warned = any("Could not share" in str(warning.message) for warning in caught)
+    assert warned == case.get("warns", False)
 
 
 def test_a_username_handled_once_is_not_looked_up_again() -> None:
