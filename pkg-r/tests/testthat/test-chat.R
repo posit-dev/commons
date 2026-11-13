@@ -9,18 +9,22 @@ test_that("commons_app builds a single-user app on page_chat", {
 
   app_env <- environment(app$serverFuncSource)
   ui <- app_env$ui(NULL)
-  chat <- htmltools::tagQuery(ui)$find("shiny-chat-container")$selectedTags()
   deps <- htmltools::findDependencies(ui)
 
-  expect_length(chat, 1)
-  # Left unset so chat_server() decides (it enables both automatically).
-  expect_null(chat[[1]]$attribs[["allow-attachments"]])
-  expect_null(chat[[1]]$attribs[["enable-cancel"]])
   expect_true("commons-chat" %in% vapply(deps, `[[`, character(1), "name"))
 
   shiny::testServer(app_env$server, {
     session$flushReact()
   })
+
+  # shiny-chat-container is private to shinychat; skipped on CRAN so
+  # shinychat's reverse dependency checks don't fail.
+  skip_on_cran()
+  chat <- htmltools::tagQuery(ui)$find("shiny-chat-container")$selectedTags()
+  expect_length(chat, 1)
+  # Left unset so chat_server() decides (it enables both automatically).
+  expect_null(chat[[1]]$attribs[["allow-attachments"]])
+  expect_null(chat[[1]]$attribs[["enable-cancel"]])
 })
 
 test_that("commons_server registers no custom-message observers", {
