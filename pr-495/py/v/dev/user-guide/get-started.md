@@ -41,6 +41,7 @@ The table below lists how each provenance outcome can occur:
 | A trusted Python [measure](#semantic-layer) | `Trusted` <img src="assets/figs/trusted-icon.svg" class="commons-documentation-marker" /> |
 | A [data dictionary metric](#definitions), possibly grouped or filtered with definitions | `Trusted` <img src="assets/figs/trusted-icon.svg" class="commons-documentation-marker" /> |
 | A metric from a [Snowflake semantic view](#warehouse-semantic-layers), possibly grouped or filtered by its dimensions | `Trusted` <img src="assets/figs/trusted-icon.svg" class="commons-documentation-marker" /> |
+| A verified query from a [Snowflake semantic view](#warehouse-semantic-layers) | `Trusted` <img src="assets/figs/trusted-icon.svg" class="commons-documentation-marker" /> |
 | Custom SQL, including SQL that uses [data dictionary definitions](#definitions) | `Cited` <img src="assets/figs/citation-mark.svg" class="commons-documentation-marker" /> when the answer quotes a trusted source and `commons` verifies the quote; otherwise `Untrusted` <img src="assets/figs/warning-icon.svg" class="commons-documentation-marker" /> |
 | Custom Python | `Cited` <img src="assets/figs/citation-mark.svg" class="commons-documentation-marker" /> when the answer quotes a trusted source and `commons` verifies the quote; otherwise `Untrusted` <img src="assets/figs/warning-icon.svg" class="commons-documentation-marker" /> |
 | No data tool used (for example, the agent already had the information, or no accessible information answered the question) | No provenance outcome |
@@ -83,6 +84,8 @@ When a user asks "Which species were observed at Oak Bluff?", the model reads th
 ## Warehouse semantic layers
 
 If you have trusted metrics in [Snowflake semantic views](https://docs.snowflake.com/en/user-guide/views-semantic/overview), you can use those calculations directly with commons. It can also group or filter metrics by approved fields from the warehouse. Answers based on these warehouse-defined metrics have the `Trusted` provenance outcome and display the green check-shield provenance marker.
+
+A semantic view can also declare verified queries: fixed SQL that answers one question. The agent finds them beside the other trusted calculations and runs one exactly as the view declares it, with the `Trusted` outcome. commons reads a verified query only if it is one read-only `SELECT` or `WITH` statement. A view that declares any other kind of verified query cannot be read. If you name that view in `tables`, creating the source fails. If a database or schema selection reaches it, the agent gets the error when it first uses the view. If commons finds it over tables you named, commons skips it.
 
 A Snowflake data source imports the semantic views its `tables` selection reaches. A view that you name in `tables` is read and checked for access when you create the source. A view that a database or schema selection reaches is read only when the agent first uses it. When you name tables exactly, commons also imports the views over them, but only when the selection includes every table that a view reads.
 
