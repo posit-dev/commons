@@ -147,8 +147,11 @@ class PathBeneathAttr(ctypes.Structure):
 
     Packed, and 12 bytes rather than the 16 natural alignment would give.
     The kernel checks the size it was handed against its own definition.
+    Python 3.14 accepts ``_pack_`` only with the ``ms`` layout, which for a
+    struct without bitfields matches GCC's packed layout.
     """
 
+    _layout_ = "ms"
     _pack_ = 1
     _fields_ = (
         ("allowed_access", ctypes.c_uint64),

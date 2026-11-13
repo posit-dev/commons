@@ -190,47 +190,161 @@ test_that("share_trajectory_access warns off Connect", {
   expect_snapshot(share_trajectory_access("jdoe"))
 })
 
-test_that("share_trajectory_access grants only missing collaborators", {
-  withr::local_envvar(CONNECT_CONTENT_GUID = "content-guid")
-  clear_granted_access()
-  state <- new.env()
+# A Connect server for the shared sharing cases. Username `x` resolves to
+# `guid-x` unless it is in `case$unknown`, and a grant for a principal in
+# `state$refused` gets a 400; it starts as `case$refused`. `state` records the
+# grants that went through and the usernames looked up.
+local_connect_double <- function(case, state, env = parent.frame()) {
+  withr::local_envvar(
+    CONNECT_CONTENT_GUID = "content-guid",
+    CONNECT_SERVER = "https://connect.example.com",
+    CONNECT_API_KEY = "k",
+    .local_envir = env
+  )
   state$added <- character()
-  local_mocked_bindings(
-    connect_client = function(...) list(server = "s", api_key = "k"),
-    connect_permission_principals = function(client, guid) "guid-jdoe",
-    connect_user_guid = function(client, username, ...) {
-      paste0("guid-", username)
+  state$looked_up <- character()
+  state$refused <- unlist(case$refused)
+  json_response <- function(req, body) {
+    httr2::new_response(
+      "GET", req$url, 200L,
+      list(`Content-Type` = "application/json"),
+      charToRaw(jsonlite::toJSON(body, auto_unbox = TRUE)),
+      request = req
+    )
+  }
+  httr2::local_mocked_responses(
+    function(req) {
+      if (!is.null(req$body)) {
+        principal <- req$body$data$principal_guid
+        if (principal %in% state$refused) {
+          return(httr2::response(400L, request = req))
+        }
+        state$added <- c(state$added, principal)
+        return(json_response(req, structure(list(), names = character())))
+      }
+      if (grepl("/permissions$", req$url)) {
+        return(json_response(req, case$permitted %||% list()))
+      }
+      prefix <- httr2::url_parse(req$url)$query$prefix
+      state$looked_up <- c(state$looked_up, prefix)
+      if (prefix %in% unlist(case$unknown)) {
+        return(json_response(req, list(results = list())))
+      }
+      json_response(req, list(results = list(
+        list(username = prefix, guid = paste0("guid-", prefix))
+      )))
     },
-    connect_add_collaborator = function(client, guid, principal_guid) {
-      state$added <- c(state$added, principal_guid)
-      invisible(NULL)
-    }
+    env = env
+  )
+}
+
+# Who gets a grant, what the grant says, and what a second share looks up are
+# shared with pkg-py; see tests/shared/connect.json.
+test_that("share_trajectory_access grants who the shared fixture says", {
+  spec <- shared_fixture("connect")$sharing
+  expect_setequal(
+    vapply(spec$cases, function(case) length(case$expected) > 0, logical(1)),
+    c(TRUE, FALSE)
   )
 
-  share_trajectory_access(c("jdoe", "asmith"))
+  for (case in spec$cases) {
+    clear_granted_access()
+    state <- new.env()
+    local_connect_double(case, state)
 
-  expect_equal(state$added, "guid-asmith")
+    if (isTRUE(case$warns)) {
+      expect_warning(
+        share_trajectory_access(unlist(case$usernames)),
+        "Could not share"
+      )
+    } else {
+      expect_no_warning(share_trajectory_access(unlist(case$usernames)))
+    }
+
+    expect_equal(
+      state$added,
+      unlist(case$expected) %||% character(),
+      info = case$name
+    )
+  }
 })
 
-test_that("share_trajectory_access skips usernames already handled", {
+test_that("a second share looks up who the shared fixture says", {
+  for (case in shared_fixture("connect")$sharing_again$cases) {
+    clear_granted_access()
+    state <- new.env()
+    local_connect_double(case, state)
+
+    suppressWarnings(share_trajectory_access(unlist(case$usernames)))
+    state$looked_up <- character()
+    state$added <- character()
+    state$refused <- character()
+    expect_no_warning(share_trajectory_access(unlist(case$again)))
+
+    expect_equal(
+      state$looked_up,
+      unlist(case$looked_up) %||% character(),
+      info = case$name
+    )
+    expect_equal(
+      state$added,
+      unlist(case$granted) %||% character(),
+      info = case$name
+    )
+  }
+})
+
+test_that("connect_add_collaborator sends the shared grant body", {
+  spec <- shared_fixture("connect")$collaborator_grant
+  sent <- NULL
+  httr2::local_mocked_responses(function(req) {
+    sent <<- req
+    httr2::new_response("POST", req$url, 200L, list(), raw(), request = req)
+  })
+
+  connect_add_collaborator(
+    list(server = "https://connect.example.com", api_key = "k"),
+    "content-guid",
+    "guid-jdoe"
+  )
+
+  # httr2 infers POST from the presence of a body rather than recording it.
+  expect_equal(sent$method %||% "POST", spec$method)
+  expect_equal(
+    sent$url,
+    paste(
+      c(
+        "https://connect.example.com/__api__/v1",
+        vapply(spec$endpoint, function(part) {
+          sub("{guid}", "content-guid", part, fixed = TRUE)
+        }, character(1))
+      ),
+      collapse = "/"
+    )
+  )
+  body <- sent$body$data
+  expect_equal(body[names(spec$body)], spec$body)
+  expect_equal(body$principal_guid, "guid-jdoe")
+})
+
+test_that("share_trajectory_access looks a repeated username up once", {
   withr::local_envvar(CONNECT_CONTENT_GUID = "content-guid")
   clear_granted_access()
   state <- new.env()
   state$lookups <- 0
   local_mocked_bindings(
     connect_client = function(...) list(server = "s", api_key = "k"),
-    connect_permission_principals = function(client, guid) character(),
+    connect_collaborator_principals = function(client, guid) character(),
     connect_user_guid = function(client, username, ...) {
       state$lookups <- state$lookups + 1
-      paste0("guid-", username)
+      paste0("guid-", tolower(username))
     },
     connect_add_collaborator = function(client, guid, principal_guid) {
       invisible(NULL)
     }
   )
 
-  share_trajectory_access("jdoe")
-  share_trajectory_access("jdoe")
+  share_trajectory_access(c("jdoe", "JDOE"))
 
   expect_equal(state$lookups, 1)
 })

@@ -97,5 +97,106 @@
         "expected": "https://connect.example.com/__api__/v1/users"
       }
     ]
+  },
+  "collaborator_grant": {
+    "description": "The permission commons creates so a user can read this content's trajectories. Reading traces needs editor-level access, and Connect's permissions API spells that role \"owner\"; it rejects \"editor\". A lesser permission on the content, such as the viewer role someone gets when the app is shared with them, does not carry trace access, so it is not a reason to skip them.",
+    "endpoint": ["content", "{guid}", "permissions"],
+    "method": "POST",
+    "body": {
+      "principal_type": "user",
+      "role": "owner",
+      "send_email": false
+    }
+  },
+  "sharing": {
+    "description": "Who gets a grant, given the usernames asked for and the permissions that already exist on the content. `permitted` is the permissions response, and `expected` lists the principals granted, in order. Connect answers a grant for a principal in `refused` with a 4xx, as it does for the content's owner or an account that cannot publish. A case with `warns` set expects a warning. Test doubles resolve username `x` to principal `guid-x`, except a username in `unknown`, which no Connect user has.",
+    "cases": [
+      {
+        "name": "a user with no permission is granted one",
+        "usernames": ["ada"],
+        "permitted": [],
+        "expected": ["guid-ada"]
+      },
+      {
+        "name": "a user who already holds the role is left alone",
+        "usernames": ["ada"],
+        "permitted": [
+          { "principal_guid": "guid-ada", "role": "owner" }
+        ],
+        "expected": []
+      },
+      {
+        "name": "a user with only viewer access is still granted the role",
+        "usernames": ["ada"],
+        "permitted": [
+          { "principal_guid": "guid-ada", "role": "viewer" }
+        ],
+        "expected": ["guid-ada"]
+      },
+      {
+        "name": "only the user missing the role is granted",
+        "usernames": ["ada", "grace"],
+        "permitted": [
+          { "principal_guid": "guid-ada", "role": "owner" }
+        ],
+        "expected": ["guid-grace"]
+      },
+      {
+        "name": "a username is matched regardless of case",
+        "usernames": ["Ada"],
+        "permitted": [],
+        "expected": ["guid-ada"]
+      },
+      {
+        "name": "case variants of one username are granted once",
+        "usernames": ["ada", "ADA"],
+        "permitted": [],
+        "expected": ["guid-ada"]
+      },
+      {
+        "name": "a permissions object rather than a list grants nobody",
+        "usernames": ["ada"],
+        "permitted": {},
+        "expected": [],
+        "warns": true
+      },
+      {
+        "name": "a user Connect refuses does not stop the grants after it",
+        "usernames": ["grace", "ada"],
+        "permitted": [],
+        "refused": ["guid-grace"],
+        "expected": ["guid-ada"],
+        "warns": true
+      },
+      {
+        "name": "an unknown username does not stop the grants after it",
+        "usernames": ["mallory", "ada"],
+        "permitted": [],
+        "unknown": ["mallory"],
+        "expected": ["guid-ada"],
+        "warns": true
+      }
+    ]
+  },
+  "sharing_again": {
+    "description": "Which usernames a second share in the same process looks up on Connect. Each case shares with `usernames`, then with `again`. `looked_up` lists the usernames the second share looks up, and `granted` the principals it grants. A grant that went through is not repeated. A refused one is tried again, so a fix the publisher makes on Connect takes effect when the agent is next built. Connect refuses a grant for a principal in `refused` during the first share only.",
+    "cases": [
+      {
+        "name": "a granted user is not looked up again, in any case",
+        "usernames": ["ada"],
+        "again": ["ADA"],
+        "refused": [],
+        "looked_up": [],
+        "granted": []
+      },
+      {
+        "name": "a refused user is looked up again",
+        "usernames": ["ada"],
+        "again": ["ada"],
+        "refused": ["guid-ada"],
+        "looked_up": ["ada"],
+        "granted": ["guid-ada"]
+      }
+    ]
   }
 }

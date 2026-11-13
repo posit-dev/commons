@@ -353,6 +353,11 @@ share_trajectory_access <- function(share_with) {
   }
 
   guid <- connect_content_guid()
+  # Fold case before dropping duplicates: Connect matches usernames that way,
+  # so c("ada", "ADA") is one user, and granting twice makes a second request
+  # against a permissions snapshot that no longer reflects the first.
+  share_with <- tolower(share_with)
+  share_with <- share_with[!duplicated(share_with)]
   share_with <- share_with[
     !vapply(share_key(guid, share_with), exists, logical(1), envir = granted)
   ]
@@ -363,13 +368,27 @@ share_trajectory_access <- function(share_with) {
   tryCatch(
     {
       client <- connect_client()
-      existing <- connect_permission_principals(client, guid)
+      existing <- connect_collaborator_principals(client, guid)
+      # Connect refuses some users outright, such as the content's owner or
+      # an account that cannot publish, so one refusal must not cost the
+      # users after it their grant.
       for (username in share_with) {
-        user_guid <- connect_user_guid(client, username)
-        if (!user_guid %in% existing) {
-          connect_add_collaborator(client, guid, user_guid)
-        }
-        assign(share_key(guid, username), TRUE, envir = granted)
+        tryCatch(
+          {
+            user_guid <- connect_user_guid(client, username)
+            if (!user_guid %in% existing) {
+              connect_add_collaborator(client, guid, user_guid)
+              existing <- c(existing, user_guid)
+            }
+            assign(share_key(guid, username), TRUE, envir = granted)
+          },
+          error = function(err) {
+            cli::cli_warn(c(
+              "Could not share trajectory access with {.val {username}}.",
+              i = conditionMessage(err)
+            ))
+          }
+        )
       }
     },
     error = function(err) {
