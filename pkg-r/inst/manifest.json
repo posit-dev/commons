@@ -360,6 +360,39 @@
         "RemoteSha": "1.0-10"
       }
     },
+    "bsicons": {
+      "Source": "CRAN",
+      "Repository": "https://cran.rstudio.com",
+      "description": {
+        "Package": "bsicons",
+        "Title": "Easily Work with 'Bootstrap' Icons",
+        "Version": "0.1.2",
+        "Authors@R": "c(\n    person(\"Carson\", \"Sievert\", , \"carson@posit.co\", role = c(\"cre\", \"aut\"),\n           comment = c(ORCID = \"0000-0002-4958-2844\")),\n    person(\"Posit Software, PBC\", role = c(\"cph\", \"fnd\")),\n    person(\"Mark\", \"Otto\", role = \"cph\",\n           comment = \"Bootstrap icons maintainer\")\n  )",
+        "Description": "Easily use 'Bootstrap' icons inside 'Shiny' apps and 'R\n    Markdown' documents. More generally, icons can be inserted in any\n    'htmltools' document through inline 'SVG'.",
+        "License": "MIT + file LICENSE",
+        "URL": "https://github.com/rstudio/bsicons",
+        "BugReports": "https://github.com/rstudio/bsicons/issues",
+        "Depends": "R (>= 2.10)",
+        "Imports": "cli, htmltools, rlang, utils",
+        "Suggests": "bslib, processx, testthat, webshot2, withr",
+        "Config/testthat/edition": "3",
+        "Encoding": "UTF-8",
+        "RoxygenNote": "7.2.3",
+        "NeedsCompilation": "no",
+        "Packaged": "2023-11-03 23:29:00 UTC; cpsievert",
+        "Author": "Carson Sievert [cre, aut] (<https://orcid.org/0000-0002-4958-2844>),\n  Posit Software, PBC [cph, fnd],\n  Mark Otto [cph] (Bootstrap icons maintainer)",
+        "Maintainer": "Carson Sievert <carson@posit.co>",
+        "Repository": "CRAN",
+        "Date/Publication": "2023-11-04 00:30:05 UTC",
+        "Built": "R 4.5.0; ; 2025-04-01 07:48:51 UTC; unix",
+        "RemoteType": "standard",
+        "RemotePkgRef": "bsicons",
+        "RemoteRef": "bsicons",
+        "RemoteRepos": "https://cran.rstudio.com",
+        "RemotePkgPlatform": "aarch64-apple-darwin20",
+        "RemoteSha": "0.1.2"
+      }
+    },
     "bslib": {
       "Source": "CRAN",
       "Repository": "https://cran.rstudio.com",
@@ -551,12 +584,12 @@
         "URL": "https://github.com/posit-dev/commons,\nhttps://posit-dev.github.io/commons/r/",
         "BugReports": "https://github.com/posit-dev/commons/issues",
         "Depends": "R (>= 4.1.0)",
-        "Imports": "bslib (>= 0.11.0), callr (>= 3.8.0), cli, commonmark, coro,\nDBI, duckdb (>= 1.5.4.2), ellmer (>= 0.5.1), evaluate,\nfilelock, highr, htmltools, httr2 (>= 1.1.0), jsonlite, knitr,\nlater, lifecycle, processx, promises (>= 1.5.0), R6, ragg,\nragnar, rlang (>= 1.2.0), roxygen2, S7, sass, shinychat (>=\n0.5.0), utils, yaml",
-        "Suggests": "bit64, bsicons, chromote, dbplyr, dplyr, ggplot2, gt, odbc,\notel (>= 0.2.0), otelsdk (>= 0.2.0), pins, plotly, pkgload,\nreadr, rmarkdown, rsconnect, RSQLite, shiny (>= 1.11.1),\nshinytest2, testthat (>= 3.0.0), vitals, withr",
+        "Imports": "bsicons, bslib (>= 0.11.0), callr (>= 3.8.0), cli, commonmark,\ncoro, DBI, duckdb (>= 1.5.4.2), ellmer (>= 0.5.1), evaluate,\nfilelock, highr, htmltools, httr2 (>= 1.1.0), jsonlite, knitr,\nlater, lifecycle, processx, promises (>= 1.5.0), R6, ragg,\nragnar, rlang (>= 1.2.0), roxygen2, S7, sass, shinychat (>=\n0.5.0), utils, yaml",
+        "Suggests": "bit64, chromote, dbplyr, dplyr, ggplot2, gt, odbc, otel (>=\n0.2.0), otelsdk (>= 0.2.0), pins, pkgload, readr, rmarkdown,\nrsconnect, RSQLite, shiny (>= 1.11.1), shinytest2, testthat (>=\n3.0.0), vitals, withr",
         "VignetteBuilder": "knitr",
         "Config/testthat/edition": "3",
         "Config/testthat/parallel": "true",
-        "Config/testthat/start-first": "run-r, citation-scan, citation-browser,\ncommons, data-source, pool, definitions, trajectory-review",
+        "Config/testthat/start-first": "run-r, citation-scan, citation-browser,\ncommons, data-source, pool, definitions",
         "Encoding": "UTF-8",
         "Roxygen": "list(markdown = TRUE)",
         "Config/roxygen2/version": "8.1.0",
@@ -565,20 +598,20 @@
         "RemoteHost": "api.github.com",
         "RemoteRepo": "commons",
         "RemoteUsername": "posit-dev",
-        "RemotePkgRef": "posit-dev/commons/pkg-r@5d9b11e7d5dc77c758bc8174541e5e569c2d043e",
-        "RemoteRef": "5d9b11e7d5dc77c758bc8174541e5e569c2d043e",
-        "RemoteSha": "5d9b11e7d5dc77c758bc8174541e5e569c2d043e",
+        "RemotePkgRef": "posit-dev/commons/pkg-r@74e3f392",
+        "RemoteRef": "74e3f392",
+        "RemoteSha": "74e3f3926331ceccaa90fd5ffa774330d545b16b",
         "RemoteSubdir": "pkg-r",
         "GithubRepo": "commons",
         "GithubUsername": "posit-dev",
-        "GithubRef": "5d9b11e7d5dc77c758bc8174541e5e569c2d043e",
-        "GithubSHA1": "5d9b11e7d5dc77c758bc8174541e5e569c2d043e",
+        "GithubRef": "74e3f392",
+        "GithubSHA1": "74e3f3926331ceccaa90fd5ffa774330d545b16b",
         "GithubSubdir": "pkg-r",
         "NeedsCompilation": "yes",
-        "Packaged": "2026-11-09 21:45:08 UTC; simoncouch",
+        "Packaged": "2026-11-13 15:42:56 UTC; simoncouch",
         "Author": "Simon Couch [aut, cre] (ORCID: <https://orcid.org/0000-0001-5676-5107>),\n  Sara Altman [aut],\n  Posit Software, PBC [cph, fnd] (ROR: <https://ror.org/03wc8by49>)",
         "Maintainer": "Simon Couch <simon.couch@posit.co>",
-        "Built": "R 4.5.3; aarch64-apple-darwin20; 2026-11-09 21:45:10 UTC; unix"
+        "Built": "R 4.5.3; aarch64-apple-darwin20; 2026-11-13 15:42:58 UTC; unix"
       }
     },
     "coro": {
@@ -881,7 +914,7 @@
       "description": {
         "Package": "ellmer",
         "Title": "Chat with Large Language Models",
-        "Version": "0.5.1",
+        "Version": "0.5.2",
         "Authors@R": "c(\n    person(\"Hadley\", \"Wickham\", , \"hadley@posit.co\", role = c(\"aut\", \"cre\"),\n           comment = c(ORCID = \"0000-0003-4757-117X\")),\n    person(\"Joe\", \"Cheng\", role = \"aut\"),\n    person(\"Aaron\", \"Jacobs\", role = \"aut\"),\n    person(\"Garrick\", \"Aden-Buie\", , \"garrick@posit.co\", role = \"aut\",\n           comment = c(ORCID = \"0000-0002-7111-0077\")),\n    person(\"Barret\", \"Schloerke\", , \"barret@posit.co\", role = \"aut\",\n           comment = c(ORCID = \"0000-0001-9986-114X\")),\n    person(\"Posit Software, PBC\", role = c(\"cph\", \"fnd\"),\n           comment = c(ROR = \"03wc8by49\"))\n  )",
         "Description": "Chat with large language models from a range of providers\n    including 'Claude' <https://claude.ai>, 'OpenAI'\n    <https://chatgpt.com>, and more. Supports streaming, asynchronous\n    calls, tool calling, and structured data extraction.",
         "License": "MIT + file LICENSE",
@@ -900,18 +933,18 @@
         "Encoding": "UTF-8",
         "Collate": "'utils-S7.R' 'types.R' 'ellmer-package.R' 'tools-def.R'\n'content.R' 'provider.R' 'as-json.R' 'batch-chat.R'\n'chat-structured.R' 'chat-tools-content.R' 'turns.R'\n'chat-tools.R' 'chat-utils.R' 'utils-coro.R' 'chat.R' 'files.R'\n'content-document.R' 'content-image.R' 'content-pdf.R'\n'content-replay.R' 'httr2.R' 'import-standalone-defer.R'\n'import-standalone-obj-type.R' 'import-standalone-purrr.R'\n'import-standalone-types-check.R' 'interpolate.R' 'live.R'\n'model.R' 'otel.R' 'parallel-chat.R' 'params.R' 'prices.R'\n'provider-any.R' 'provider-aws-api.R'\n'provider-openai-compatible.R' 'provider-openai.R'\n'provider-claude.R' 'provider-aws.R' 'provider-azure.R'\n'provider-claude-files.R' 'provider-claude-tools.R'\n'provider-google.R' 'provider-cloudflare.R'\n'provider-databricks.R' 'provider-deepseek.R'\n'provider-github.R' 'tools-built-in.R'\n'provider-google-interactions.R' 'provider-google-tools.R'\n'provider-google-upload.R' 'provider-groq.R'\n'provider-huggingface.R' 'provider-lmstudio.R'\n'provider-mistral.R' 'provider-ollama.R'\n'provider-openai-tools.R' 'provider-openrouter.R'\n'provider-perplexity.R' 'provider-portkey.R' 'provider-posit.R'\n'provider-snowflake.R' 'provider-vllm.R' 'rounds.R' 'schema.R'\n'stream-controller.R' 'tokens.R' 'tool-context.R'\n'tools-def-auto.R' 'utils-auth.R' 'utils-callbacks.R'\n'utils-cat.R' 'utils-merge.R' 'utils-prettytime.R' 'utils.R'\n'zzz.R'",
         "NeedsCompilation": "no",
-        "Packaged": "2026-11-07 12:28:35 UTC; nic",
+        "Packaged": "2026-11-09 19:05:12 UTC; nic",
         "Author": "Hadley Wickham [aut, cre] (ORCID:\n    <https://orcid.org/0000-0003-4757-117X>),\n  Joe Cheng [aut],\n  Aaron Jacobs [aut],\n  Garrick Aden-Buie [aut] (ORCID:\n    <https://orcid.org/0000-0002-7111-0077>),\n  Barret Schloerke [aut] (ORCID: <https://orcid.org/0000-0001-9986-114X>),\n  Posit Software, PBC [cph, fnd] (ROR: <https://ror.org/03wc8by49>)",
         "Maintainer": "Hadley Wickham <hadley@posit.co>",
         "Repository": "CRAN",
-        "Date/Publication": "2026-11-08 21:20:32 UTC",
-        "Built": "R 4.5.2; ; 2026-11-09 03:13:45 UTC; unix",
+        "Date/Publication": "2026-11-10 08:40:09 UTC",
+        "Built": "R 4.5.2; ; 2026-11-10 13:47:44 UTC; unix",
         "RemoteType": "standard",
         "RemotePkgRef": "ellmer",
         "RemoteRef": "ellmer",
         "RemoteRepos": "https://cran.rstudio.com",
         "RemotePkgPlatform": "aarch64-apple-darwin20",
-        "RemoteSha": "0.5.1"
+        "RemoteSha": "0.5.2"
       }
     },
     "evaluate": {
@@ -2199,34 +2232,34 @@
       "description": {
         "Package": "ragnar",
         "Title": "Retrieval-Augmented Generation (RAG) Workflows",
-        "Version": "0.3.1",
+        "Version": "0.4.0",
         "Authors@R": "c(\n    person(\"Tomasz\", \"Kalinowski\", , \"tomasz@posit.co\", role = c(\"aut\", \"cre\")),\n    person(\"Daniel\", \"Falbel\", , \"daniel@posit.co\", role = \"aut\"),\n    person(\"Posit Software, PBC\", role = c(\"cph\", \"fnd\"),\n           comment = c(ROR = \"03wc8by49\"))\n  )",
         "Description": "Provides tools for implementing Retrieval-Augmented\n    Generation (RAG) workflows with Large Language Models (LLM). Includes\n    functions for document processing, text chunking, embedding\n    generation, storage management, and content retrieval. Supports\n    various document types and embedding providers ('Ollama', 'OpenAI'),\n    with 'DuckDB' as the default storage backend. Integrates with the\n    'ellmer' package to equip chat objects with retrieval capabilities.\n    Designed to offer both sensible defaults and customization options\n    with transparent access to intermediate outputs.  For a review of\n    retrieval-augmented generation methods, see Gao et al. (2023)\n    \"Retrieval-Augmented Generation for Large Language Models: A Survey\"\n    <doi:10.48550/arXiv.2312.10997>.",
         "License": "MIT + file LICENSE",
         "URL": "https://ragnar.tidyverse.org/, https://github.com/tidyverse/ragnar",
         "BugReports": "https://github.com/tidyverse/ragnar/issues",
         "Depends": "R (>= 4.3.0)",
-        "Imports": "blob, cli, commonmark, curl, DBI (>= 1.2.0), mirai (>= 2.6.0),\ndbplyr, dplyr, duckdb (>= 1.3.1), glue, httr2, jsonlite,\nmethods, reticulate (>= 1.42.0), rlang (>= 1.1.0), rvest, S7,\nstringi, tidyr, vctrs, withr, xml2",
-        "Suggests": "connectcreds, ellmer (>= 0.3.0), gargle, knitr, lifecycle,\nmcptools (>= 0.2.0), nanoarrow (>= 0.8.0), pandoc, paws.common,\nrmarkdown, shiny, stringr, testthat (>= 3.0.0), tibble, jose,\nopenssl",
+        "Imports": "blob, cli, commonmark, curl, DBI (>= 1.2.0), mirai (>= 2.6.0),\ndbplyr, dplyr, duckdb (>= 1.5.0), glue, httr2, jsonlite,\nmethods, nanonext, reticulate (>= 1.42.0), rlang (>= 1.1.0),\nrvest, S7, stringi, tidyr, vctrs, withr, xml2",
+        "Suggests": "connectcreds, ellmer (>= 0.3.0), gargle, knitr, lifecycle,\nmcptools (>= 0.2.0), nanoarrow (>= 0.8.0), pandoc, paws.common,\nrmarkdown, shiny, stringr, testthat (>= 3.0.0), tibble, jose,\nopenssl, webfakes",
         "VignetteBuilder": "knitr",
         "Config/Needs/website": "tidyverse/tidytemplate, rmarkdown",
         "Config/testthat/edition": "3",
         "Encoding": "UTF-8",
-        "Config/roxygen2/version": "8.1.0",
+        "Config/roxygen2/version": "8.1.1",
         "NeedsCompilation": "yes",
-        "Packaged": "2026-09-10 16:46:37 UTC; tomasz",
+        "Packaged": "2026-11-10 15:43:08 UTC; tomasz",
         "Author": "Tomasz Kalinowski [aut, cre],\n  Daniel Falbel [aut],\n  Posit Software, PBC [cph, fnd] (ROR: <https://ror.org/03wc8by49>)",
         "Maintainer": "Tomasz Kalinowski <tomasz@posit.co>",
         "Repository": "CRAN",
-        "Date/Publication": "2026-09-10 17:10:02 UTC",
-        "Built": "R 4.5.2; aarch64-apple-darwin20; 2026-09-10 19:56:34 UTC; unix",
+        "Date/Publication": "2026-11-10 22:20:02 UTC",
+        "Built": "R 4.5.2; aarch64-apple-darwin20; 2026-11-11 04:42:07 UTC; unix",
         "Archs": "ragnar.so.dSYM",
         "RemoteType": "standard",
         "RemotePkgRef": "ragnar",
         "RemoteRef": "ragnar",
         "RemoteRepos": "https://cran.rstudio.com",
         "RemotePkgPlatform": "aarch64-apple-darwin20",
-        "RemoteSha": "0.3.1"
+        "RemoteSha": "0.4.0"
       }
     },
     "rappdirs": {
@@ -3222,7 +3255,7 @@
       "checksum": "4b49b3ca92f4c88e837b59f6733e044d"
     },
     "www/commons-chat/commons-chat.css": {
-      "checksum": "dfbcba16ae49c113ddcdebdec2c8f995"
+      "checksum": "d7f22b41b07d5ee2625c1bbf3cdc60dc"
     },
     "www/commons-chat/figs/citation-definition.svg": {
       "checksum": "eeec1c079ecac49ca50a1b89092d2b98"
