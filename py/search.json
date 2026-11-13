@@ -59,7 +59,7 @@
     "href": "user-guide/feature-parity.html",
     "title": "Feature parity with the R package",
     "section": "",
-    "text": "While both Python and R packages are first-class implementations of commons, the R implementation was developed first, and the Python package does not yet implement everything the R package does. This page lists the gaps that remain as of the current version and what a Python agent does instead.\n\n\n\n\n\n\n\nR-only feature\nWhat a Python agent does instead\n\n\n\n\ntrajectory_read(), for reading logged conversations\nNo equivalent yet\n\n\nThe commons agent skill for coding agents\nShips with the R package only\n\n\n\nThis page will shrink (and eventually disappear) as the Python package matures.",
+    "text": "While both Python and R packages are first-class implementations of commons, the R implementation was developed first, and the Python package does not yet implement everything the R package does. This page lists the gaps that remain as of the current version and what a Python agent does instead.\n\n\n\nR-only feature\nWhat a Python agent does instead\n\n\n\n\ntrajectory_read(), for reading logged conversations\nNo equivalent yet\n\n\nThe commons agent skill for coding agents\nShips with the R package only\n\n\nReports written as Quarto documents, shown in the chat’s drawer and revised with edit_artifact\nAnswers in the chat only\n\n\nSharing a conversation, document, plot, or table to Posit Connect\nNo equivalent yet (#517)\n\n\n\nThis page will shrink (and eventually disappear) as the Python package matures.",
     "crumbs": [
       "User Guide",
       "Feature parity with the R package"
