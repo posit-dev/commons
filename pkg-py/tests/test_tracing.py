@@ -7,9 +7,6 @@ not the names commons records.
 from __future__ import annotations
 
 import os
-import subprocess
-import sys
-import textwrap
 import warnings
 from collections.abc import Iterator
 from typing import Any
@@ -36,6 +33,7 @@ from commons._tracing import (
     tracing_configured,
 )
 
+from ._fresh_interpreter import run_in_fresh_interpreter
 from ._shared import load_shared_fixture
 
 CONTENT_CAPTURE = load_shared_fixture("traces")["content_capture"]
@@ -199,44 +197,6 @@ def test_logging_on_with_capture_turned_off_is_not_stamped(
 
     assert enable_trajectory_tracing(log=True) is False
     assert os.environ[CAPTURE_VAR] == "false"
-
-
-# Fails the child on a warning or log record from commons or OpenTelemetry.
-# Other stderr output is allowed: onnxruntime (a magika dependency) logs a
-# device-probe warning on the Linux CI runners, and total silence is not
-# commons' to guarantee.
-_QUIET_PREAMBLE = """
-import logging
-import warnings
-
-warnings.filterwarnings("error", module=r"(commons|opentelemetry)(\\.|$)")
-
-
-class _FailOnRecord(logging.Handler):
-    def emit(self, record):
-        raise SystemExit(f"{record.name} logged: {record.getMessage()}")
-
-
-for _name in ("commons", "opentelemetry"):
-    logging.getLogger(_name).addHandler(_FailOnRecord(logging.WARNING))
-"""
-
-
-def run_in_fresh_interpreter(body: str, **env: str) -> str:
-    """Run `body` in a new process, where no tracer provider is installed."""
-    # Drop the caller's OpenTelemetry settings: OTEL_PYTHON_TRACER_PROVIDER,
-    # for one, would install a provider on first use.
-    inherited = {k: v for k, v in os.environ.items() if not k.startswith("OTEL_")}
-    result = subprocess.run(
-        [sys.executable, "-c", _QUIET_PREAMBLE + textwrap.dedent(body)],
-        capture_output=True,
-        text=True,
-        check=False,
-        env={**inherited, **env},
-        timeout=60,
-    )
-    assert result.returncode == 0, result.stderr
-    return result.stdout
 
 
 @pytest.mark.parametrize(
