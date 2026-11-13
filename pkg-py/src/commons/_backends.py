@@ -208,12 +208,15 @@ class EngineBackend:
     def dialect(self) -> str:
         return self._engine.dialect.name
 
-    def table_types(self, catalog: str, schema: str | None) -> dict[tuple[str, str], str] | None:
+    def table_types(
+        self, catalog: str, schema: str | None
+    ) -> dict[tuple[str, str], str] | None:
         """Each table's type as Databricks' table metadata reports it.
 
-        `information_schema` can report a metric view as a plain view; the
-        connector's table metadata names it. None off Databricks, or when the
-        metadata cannot be read.
+        Unity Catalog reports a metric view as VIEW here, where
+        `information_schema` says METRIC_VIEW; `relation_kind` reads both,
+        and either naming a metric view decides. None off Databricks, or when
+        the metadata cannot be read.
         """
         if self.dialect() != "databricks":
             return None

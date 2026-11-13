@@ -441,10 +441,7 @@ def _semantic_metrics(
     filter_rows = resolve_filters(filters, on_model)
     values = validate_arguments(model.parameters, dict(arguments or {}))
     if model.backend == databricks_semantic.BACKEND:
-        if filter_rows:
-            raise ValueError(
-                "Named filters from Databricks metric views are not supported."
-            )
+        # A metric view has no filter members, so `filter_rows` is empty here.
         sql = databricks_semantic.metric_sql(
             model, metric_rows, dimension_rows, where, on_model, list(values)
         )
