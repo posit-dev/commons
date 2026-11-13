@@ -55,7 +55,9 @@ On Posit Connect, viewers can publish a read-only copy of a conversation,
 document, plot, or table. Sharing is available only when the app runs on
 Posit Connect. Shared items are published as the viewer who shares it, so
 only viewers whose Connect account can publish content can share. Items
-can only be shared with people who can view the commons apps.
+can only be shared with people who can view the commons apps. Sharing
+works on a default Connect installation, but administrators may have
+turned it off.
 }
 
 \examples{

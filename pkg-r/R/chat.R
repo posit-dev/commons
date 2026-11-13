@@ -86,7 +86,9 @@ commons_app <- function(client, ...) {
 #' document, plot, or table. Sharing is available only when the app runs on
 #' Posit Connect. Shared items are published as the viewer who shares it, so
 #' only viewers whose Connect account can publish content can share. Items
-#' can only be shared with people who can view the commons apps.
+#' can only be shared with people who can view the commons apps. Sharing
+#' works on a default Connect installation, but administrators may have
+#' turned it off.
 #'
 #' @param client An [agent()]. In a deployed app, create the agent
 #'   inside the server function and pass it to `commons_server()` so each
