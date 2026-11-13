@@ -50,7 +50,7 @@ __all__ = [
 
 # The tools whose results are stored as handles, in the order the
 # description names them.
-HANDLE_TOOLS = ("call_measure", "call_metrics", "run_sql")
+HANDLE_TOOLS = ("call_measure", "call_metrics", "call_calculation", "run_sql")
 
 NO_OUTPUT = "(The code ran but produced no output.)"
 

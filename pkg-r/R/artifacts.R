@@ -826,8 +826,8 @@ artifact_invalid <- function(slug, message, call = rlang::caller_env()) {
 }
 
 # YAML 1.1 reads `n`, `y`, `on`, and `off` as booleans, which would turn a
-# subtitle of `On` into `TRUE`. Quarto reads YAML 1.2, where only true and
-# false are.
+# subtitle of `On` into `TRUE` and a metric view join's `on:` key into `TRUE`.
+# Quarto and the warehouses read YAML 1.2, where only true and false are.
 yaml12_booleans <- function() {
   list(
     "bool#yes" = function(x) if (tolower(x) == "true") TRUE else x,

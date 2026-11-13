@@ -433,3 +433,240 @@ test_that("native semantic metrics add pool and metric tools", {
   expect_contains(tools, "search_pool")
   expect_contains(tools, "call_metrics")
 })
+
+# The semantic model registry and resolution contract both packages consume.
+# The Python suite runs the same cases from the same file. See
+# tests/shared/README.md.
+semantic_models_spec <- function() shared_fixture("semantic-models")
+
+semantic_fixture_members <- function(spec) {
+  source <- fixture_semantic_source(spec$models$values)
+  registry_semantic_members(
+    semantic_models_registry(list(warehouse = source)),
+    "warehouse"
+  )
+}
+
+test_that("the semantic registry lists the members the shared fixture says", {
+  spec <- semantic_models_spec()
+  members <- semantic_fixture_members(spec)
+  expected <- spec$registry$members
+  expect_gt(length(expected), 0)
+  actual <- lapply(seq_len(nrow(members)), function(i) {
+    row <- as.list(members[i, ])
+    lapply(row, function(x) if (length(x) == 1L && is.na(x)) NULL else x)
+  })
+  expect_equal(actual, expected)
+})
+
+test_that("semantic names resolve as the shared fixture says", {
+  spec <- semantic_models_spec()
+  members <- semantic_fixture_members(spec)
+  cases <- spec$resolution$cases
+  expect_gt(length(cases), 0)
+  for (case in cases) {
+    names <- unlist(case$names)
+    info <- paste(case$kind, paste(names, collapse = ","))
+    result <- tryCatch(
+      if (identical(case$kind, "filter")) {
+        resolve_semantic_filters(names, members)
+      } else {
+        resolve_semantic_members(names, members, case$kind)
+      },
+      error = function(err) err
+    )
+    if (is.null(case$expected$error)) {
+      keys <- vapply(seq_len(nrow(result)), function(i) {
+        semantic_member_key(result[i, , drop = FALSE])
+      }, character(1))
+      expect_identical(as.list(keys), case$expected$keys, info = info)
+    } else {
+      expect_fixture_error(result, case$expected, info = info)
+    }
+  }
+})
+
+test_that("metric origins follow the shared fixture", {
+  spec <- semantic_models_spec()
+  members <- semantic_fixture_members(spec)
+  definitions <- spec$models$definitions
+  defs <- data.frame(
+    name = vapply(definitions, `[[`, character(1), "name"),
+    table = vapply(definitions, `[[`, character(1), "table"),
+    kind = vapply(definitions, `[[`, character(1), "kind"),
+    source = "warehouse"
+  )
+  cases <- spec$metric_origin$cases
+  expect_gt(length(cases), 0)
+  for (case in cases) {
+    unread <- unlist(case$unread) %||%
+      vapply(spec$models$stubs, `[[`, character(1), "label")
+    result <- tryCatch(
+      metric_origin(
+        strip_token_braces(case$name),
+        if (isTRUE(case$empty)) defs[0, , drop = FALSE] else defs,
+        if (isTRUE(case$empty)) members[0, , drop = FALSE] else members,
+        unread = unread
+      ),
+      error = function(err) err
+    )
+    if (is.null(case$expected$error)) {
+      expect_identical(result, case$expected$origin, info = case$name)
+    } else {
+      expect_fixture_error(result, case$expected, info = case$name)
+    }
+  }
+})
+
+test_that("search_pool renders native members and stubs as the shared fixture says", {
+  spec <- semantic_models_spec()
+  source <- fixture_semantic_source(spec$models$values, stubs = spec$models$stubs)
+  registry <- semantic_models_registry(list(warehouse = source))
+  defs <- list(defs = data.frame(
+    name = character(), table = character(), kind = character(),
+    label = character(), description = character(), details = character(),
+    sql = character(), source = character(), mixed_grain = logical()
+  ))
+  cases <- spec$pool_text$cases
+  expect_gt(length(cases), 0)
+  for (case in cases) {
+    expect_identical(
+      search_pool_text(
+        list(),
+        defs,
+        case$query,
+        unlist(case$source_names) %||% character(),
+        semantic_models = registry,
+        calculations = calculations_registry(list(warehouse = source))
+      ),
+      case$text,
+      info = case$query
+    )
+  }
+  expect_identical(
+    search_pool_text(
+      list(),
+      defs,
+      "revenue",
+      semantic_models = semantic_models_registry(list(warehouse = test_source()))
+    ),
+    spec$pool_text$empty
+  )
+})
+
+test_that("refused native metric calls match the shared fixture", {
+  spec <- semantic_models_spec()
+  source <- fixture_semantic_source(spec$models$values)
+  definitions <- spec$models$definitions
+  defs <- data.frame(
+    name = vapply(definitions, `[[`, character(1), "name"),
+    table = vapply(definitions, `[[`, character(1), "table"),
+    kind = vapply(definitions, `[[`, character(1), "kind"),
+    source = "warehouse",
+    label = NA_character_,
+    description = NA_character_,
+    details = NA_character_,
+    sql = "1",
+    mixed_grain = FALSE
+  )
+  cases <- spec$call_metrics$cases
+  expect_gt(length(cases), 0)
+  for (case in cases) {
+    result <- tryCatch(
+      query_metrics(
+        list(defs = defs),
+        list(warehouse = source),
+        unlist(case$metrics),
+        unlist(case$dimensions),
+        arguments = case$arguments %||% "{}"
+      ),
+      error = function(err) err
+    )
+    expect_fixture_error(result, case$expected, info = case$name)
+  }
+})
+
+test_that("semantic model descriptions match the shared fixture", {
+  spec <- semantic_models_spec()
+  models <- data_source_state(
+    fixture_semantic_source(spec$models$values)
+  )$semantic_models
+  cases <- spec$description_text$cases
+  expect_gt(length(cases), 0)
+  for (case in cases) {
+    model <- models[[case$model]]
+    stub <- Filter(function(s) identical(s$label, case$model), spec$models$stubs)
+    description <- structure(
+      list(
+        name = case$model,
+        kind = "snowflake_semantic_view",
+        description = if (is.null(model)) stub[[1]]$description else model$description,
+        model = model,
+        error = if (!is.null(case$error)) simpleError(case$error)
+      ),
+      class = "commons_semantic_model_description"
+    )
+    expect_identical(
+      semantic_model_description_text(description),
+      case$text,
+      info = case$model
+    )
+  }
+})
+
+test_that("semantic first-touch context follows the shared fixture", {
+  section <- semantic_models_spec()$first_touch
+  source <- test_source()
+  state <- data_source_state(source)
+  state$manifest <- NULL
+  state$relations <- lapply(section$relations, function(relation) {
+    list(
+      id = do.call(DBI::Id, relation$id),
+      identity = if (!is.null(relation$identity)) do.call(DBI::Id, relation$identity)
+    )
+  })
+  models <- lapply(section$models, function(model) {
+    new_semantic_model(
+      DBI::Id(catalog = "ANALYTICS", schema = "PUBLIC", table = model$label),
+      model$label,
+      backend = "snowflake_semantic_view",
+      dependencies = lapply(model$dependencies, function(id) do.call(DBI::Id, id)),
+      context = list(first_touch = unlist(model$context))
+    )
+  })
+  state$semantic_models <- stats::setNames(
+    models,
+    vapply(section$models, `[[`, character(1), "label")
+  )
+  expect_gt(length(section$cases), 0)
+  for (case in section$cases) {
+    expect_identical(
+      as.list(semantic_model_first_touch(source, case$table)),
+      case$expected,
+      info = case$table
+    )
+  }
+})
+
+test_that("verified queries resolve as the shared fixture says", {
+  spec <- semantic_models_spec()
+  source <- fixture_semantic_source(spec$models$values)
+  calculations <- calculations_registry(list(warehouse = source))
+  expect_identical(
+    as.list(vapply(calculations, `[[`, character(1), "key")),
+    spec$calculations$keys
+  )
+  cases <- spec$calculations$cases
+  expect_gt(length(cases), 0)
+  for (case in cases) {
+    result <- tryCatch(
+      resolve_calculation(calculations, case$name, source_name = case$source),
+      error = function(err) err
+    )
+    if (is.null(case$expected$error)) {
+      expect_identical(result$key, case$expected$key, info = case$name)
+    } else {
+      expect_fixture_error(result, case$expected, info = case$name)
+    }
+  }
+})

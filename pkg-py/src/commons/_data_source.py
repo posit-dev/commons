@@ -8,6 +8,7 @@ the constructor functions, which is where a bad argument can still be named.
 from __future__ import annotations
 
 import string
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -16,11 +17,12 @@ import sqlalchemy
 from . import _duckdb
 from ._backends import Backend, DuckDBBackend, EngineBackend
 from ._frames import is_frame
-from ._sql_guard import check_query
+from ._sql_guard import check_query, is_single_select
 
 if TYPE_CHECKING:
     from ._catalog import Manifest, Relation, SessionSnapshot
     from ._data_dictionary import DataDictionary
+    from ._semantic_models import SemanticModel, SemanticStub
 
 __all__ = ["DataSource", "TableId", "data_source", "list_tables"]
 
@@ -127,6 +129,10 @@ class DataSource:
     manifest: Manifest | None = None
     session: SessionSnapshot | None = None
     definition_bindings: dict[str, Any] | None = None
+    # A warehouse's own semantic models, by label: read ones, and ones listed
+    # but not read until they are inspected or used.
+    semantic_models: dict[str, SemanticModel] = field(default_factory=dict)
+    semantic_stubs: dict[str, SemanticStub] = field(default_factory=dict)
 
     @classmethod
     def from_frames(cls, **frames: Any) -> DataSource:
@@ -173,7 +179,9 @@ class DataSource:
 
         `exclude` takes unqualified object-name globs to drop from a
         warehouse catalog listing, such as `"TMP_*"`. Only a warehouse has a
-        listing to drop from, so any other engine refuses it.
+        listing to drop from, so any other engine refuses it. A glob matches
+        a semantic view by its own name, not by the tables it reads, so a
+        view over an excluded table can still answer metric queries.
 
         On a warehouse `dictionary` is taken here because the catalog listing
         is folded into it during construction; on any other engine it is
@@ -236,6 +244,8 @@ class DataSource:
             manifest=imported.manifest,
             session=imported.session,
             definition_bindings=imported.definition_bindings,
+            semantic_models=imported.semantic_models,
+            semantic_stubs=imported.semantic_stubs,
         )
 
     @classmethod
@@ -300,6 +310,39 @@ class DataSource:
         if self.pending is None:
             return self.backend.query(sql)
         return self._query_loading_pins(sql)
+
+    def _query_compiled(
+        self, sql: str, params: Mapping[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
+        """Run SQL commons compiled from quoted identifiers, literals, and binds.
+
+        The read-only parse is skipped because it does not know every clause
+        commons emits (Snowflake's `VARIABLES`). The statement must still be a
+        single SELECT, and the session is still checked.
+        """
+        from ._catalog import check_session
+
+        check_session(self.backend, self.session)
+        if not is_single_select(sql, dialect=self.backend.dialect()):
+            raise ValueError("Only a single read-only SELECT statement is allowed.")
+        if params:
+            return self.backend.query(sql, params)
+        return self.backend.query(sql)
+
+    def _query_trusted(self, sql: str) -> list[dict[str, Any]]:
+        """Run a verified query a warehouse model declares, as written.
+
+        The trusted-query check guards it instead of the read-only parse in
+        `query`. That check runs the same parse, but when the parser cannot
+        read the query (Snowflake's `SEMANTIC_VIEW` clause), it relies on its
+        structural check rather than refusing. The session is still checked.
+        """
+        from ._catalog import check_session
+        from ._semantic_models import check_trusted_query
+
+        check_session(self.backend, self.session)
+        check_trusted_query(sql)
+        return self.backend.query(sql)
 
     def _query_loading_pins(self, sql: str) -> list[dict[str, Any]]:
         # Let DuckDB resolve the query's table references and drive loading off
@@ -425,6 +468,17 @@ def data_source(
     raises there only if a table declaring definitions matched no exposed
     relation, or if a definition names an authored column the selected
     relation does not have.
+
+    A Snowflake selection also imports the warehouse's semantic views, and a
+    Databricks selection its metric views. Their public metrics become
+    trusted calculations, which their dimensions can group and filter. A
+    view named in `tables` is read and checked for access when the source is
+    created, and raises if it cannot be used. A view a namespace selection
+    reaches is listed when the source is created and read only when the
+    agent first inspects or uses it. Naming relations exactly also imports,
+    where it can, the views in the same schemas that read only those
+    relations; their access is checked only when the agent uses one. Name a
+    view in `tables` to be sure it is imported.
     """
     from ._data_dictionary import as_data_dictionary
 

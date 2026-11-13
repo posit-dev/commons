@@ -1,6 +1,6 @@
 {
   "corpus_dir": "definition-export",
-  "note": "Snowflake and Databricks lowering. Unlike SQL(duckdb), these targets have no upstream authority: the pinned data-dict binary emits DuckDB and R targets only, so nothing external says what correct output is. This fixture is therefore hand-maintained and is the contract between the two commons implementations, not a record of data-dict's output. See commons kata g0ax for the upstream ask that would replace it. Cases are keyed by corpus file, then table::definition, then target. `code` is exact; `code_contains` and `notes_contain` pin a rule whose full rendering is long enough that pinning it would obscure what is being tested. `composed_code` pins the SQL after a referenced sibling definition is inlined, and appears only where that composition is the point. The `unsupported` section holds constructs a target cannot express, with inline dictionaries rather than corpus keys: `error_contains` pins the refusal, and a target that accepts the construct pins `code`.",
+  "note": "Snowflake and Databricks lowering. Unlike SQL(duckdb), these targets have no upstream authority: the pinned data-dict binary emits DuckDB and R targets only, so nothing external says what correct output is. This fixture is therefore hand-maintained and is the contract between the two commons implementations, not a record of data-dict's output. See commons kata g0ax for the upstream ask that would replace it. Cases are keyed by corpus file, then table::definition, then target. `code` is exact; `code_contains` and `notes_contain` pin a rule whose full rendering is long enough that pinning it would obscure what is being tested. `composed_code` pins the SQL after a referenced sibling definition is inlined, and appears only where that composition is the point. The `unsupported` section holds constructs a target cannot express, with inline dictionaries rather than corpus keys: `error_contains` pins the refusal, and a target that accepts the construct pins `code`, or `composed_code` when the case lists `siblings`. An inline case may list `siblings`, further definitions on the table that its `definition` references. The `string quoting` case pins how each target escapes a quote and a backslash in a string literal, which the corpus has no value to show, including after a sibling is inlined.",
   "cases": {
     "functions.yaml": {
       "values::strings": {
@@ -134,6 +134,19 @@
           "code": "\"observed\" > TO_TIMESTAMP_TZ('2024-01-01 00:00:00.123456789 +00:00')"
         },
         "SQL(databricks)": {"error_contains": ["microsecond precision"]}
+      }
+    },
+    "string quoting": {
+      "table": "values",
+      "columns": [
+        {"name": "category", "type": "string"},
+        {"name": "number", "type": "number(quantity)"}
+      ],
+      "siblings": [{"name": "big", "expr": "number > 10"}],
+      "definition": {"name": "named", "expr": "big AND category = 'O''Brien\\x'"},
+      "targets": {
+        "SQL(snowflake)": {"composed_code": "(\"number\" > 10) AND \"category\" = 'O''Brien\\\\x'"},
+        "SQL(databricks)": {"composed_code": "(`number` > 10) AND `category` = 'O\\'Brien\\\\x'"}
       }
     }
   }

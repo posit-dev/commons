@@ -173,7 +173,7 @@
     ]
   },
   "augment_context_layer": {
-    "description": "Folding each source's prose into an agent's context layer. The sources' chunks follow the caller's own documents and then each other in the order the sources were given, so the order a reader would expect is preserved. With no chunks to add, the layer is handed back as it was, absent included: an agent with neither context files nor dictionary prose has no layer rather than an empty one. `docs` and `expected_docs` are null for an absent layer and an empty list for a layer holding no documents; the two are not the same thing. Each entry in `dictionaries` is one source, null for a source carrying no dictionary. Whether the returned layer is a new object, and whether it carries a fresh index, is implementation detail and is not pinned here.",
+    "description": "Folding each source's prose into an agent's context layer. The sources' chunks follow the caller's own documents and then each other in the order the sources were given, so the order a reader would expect is preserved. With no chunks to add, the layer is handed back as it was, absent included: an agent with neither context files nor dictionary prose has no layer rather than an empty one. `docs` and `expected_docs` are null for an absent layer and an empty list for a layer holding no documents; the two are not the same thing. Each entry in `dictionaries` is one source, null for a source carrying no dictionary. Whether the returned layer is a new object, and whether it carries a fresh index, is implementation detail and is not pinned here. `semantic_retrieval`, when given, holds each source's semantic models' retrieval prose, in model order; it follows that source's dictionary chunks.",
     "cases": [
       {
         "name": "source chunks follow the layer's own documents",
@@ -266,6 +266,44 @@
         "docs": null,
         "dictionaries": [],
         "expected_docs": null
+      },
+      {
+        "name": "semantic model prose follows its source's dictionary chunks",
+        "docs": [
+          "Booked revenue excludes tax."
+        ],
+        "dictionaries": [
+          {
+            "details": "Orders from the retail system."
+          }
+        ],
+        "semantic_retrieval": [
+          [
+            "Use booked revenue.",
+            "Margin is net of cost."
+          ]
+        ],
+        "expected_docs": [
+          "Booked revenue excludes tax.",
+          "Orders from the retail system.",
+          "Use booked revenue.",
+          "Margin is net of cost."
+        ]
+      },
+      {
+        "name": "semantic model prose alone becomes the layer",
+        "docs": null,
+        "dictionaries": [
+          null
+        ],
+        "semantic_retrieval": [
+          [
+            "Use booked revenue."
+          ]
+        ],
+        "expected_docs": [
+          "Use booked revenue."
+        ]
       }
     ]
   }

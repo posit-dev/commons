@@ -28,8 +28,10 @@ from commons._catalog import (
     session_snapshot,
 )
 from commons._catalog._security import probe_relation
+from commons._citations import TAG_EXTRA_KEY
 from commons._data_dictionary import DataDictionary
 from commons._data_source import data_source, list_tables
+from commons._provenance import Tag
 from tests._live_warehouse import (
     duckdb_fixture_connection,
     matches,
@@ -74,10 +76,12 @@ def test_the_listing_reports_the_provisioned_relations(backend):
 
     relations = reader.list_relations(live.engine_backend, _selector(live))
 
-    listed = {_folded(live, relation.id.table) for relation in relations}
-    assert {_folded(live, table) for table in FIXTURE_TABLES} <= listed
-    for relation in relations:
-        assert relation.kind in ("table", "view")
+    kinds = {_folded(live, relation.id.table): relation.kind for relation in relations}
+    fixture = {_folded(live, table): "table" for table in FIXTURE_TABLES}
+    assert fixture.items() <= kinds.items()
+    if backend == "databricks":
+        model = _folded(live, live.provisioned["parameterized_model"])
+        assert kinds[model] == "metric_view"
 
 
 @pytest.mark.parametrize("backend", BACKENDS)
@@ -256,3 +260,141 @@ def test_the_emitted_definition_sql_agrees_with_duckdb(backend):
 
     assert executed, "no definitions were executed"
     assert compared, "every definition was exempted, so nothing was compared"
+
+
+# ---- Snowflake semantic views -----------------------------------------------
+
+
+def _semantic_source(live, *tables):
+    return data_source(live.engine, tables=[*tables] if tables else None)
+
+
+def _run_metrics(source, metrics, arguments=None):
+    from commons._definitions import Registry
+    from commons._handles import HandleStore
+    from commons._pool import call_metrics
+
+    handles = HandleStore()
+    result = call_metrics(
+        Registry(), source, "snowflake", handles, metrics=metrics, arguments=arguments
+    )
+    return result, handles
+
+
+def test_live_snowflake_discovers_and_executes_a_semantic_view():
+    from commons._definitions import Registry
+    from commons._pool import search_pool_text
+    from commons._semantic_models import semantic_registry
+
+    live = require_live_warehouse("snowflake")
+    view = live.fixture_table_id("semantic_view")
+    source = _semantic_source(live, view.label)
+    model = source.semantic_models[view.label]
+    assert model.metrics
+    metric = model.metrics[0].name
+
+    search = search_pool_text(
+        {}, Registry(), metric, semantic=semantic_registry({"snowflake": source})
+    )
+    result, handles = _run_metrics(source, [metric])
+
+    assert source.tables == []
+    assert metric in search
+    assert handles.get("r1") is not None
+    assert result.extra[TAG_EXTRA_KEY] == Tag.A
+
+
+def test_live_snowflake_binds_native_semantic_variables():
+    live = require_live_warehouse("snowflake")
+    configured = live.fixture_table_id("parameterized_model")
+    source = _semantic_source(live, configured.label)
+    model = source.semantic_models[configured.label]
+    assert model.parameters
+    assert model.metrics
+    arguments = live.provisioned["parameterized_model_arguments"]
+
+    result, handles = _run_metrics(source, [model.metrics[0].name], arguments)
+    _, defaults = _run_metrics(source, [model.metrics[0].name])
+
+    assert result.extra[TAG_EXTRA_KEY] == Tag.A
+    # The configured arguments differ from the view's defaults, so a value
+    # that was not bound would answer as the defaults do.
+    assert not handles.get("r1").equals(defaults.get("r1"))
+
+
+def test_live_snowflake_scopes_models_associated_with_physical_tables():
+    # The provisioned semantic view reads only the orders table, so selecting
+    # orders brings it in and selecting another table leaves it out.
+    live = require_live_warehouse("snowflake")
+    view = live.fixture_table_id("semantic_view")
+
+    source = _semantic_source(live, live.table_id("orders").label)
+    model = source.semantic_models[view.label]
+    assert model.dependencies == [live.table_id("orders")]
+    assert model.metrics
+    result, _ = _run_metrics(source, [model.metrics[0].name])
+
+    assert result.extra[TAG_EXTRA_KEY] == Tag.A
+    outside = _semantic_source(live, live.table_id("values").label)
+    assert view.label not in outside.semantic_models
+
+
+def test_live_snowflake_hydrates_a_namespace_stub():
+    live = require_live_warehouse("snowflake")
+    view = live.fixture_table_id("semantic_view")
+    from commons._catalog import Selector
+
+    catalog, schema = live.namespace
+    source = _semantic_source(live, Selector(catalog=catalog, schema=schema))
+    assert view.label in source.semantic_stubs
+    assert view.label not in source.semantic_models
+
+    exact = _semantic_source(live, view.label).semantic_models[view.label]
+    assert exact.metrics
+    result, _ = _run_metrics(source, [f"{view.label}::{exact.metrics[0].name}"])
+
+    assert view.label in source.semantic_models
+    assert result.extra[TAG_EXTRA_KEY] == Tag.A
+
+
+def test_live_snowflake_executes_an_imported_verified_query():
+    from commons._pool import call_calculation
+    from commons._semantic_models import calculations_registry
+
+    live = require_live_warehouse("snowflake")
+    view = live.fixture_table_id("verified_query_view")
+    source = _semantic_source(live, view.label)
+    calculations = calculations_registry({"snowflake": source})
+    assert calculations
+
+    result = call_calculation(
+        {"snowflake": source}, "snowflake", None, calculations[0].key
+    )
+
+    assert result.extra[TAG_EXTRA_KEY] == Tag.A
+
+
+def test_live_databricks_binds_native_metric_view_parameters():
+    live = require_live_warehouse("databricks")
+    configured = live.fixture_table_id("parameterized_model")
+    source = _semantic_source(live, configured.label)
+    model = source.semantic_models[configured.label]
+    assert model.parameters
+    assert model.metrics
+    arguments = live.provisioned["parameterized_model_arguments"]
+
+    from commons._definitions import Registry
+    from commons._handles import HandleStore
+    from commons._pool import call_metrics
+
+    handles, defaults = HandleStore(), HandleStore()
+    metric = [model.metrics[0].name]
+    result = call_metrics(
+        Registry(), source, "databricks", handles, metrics=metric, arguments=arguments
+    )
+    call_metrics(Registry(), source, "databricks", defaults, metrics=metric)
+
+    assert result.extra[TAG_EXTRA_KEY] == Tag.A
+    # The configured arguments differ from the view's defaults, so a value
+    # that was not bound would answer as the defaults do.
+    assert not handles.get("r1").equals(defaults.get("r1"))

@@ -48,6 +48,45 @@ fixture_tool_source <- function(searchable) {
   source
 }
 
+fixture_semantic_models <- function(specs) {
+  models <- lapply(specs, function(spec) {
+    members <- function(names, kind) {
+      lapply(unlist(names), new_semantic_member, kind = kind)
+    }
+    new_semantic_model(
+      DBI::Id(catalog = "ANALYTICS", schema = "PUBLIC", table = spec$name),
+      spec$name,
+      backend = "snowflake_semantic_view",
+      dimensions = members(spec$dimensions, "dimension"),
+      metrics = members(spec$metrics, "metric"),
+      calculations = stats::setNames(
+        lapply(spec$calculations, function(calculation) {
+          new_trusted_calculation(
+            calculation$name,
+            calculation$description,
+            "SELECT 1"
+          )
+        }),
+        vapply(spec$calculations, `[[`, character(1), "name")
+      )
+    )
+  })
+  stats::setNames(models, vapply(specs, `[[`, character(1), "name"))
+}
+
+fixture_semantic_stubs <- function(specs) {
+  stubs <- lapply(specs, function(spec) {
+    new_semantic_model_stub(
+      list(
+        id = DBI::Id(catalog = "ANALYTICS", schema = "PUBLIC", table = spec$name),
+        description = spec$description
+      ),
+      "snowflake_semantic_view"
+    )
+  })
+  stats::setNames(stubs, vapply(specs, `[[`, character(1), "name"))
+}
+
 fixture_tools <- function(spec, shape_name) {
   shape <- spec$shapes$values[[shape_name]]
   source_names <- unlist(shape$sources)
@@ -80,12 +119,18 @@ fixture_tools <- function(spec, shape_name) {
     )
   }
 
+  # A warehouse's own semantic models and stubs sit on the first source.
+  state <- data_source_state(sources[[1]])
+  state$semantic_models <- fixture_semantic_models(shape$semantic_models)
+  state$semantic_stubs <- fixture_semantic_stubs(shape$semantic_stubs)
+  state$calculations <- semantic_model_calculations(state$semantic_models)
+
   private <- list(
     sources = sources,
     registry = registry,
     definitions = list(defs = defs),
     semantic_models = semantic_models_registry(sources),
-    calculations = list(),
+    calculations = calculations_registry(sources),
     context_layer = NULL,
     handles = NULL,
     first_touch = NULL,

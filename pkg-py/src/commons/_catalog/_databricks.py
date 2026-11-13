@@ -41,7 +41,13 @@ def _quote_path(parts: list[str]) -> str:
 
 
 def _quote_string(value: str) -> str:
-    escaped = str(value).replace("'", "''")
+    """A string literal.
+
+    Databricks reads a backslash in one as an escape and joins adjacent
+    literals, so `'O''Brien'` reads as `OBrien`; both characters are escaped
+    with a backslash instead.
+    """
+    escaped = str(value).replace("\\", "\\\\").replace("'", "\\'")
     return f"'{escaped}'"
 
 
@@ -83,18 +89,19 @@ def _complete(backend: Any, selector: Selector) -> Selector:
 
 def relations_from_information_schema(
     rows: list[dict[str, Any]],
+    object_types: dict[tuple[str, str], str] | None = None,
 ) -> list[Relation]:
     """Relations from `system.information_schema.tables`.
 
-    A metric view reports as a view here. Telling the two apart needs the ODBC
-    object type, which only matters once metric views are supported; see kata
-    gcgj.
+    `object_types`, keyed by schema and table, gives the type the
+    warehouse's table metadata reports; `relation_kind` reads both.
     """
+    from ._databricks_semantic import relation_kind
+
     out: list[Relation] = []
     for raw in rows:
         row = _lower_keys(raw)
-        table_type = str(row.get("table_type") or "")
-        kind = "view" if "view" in table_type.lower() else "table"
+        object_type = (object_types or {}).get((row["table_schema"], row["table_name"]))
         out.append(
             Relation(
                 id=TableId(
@@ -102,7 +109,7 @@ def relations_from_information_schema(
                     schema=row["table_schema"],
                     table=row["table_name"],
                 ),
-                kind=kind,
+                kind=relation_kind(row.get("table_type"), object_type),
                 description=_prose(row.get("comment")),
             )
         )
@@ -126,7 +133,32 @@ def _list_unity_relations(backend: Any, selector: Selector) -> list[Relation]:
         + " AND ".join(predicates)
         + " ORDER BY table_catalog, table_schema, table_name"
     )
-    return relations_from_information_schema(rows)
+    return relations_from_information_schema(
+        rows, _object_types(backend, selector, rows)
+    )
+
+
+def _object_types(
+    backend: Any, selector: Selector, rows: list[dict[str, Any]]
+) -> dict[tuple[str, str], str] | None:
+    """Table metadata types for the schemas whose rows could be metric views."""
+    table_types = getattr(backend, "table_types", None)
+    if table_types is None:
+        return None
+    schemas = list(
+        dict.fromkeys(
+            str(row["table_schema"])
+            for row in map(_lower_keys, rows)
+            if any(
+                word in str(row.get("table_type") or "").lower()
+                for word in ("view", "metric")
+            )
+        )
+    )
+    found: dict[tuple[str, str], str] = {}
+    for schema in schemas:
+        found.update(table_types(selector.catalog or "", schema) or {})
+    return found
 
 
 def _list_hive_relations(backend: Any, selector: Selector) -> list[Relation]:

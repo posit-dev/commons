@@ -707,9 +707,15 @@ definition_sql_quote_identifier <- function(name, dialect) {
   paste0(quote, escaped, quote)
 }
 
+# Both warehouses read a backslash in a string literal as an escape, where
+# data-dict reads it literally. Databricks also joins adjacent literals, so a
+# doubled quote reads as no quote there.
 definition_sql_string <- function(value, dialect) {
-  value <- gsub("'", "''", value, fixed = TRUE)
+  if (identical(dialect, "databricks")) {
+    return(databricks_quote_string(value))
+  }
   value <- gsub("\\", "\\\\", value, fixed = TRUE)
+  value <- gsub("'", "''", value, fixed = TRUE)
   sprintf("'%s'", value)
 }
 

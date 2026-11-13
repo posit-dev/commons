@@ -165,7 +165,7 @@ def _write(node: Ir, state: _State, selected: str | None = None) -> str:
     if kind == "number":
         return _number(node, dialect)
     if kind == "string":
-        return _string(attrs["value"])
+        return _string(attrs["value"], dialect)
     if kind == "boolean":
         return "TRUE" if attrs["value"] else "FALSE"
     if kind == "null":
@@ -391,17 +391,17 @@ def _like(node: Ir, state: _State, selected: str | None) -> str:
     count = len(re.findall(r"[%_]", pattern))
     if count == 0:
         op = " <> " if negated else " = "
-        return f"{operand}{op}{_string(pattern)}"
+        return f"{operand}{op}{_string(pattern, state.dialect)}"
     prefix = "NOT " if negated else ""
     bare = _child(attrs["operand"], 0, "free", state, selected)
     if count == 1 and pattern.endswith("%"):
         fn = _affix_function("starts_with", dialect)
-        return f"{prefix}{fn}({bare}, {_string(pattern[:-1])})"
+        return f"{prefix}{fn}({bare}, {_string(pattern[:-1], state.dialect)})"
     if count == 1 and pattern.startswith("%"):
         fn = _affix_function("ends_with", dialect)
-        return f"{prefix}{fn}({bare}, {_string(pattern[1:])})"
+        return f"{prefix}{fn}({bare}, {_string(pattern[1:], state.dialect)})"
     fn = "REGEXP_LIKE" if dialect == "snowflake" else "regexp_like"
-    return f"{prefix}{fn}({bare}, {_string(_like_regex(pattern))})"
+    return f"{prefix}{fn}({bare}, {_string(_like_regex(pattern), state.dialect)})"
 
 
 def _similar(node: Ir, state: _State, selected: str | None) -> str:
@@ -476,7 +476,7 @@ def _identifier(path: Any, dialect: str) -> str:
         # Snowflake reads a struct field with GET() rather than a dotted path.
         out = _quote_identifier(segments[0], dialect)
         for field in segments[1:]:
-            out = f"GET({out}, {_string(str(field))})"
+            out = f"GET({out}, {_string(str(field), dialect)})"
         return out
     return ".".join(_quote_identifier(part, dialect) for part in segments)
 
@@ -487,10 +487,13 @@ def _quote_identifier(name: Any, dialect: str) -> str:
     return f"{quote}{escaped}{quote}"
 
 
-def _string(value: str) -> str:
+def _string(value: str, dialect: str) -> str:
     # Both warehouses treat a backslash as an escape inside a string literal,
-    # where data-dict treats it literally.
-    return "'" + value.replace("'", "''").replace("\\", "\\\\") + "'"
+    # where data-dict treats it literally. Databricks also joins adjacent
+    # literals, so a doubled quote reads as no quote there.
+    escaped = value.replace("\\", "\\\\")
+    quote = "\\'" if dialect == "databricks" else "''"
+    return "'" + escaped.replace("'", quote) + "'"
 
 
 def _number(node: Ir, dialect: str) -> str:

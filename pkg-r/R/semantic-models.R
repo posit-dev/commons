@@ -114,6 +114,13 @@ semantic_parameters_from_spec <- function(entries, backend) {
     default <- if (has_default) {
       coerce_semantic_default(entry[[default_field]], type)
     }
+    if (has_default && !semantic_default_valid(name, type, default)) {
+      article <- if (identical(type, "integer")) "an" else "a"
+      cli::cli_abort(
+        "{backend} semantic parameter {.val {name}} has a default that is not {article} {type} value.",
+        class = "commons_unsupported_semantic_parameter"
+      )
+    }
     new_typed_argument(
       name,
       type,
@@ -124,9 +131,24 @@ semantic_parameters_from_spec <- function(entries, backend) {
   })
   names(parameters) <- vapply(parameters, `[[`, character(1), "name")
   if (anyDuplicated(names(parameters))) {
-    cli::cli_abort("{backend} semantic parameter names must be unique.")
+    duplicate <- names(parameters)[anyDuplicated(names(parameters))]
+    cli::cli_abort(
+      "{backend} semantic parameter {.val {duplicate}} is declared more than once.",
+      class = "commons_unsupported_semantic_parameter"
+    )
   }
   parameters
+}
+
+semantic_default_valid <- function(name, type, default) {
+  specification <- list(name = name, type = type, identifier = FALSE)
+  tryCatch(
+    {
+      validate_typed_value(default, specification)
+      TRUE
+    },
+    error = function(err) FALSE
+  )
 }
 
 coerce_semantic_default <- function(value, type) {
@@ -721,6 +743,7 @@ semantic_where_conditions <- function(
   members,
   con,
   member_references,
+  quote_string,
   call = rlang::caller_env()
 ) {
   vapply(normalize_where(where), function(triple) {
@@ -752,7 +775,7 @@ semantic_where_conditions <- function(
     ) {
       triple$value
     } else {
-      as.character(DBI::dbQuoteString(con, triple$value))
+      quote_string(triple$value)
     }
     sprintf("(%s %s %s)", reference, triple$op, value)
   }, character(1))

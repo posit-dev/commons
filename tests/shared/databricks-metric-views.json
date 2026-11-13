@@ -1,0 +1,779 @@
+{
+  "description": "How a Databricks metric view is read. Its YAML definition lists the dimensions (`fields` and `dimensions`) and measures the model is offered, the tables it reads (`source` and the `joins` beneath it), its typed `parameters`, and the prose that becomes first-touch and retrieval context. A member written without a name is a wildcard, expanded from the view's column metadata. Both packages read the same definition into the same model.",
+  "specifications": {
+    "description": "A view's id, its YAML definition, the column metadata `DESCRIBE TABLE EXTENDED ... AS JSON` reports when the case has `columns`, and the model read from them. `description` is the catalog comment, used when the YAML has no `comment`. A dependency is a three-part name, parsed as `qualified_names` pins; a source that is not one, such as a query, leaves the dependencies incomplete. The view's `filter` is SQL it always applies, so it is described in the context and is not a member. `expected` is the model, `unsupported` with the names the reason must mention, or an error.",
+    "cases": [
+      {
+        "name": "joins, a filter, and prose become dependencies and context",
+        "id": {
+          "catalog": "main",
+          "schema": "sales",
+          "table": "order_metrics"
+        },
+        "yaml": "version: 1.1\ncomment: Governed order metrics.\nai_context: Treat returned orders as active.\nsource: main.sales.orders\nfilter: source.is_active\njoins:\n  - name: customer\n    source: main.sales.customers\n    on: source.customer_id = customer.id\n    cardinality: many_to_one\n    joins:\n      - name: region\n        source: \"`main`.`sales`.`sales regions`\"\n        using: [region_id]\nfields:\n  - name: region\n    expr: region.name\n    display_name: Region\n    comment: Sales region.\n    synonyms: [territory]\nmeasures:\n  - name: revenue\n    expr: SUM(source.revenue)\n    comment: Booked revenue.\n",
+        "expected": {
+          "name": "order_metrics",
+          "description": "Governed order metrics.",
+          "dimensions": [
+            {
+              "name": "region",
+              "kind": "dimension",
+              "parent": null,
+              "label": "Region",
+              "description": "Sales region.",
+              "type": null,
+              "synonyms": [
+                "territory"
+              ],
+              "filter": false
+            }
+          ],
+          "metrics": [
+            {
+              "name": "revenue",
+              "kind": "metric",
+              "parent": null,
+              "label": null,
+              "description": "Booked revenue.",
+              "type": null,
+              "synonyms": [],
+              "filter": false
+            }
+          ],
+          "facts": [],
+          "filters": [],
+          "parameters": {},
+          "dependencies": [
+            {
+              "catalog": "main",
+              "schema": "sales",
+              "table": "orders"
+            },
+            {
+              "catalog": "main",
+              "schema": "sales",
+              "table": "customers"
+            },
+            {
+              "catalog": "main",
+              "schema": "sales",
+              "table": "sales regions"
+            }
+          ],
+          "dependencies_complete": true,
+          "first_touch": [
+            "Governed order metrics.",
+            "Treat returned orders as active.",
+            "Metric-view filter: source.is_active",
+            "Metric-view relationship `customer` joins `main.sales.customers` on source.customer_id = customer.id with many_to_one cardinality.",
+            "Metric-view relationship `region` joins ``main`.`sales`.`sales regions`` on using region_id."
+          ],
+          "retrieval": [
+            "Governed order metrics.",
+            "Treat returned orders as active.",
+            "Metric-view filter: source.is_active",
+            "Metric-view relationship `customer` joins `main.sales.customers` on source.customer_id = customer.id with many_to_one cardinality.",
+            "Metric-view relationship `region` joins ``main`.`sales`.`sales regions`` on using region_id."
+          ]
+        }
+      },
+      {
+        "name": "dimensions and fields are both dimensions, and a description comes from SHOW when the YAML has no comment",
+        "id": {
+          "catalog": "main",
+          "schema": "sales",
+          "table": "order_metrics"
+        },
+        "description": "From the catalog.",
+        "yaml": "version: 0.1\nsource: main.sales.orders\ndimensions:\n  - name: tier\n    expr: tier\nfields:\n  - name: region\n    expr: region\nmeasures:\n  - name: orders\n    expr: COUNT(1)\n",
+        "expected": {
+          "name": "order_metrics",
+          "description": "From the catalog.",
+          "dimensions": [
+            {
+              "name": "region",
+              "kind": "dimension",
+              "parent": null,
+              "label": null,
+              "description": null,
+              "type": null,
+              "synonyms": [],
+              "filter": false
+            },
+            {
+              "name": "tier",
+              "kind": "dimension",
+              "parent": null,
+              "label": null,
+              "description": null,
+              "type": null,
+              "synonyms": [],
+              "filter": false
+            }
+          ],
+          "metrics": [
+            {
+              "name": "orders",
+              "kind": "metric",
+              "parent": null,
+              "label": null,
+              "description": null,
+              "type": null,
+              "synonyms": [],
+              "filter": false
+            }
+          ],
+          "facts": [],
+          "filters": [],
+          "parameters": {},
+          "dependencies": [
+            {
+              "catalog": "main",
+              "schema": "sales",
+              "table": "orders"
+            }
+          ],
+          "dependencies_complete": true,
+          "first_touch": [],
+          "retrieval": []
+        }
+      },
+      {
+        "name": "a query-backed source leaves the dependencies incomplete",
+        "id": {
+          "catalog": "main",
+          "schema": "sales",
+          "table": "order_metrics"
+        },
+        "yaml": "version: 1.1\nsource: SELECT * FROM main.sales.orders\nmeasures:\n  - name: orders\n    expr: COUNT(1)\n",
+        "expected": {
+          "name": "order_metrics",
+          "description": null,
+          "dimensions": [],
+          "metrics": [
+            {
+              "name": "orders",
+              "kind": "metric",
+              "parent": null,
+              "label": null,
+              "description": null,
+              "type": null,
+              "synonyms": [],
+              "filter": false
+            }
+          ],
+          "facts": [],
+          "filters": [],
+          "parameters": {},
+          "dependencies": [],
+          "dependencies_complete": false,
+          "first_touch": [],
+          "retrieval": []
+        }
+      },
+      {
+        "name": "a source that is not a three-part name leaves the dependencies incomplete",
+        "id": {
+          "catalog": "main",
+          "schema": "sales",
+          "table": "order_metrics"
+        },
+        "yaml": "version: 1.1\nsource: sales.orders\nmeasures:\n  - name: orders\n    expr: COUNT(1)\n",
+        "expected": {
+          "name": "order_metrics",
+          "description": null,
+          "dimensions": [],
+          "metrics": [
+            {
+              "name": "orders",
+              "kind": "metric",
+              "parent": null,
+              "label": null,
+              "description": null,
+              "type": null,
+              "synonyms": [],
+              "filter": false
+            }
+          ],
+          "facts": [],
+          "filters": [],
+          "parameters": {},
+          "dependencies": [],
+          "dependencies_complete": false,
+          "first_touch": [],
+          "retrieval": []
+        }
+      },
+      {
+        "name": "parameters read their default from `default`",
+        "id": {
+          "catalog": "main",
+          "schema": "sales",
+          "table": "order_metrics"
+        },
+        "yaml": "version: 1.1\nsource: main.sales.orders\nparameters:\n  - name: min_total\n    data_type: DECIMAL(10,2)\n    default: \"5.5\"\n    comment: Smallest order counted.\n  - name: since\n    data_type: DATE\nmeasures:\n  - name: revenue\n    expr: SUM(total)\n",
+        "expected": {
+          "name": "order_metrics",
+          "description": null,
+          "dimensions": [],
+          "metrics": [
+            {
+              "name": "revenue",
+              "kind": "metric",
+              "parent": null,
+              "label": null,
+              "description": null,
+              "type": null,
+              "synonyms": [],
+              "filter": false
+            }
+          ],
+          "facts": [],
+          "filters": [],
+          "parameters": {
+            "min_total": {
+              "type": "number",
+              "description": "Smallest order counted.",
+              "has_default": true,
+              "default": 5.5,
+              "sql_type": null
+            },
+            "since": {
+              "type": "date",
+              "description": null,
+              "has_default": false,
+              "default": null,
+              "sql_type": null
+            }
+          },
+          "dependencies": [
+            {
+              "catalog": "main",
+              "schema": "sales",
+              "table": "orders"
+            }
+          ],
+          "dependencies_complete": true,
+          "first_touch": [],
+          "retrieval": []
+        }
+      },
+      {
+        "name": "an unsupported parameter type makes the view unsupported",
+        "id": {
+          "catalog": "main",
+          "schema": "sales",
+          "table": "order_metrics"
+        },
+        "yaml": "version: 1.1\nsource: main.sales.orders\nparameters:\n  - name: tags\n    data_type: ARRAY<STRING>\nmeasures:\n  - name: revenue\n    expr: SUM(total)\n",
+        "expected": {
+          "unsupported": [
+            "tags",
+            "ARRAY<STRING>"
+          ]
+        }
+      },
+      {
+        "name": "wildcard members expand from the column metadata, skipping named ones",
+        "id": {
+          "catalog": "main",
+          "schema": "sales",
+          "table": "order_metrics"
+        },
+        "columns": [
+          {
+            "name": "region",
+            "type": {
+              "name": "string"
+            },
+            "is_measure": false,
+            "comment": "Sales region."
+          },
+          {
+            "name": "tier",
+            "type": {
+              "name": "varchar",
+              "length": 16
+            },
+            "is_measure": false
+          },
+          {
+            "name": "revenue",
+            "type": {
+              "name": "decimal",
+              "precision": 18,
+              "scale": 2
+            },
+            "is_measure": true,
+            "comment": "Booked revenue."
+          },
+          {
+            "name": "orders",
+            "type": "bigint",
+            "is_measure": true
+          }
+        ],
+        "yaml": "version: 1.1\nsource: main.sales.orders\ndimensions:\n  - name: region\n    expr: region\n    comment: Named explicitly.\n  - expr: \"*\"\nmeasures:\n  - expr: \"*\"\n",
+        "expected": {
+          "name": "order_metrics",
+          "description": null,
+          "dimensions": [
+            {
+              "name": "region",
+              "kind": "dimension",
+              "parent": null,
+              "label": null,
+              "description": "Named explicitly.",
+              "type": null,
+              "synonyms": [],
+              "filter": false
+            },
+            {
+              "name": "tier",
+              "kind": "dimension",
+              "parent": null,
+              "label": null,
+              "description": null,
+              "type": "varchar(16)",
+              "synonyms": [],
+              "filter": false
+            }
+          ],
+          "metrics": [
+            {
+              "name": "revenue",
+              "kind": "metric",
+              "parent": null,
+              "label": null,
+              "description": "Booked revenue.",
+              "type": "decimal(18,2)",
+              "synonyms": [],
+              "filter": false
+            },
+            {
+              "name": "orders",
+              "kind": "metric",
+              "parent": null,
+              "label": null,
+              "description": null,
+              "type": "bigint",
+              "synonyms": [],
+              "filter": false
+            }
+          ],
+          "facts": [],
+          "filters": [],
+          "parameters": {},
+          "dependencies": [
+            {
+              "catalog": "main",
+              "schema": "sales",
+              "table": "orders"
+            }
+          ],
+          "dependencies_complete": true,
+          "first_touch": [],
+          "retrieval": []
+        }
+      },
+      {
+        "name": "wildcard members need column metadata",
+        "id": {
+          "catalog": "main",
+          "schema": "sales",
+          "table": "order_metrics"
+        },
+        "yaml": "version: 1.1\nsource: main.sales.orders\ndimensions:\n  - expr: \"*\"\nmeasures:\n  - name: revenue\n    expr: SUM(total)\n",
+        "expected": {
+          "error": "wildcards",
+          "mentions": [
+            "wildcard members require concrete column metadata"
+          ]
+        }
+      }
+    ]
+  },
+  "qualified_names": {
+    "description": "A dotted name split into its parts. A backtick-quoted part keeps dots and spaces, and a doubled backtick inside one is a backtick. Unquoted whitespace or an unclosed quote makes it no name at all, which is an empty list.",
+    "cases": [
+      {
+        "value": "main.sales.orders",
+        "parts": [
+          "main",
+          "sales",
+          "orders"
+        ]
+      },
+      {
+        "value": "`main`.`sales`.`sales regions`",
+        "parts": [
+          "main",
+          "sales",
+          "sales regions"
+        ]
+      },
+      {
+        "value": "`a``b`.c.d",
+        "parts": [
+          "a`b",
+          "c",
+          "d"
+        ]
+      },
+      {
+        "value": "main.sales",
+        "parts": [
+          "main",
+          "sales"
+        ]
+      },
+      {
+        "value": "main . sales.orders",
+        "parts": []
+      },
+      {
+        "value": "`unclosed.sales.orders",
+        "parts": []
+      },
+      {
+        "value": "main.sales.orders.extra",
+        "parts": [
+          "main",
+          "sales",
+          "orders",
+          "extra"
+        ]
+      }
+    ]
+  },
+  "type_text": {
+    "description": "A column's type, as metadata reports it, written as the member's type. A string is kept. A structured type is written by name, with its precision and scale or its length where the type has them. Anything else has no type.",
+    "cases": [
+      {
+        "type": "bigint",
+        "text": "bigint"
+      },
+      {
+        "type": {
+          "name": "decimal",
+          "precision": 10,
+          "scale": 2
+        },
+        "text": "decimal(10,2)"
+      },
+      {
+        "type": {
+          "name": "varchar",
+          "length": 8
+        },
+        "text": "varchar(8)"
+      },
+      {
+        "type": {
+          "name": "char",
+          "length": 2
+        },
+        "text": "char(2)"
+      },
+      {
+        "type": {
+          "name": "timestamp"
+        },
+        "text": "timestamp"
+      },
+      {
+        "type": {
+          "precision": 3
+        },
+        "text": null
+      },
+      {
+        "type": null,
+        "text": null
+      }
+    ]
+  },
+  "relation_kinds": {
+    "description": "Which listed relations are metric views, from `information_schema.tables.table_type` and the object type the warehouse's table metadata reports. Either type mentioning `metric` makes a metric view, then either mentioning `view` makes a view, and anything else is a table. Unity Catalog's table metadata reports a metric view as `VIEW`.",
+    "cases": [
+      {
+        "table_type": "MANAGED",
+        "kind": "table"
+      },
+      {
+        "table_type": "VIEW",
+        "kind": "view"
+      },
+      {
+        "table_type": "METRIC_VIEW",
+        "kind": "metric_view"
+      },
+      {
+        "table_type": "VIEW",
+        "object_type": "METRIC_VIEW",
+        "kind": "metric_view"
+      },
+      {
+        "table_type": "METRIC_VIEW",
+        "object_type": "VIEW",
+        "kind": "metric_view"
+      },
+      {
+        "table_type": "MATERIALIZED_VIEW",
+        "kind": "view"
+      },
+      {
+        "table_type": "EXTERNAL",
+        "object_type": "TABLE",
+        "kind": "table"
+      }
+    ]
+  },
+  "selection": {
+    "description": "Which metric views a `tables` selection reads up front, which it leaves as stubs, and which relations remain tables. The listing reports metric views among the relations, as `relation_kinds` pins. A metric view an entry names exactly is read up front, and one that cannot be used fails the selection. A namespace's metric views are stubs. A metric view over exactly named tables is read up front when those tables include every table it reads, and is skipped quietly when it cannot be read or used. `exclude` drops metric views by name. `warehouse` is the catalog every case reads, all in main.sales, which is the connection's current namespace.",
+    "warehouse": {
+      "tables": [
+        "orders",
+        "customers"
+      ],
+      "metric_views": {
+        "order_metrics": "version: 1.1\nsource: main.sales.orders\ndimensions:\n  - name: region\n    expr: region\nmeasures:\n  - name: revenue\n    expr: SUM(total)\n",
+        "joined_metrics": "version: 1.1\nsource: main.sales.orders\njoins:\n  - name: customer\n    source: main.sales.customers\n    on: source.customer_id = customer.id\nmeasures:\n  - name: customers\n    expr: COUNT(DISTINCT customer.id)\n",
+        "wildcard_metrics": "version: 1.1\nsource: main.sales.orders\ndimensions:\n  - expr: \"*\"\nmeasures:\n  - name: orders\n    expr: COUNT(1)\n",
+        "tagged_metrics": "version: 1.1\nsource: main.sales.orders\nparameters:\n  - name: tags\n    data_type: ARRAY<STRING>\nmeasures:\n  - name: orders\n    expr: COUNT(1)\n"
+      },
+      "metadata": {}
+    },
+    "cases": [
+      {
+        "name": "a namespace's metric views are stubs",
+        "tables": null,
+        "expected": {
+          "tables": [
+            "main.sales.orders",
+            "main.sales.customers"
+          ],
+          "models": [],
+          "stubs": [
+            "main.sales.order_metrics",
+            "main.sales.joined_metrics",
+            "main.sales.wildcard_metrics",
+            "main.sales.tagged_metrics"
+          ]
+        }
+      },
+      {
+        "name": "an exact metric view is read",
+        "tables": [
+          "main.sales.order_metrics"
+        ],
+        "expected": {
+          "tables": [],
+          "models": [
+            "main.sales.order_metrics"
+          ],
+          "stubs": []
+        }
+      },
+      {
+        "name": "metric views over an exact table are brought in when it covers every table they read",
+        "tables": [
+          "main.sales.orders"
+        ],
+        "expected": {
+          "tables": [
+            "main.sales.orders"
+          ],
+          "models": [
+            "main.sales.order_metrics"
+          ],
+          "stubs": []
+        }
+      },
+      {
+        "name": "a joined metric view needs every table it reads selected",
+        "tables": [
+          "main.sales.orders",
+          "main.sales.customers"
+        ],
+        "expected": {
+          "tables": [
+            "main.sales.orders",
+            "main.sales.customers"
+          ],
+          "models": [
+            "main.sales.order_metrics",
+            "main.sales.joined_metrics"
+          ],
+          "stubs": []
+        }
+      },
+      {
+        "name": "exclude drops listed metric views",
+        "exclude": [
+          "*_metrics"
+        ],
+        "tables": null,
+        "expected": {
+          "tables": [
+            "main.sales.orders",
+            "main.sales.customers"
+          ],
+          "models": [],
+          "stubs": []
+        }
+      },
+      {
+        "name": "an exact metric view with an unsupported parameter fails the selection",
+        "tables": [
+          "main.sales.tagged_metrics"
+        ],
+        "expected": {
+          "error": "unsupported",
+          "mentions": [
+            "main.sales.tagged_metrics",
+            "ARRAY<STRING>"
+          ]
+        }
+      },
+      {
+        "name": "an exact metric view with wildcards and no column metadata fails the selection",
+        "tables": [
+          "main.sales.wildcard_metrics"
+        ],
+        "expected": {
+          "error": "unsupported",
+          "mentions": [
+            "main.sales.wildcard_metrics",
+            "wildcard members could not be expanded"
+          ]
+        }
+      }
+    ]
+  },
+  "metric_sql": {
+    "description": "The query a call over a metric view's measures compiles to. Measures are read with `MEASURE()` under their own names, dimensions are selected and grouped by, each `where` entry compares a dimension as `semantic-models.json` and the Snowflake fixture describe, and each `arguments` name is passed to the view as a `?` bind. Identifiers are written as Databricks quotes them, in backticks; R renders with `DBI::ANSI()` and its runner swaps the double quotes for backticks. A string literal escapes a quote or a backslash with a backslash, because Databricks reads a doubled quote as two adjacent literals.",
+    "model": {
+      "id": {
+        "catalog": "main",
+        "schema": "sales",
+        "table": "order_metrics"
+      },
+      "label": "main.sales.order_metrics",
+      "dimensions": [
+        {
+          "name": "region"
+        },
+        {
+          "name": "tier"
+        }
+      ],
+      "metrics": [
+        {
+          "name": "revenue"
+        },
+        {
+          "name": "orders"
+        }
+      ]
+    },
+    "cases": [
+      {
+        "name": "measures alone",
+        "metrics": [
+          "revenue"
+        ],
+        "expected": {
+          "sql": "SELECT MEASURE(`revenue`) AS `revenue` FROM `main`.`sales`.`order_metrics`"
+        }
+      },
+      {
+        "name": "dimensions are selected and grouped by",
+        "metrics": [
+          "revenue",
+          "orders"
+        ],
+        "dimensions": [
+          "region",
+          "tier"
+        ],
+        "expected": {
+          "sql": "SELECT `region`, `tier`, MEASURE(`revenue`) AS `revenue`, MEASURE(`orders`) AS `orders` FROM `main`.`sales`.`order_metrics` GROUP BY `region`, `tier`"
+        }
+      },
+      {
+        "name": "a where value is quoted or written bare",
+        "metrics": [
+          "revenue"
+        ],
+        "dimensions": [
+          "region"
+        ],
+        "where": [
+          {
+            "column": "region",
+            "op": "=",
+            "value": "O'Brien"
+          },
+          {
+            "column": "tier",
+            "op": ">",
+            "value": "2"
+          }
+        ],
+        "expected": {
+          "sql": "SELECT `region`, MEASURE(`revenue`) AS `revenue` FROM `main`.`sales`.`order_metrics` WHERE (`region` = 'O\\'Brien') AND (`tier` > 2) GROUP BY `region`"
+        }
+      },
+      {
+        "name": "a backslash in a where value is escaped, so it cannot end the literal",
+        "metrics": [
+          "revenue"
+        ],
+        "where": [
+          {
+            "column": "region",
+            "op": "=",
+            "value": "C:\\temp\\"
+          }
+        ],
+        "expected": {
+          "sql": "SELECT MEASURE(`revenue`) AS `revenue` FROM `main`.`sales`.`order_metrics` WHERE (`region` = 'C:\\\\temp\\\\')"
+        }
+      },
+      {
+        "name": "parameters are passed to the view",
+        "metrics": [
+          "revenue"
+        ],
+        "arguments": [
+          "min_total",
+          "since"
+        ],
+        "expected": {
+          "sql": "SELECT MEASURE(`revenue`) AS `revenue` FROM `main`.`sales`.`order_metrics`(`min_total` => ?, `since` => ?)"
+        }
+      },
+      {
+        "name": "a where column must be a dimension",
+        "metrics": [
+          "revenue"
+        ],
+        "where": [
+          {
+            "column": "orders",
+            "op": "=",
+            "value": "1"
+          }
+        ],
+        "expected": {
+          "error": "wrong_kind",
+          "mentions": [
+            "orders",
+            "native metric"
+          ]
+        }
+      }
+    ]
+  }
+}

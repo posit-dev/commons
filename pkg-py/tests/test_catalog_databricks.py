@@ -117,10 +117,11 @@ def test_listing_a_catalog_does_not_filter_by_schema():
     assert "table_schema = " not in backend.queries[0]
 
 
-def test_a_quote_inside_a_name_is_escaped():
+def test_a_quote_or_backslash_inside_a_name_is_escaped():
     backend = FakeBackend(replies=[[]])
-    list_relations(backend, Selector(catalog="it's", schema="sales"))
-    assert "table_catalog = 'it''s'" in backend.queries[0]
+    list_relations(backend, Selector(catalog="it's", schema="a\\b"))
+    assert "table_catalog = 'it\\'s'" in backend.queries[0]
+    assert "table_schema = 'a\\\\b'" in backend.queries[0]
 
 
 # --- hive_metastore --------------------------------------------------------

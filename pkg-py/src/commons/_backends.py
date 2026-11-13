@@ -9,7 +9,7 @@ are DuckDB-specific and gain nothing from it.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING, Any, Protocol
 
 import duckdb
@@ -22,8 +22,13 @@ if TYPE_CHECKING:
 
 __all__ = ["Backend", "DuckDBBackend", "EngineBackend"]
 
+
 class Backend(Protocol):
-    def query(self, sql: str) -> list[dict[str, Any]]: ...
+    def query(
+        self, sql: str, params: Mapping[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
+        """Run one statement; `params` binds named values written `:name`."""
+        ...
 
     def list_tables(self) -> list[str]: ...
 
@@ -57,7 +62,11 @@ class DuckDBBackend:
     def connection(self) -> duckdb.DuckDBPyConnection:
         return self._con
 
-    def query(self, sql: str) -> list[dict[str, Any]]:
+    def query(
+        self, sql: str, params: Mapping[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
+        if params:
+            raise ValueError("The DuckDB backend does not bind parameters.")
         cursor = self._con.execute(sql)
         if cursor.description is None:
             return []
@@ -90,8 +99,51 @@ class DuckDBBackend:
         return None
 
 
+def escape_colons(sql: str, params: Mapping[str, Any] | None = None) -> str:
+    """Escape the colons SQLAlchemy's `text()` must not read as binds.
+
+    `text()` reads `:name` as a bind wherever it appears, quotes and comments
+    included, and drops the backslash of a `\\:` it finds. It also removes
+    each escape it reads, so an escaped colon reaches the warehouse as it
+    was written. Without `params` every colon is escaped, which needs no
+    reading of the SQL at all. With them, only colons inside quotes are:
+    values are bound only in SQL commons compiles for Snowflake, which has
+    no comments, and whose literals escape with a backslash and a doubled
+    quote.
+    """
+    if not params:
+        return sql.replace(":", "\\:")
+    out: list[str] = []
+    quote: str | None = None
+    i = 0
+    while i < len(sql):
+        char = sql[i]
+        if quote is None:
+            if char in "'\"":
+                quote = char
+            out.append(char)
+        elif char == ":":
+            out.append("\\:")
+        elif char == "\\" and quote == "'" and i + 1 < len(sql):
+            out.append(sql[i : i + 2])
+            i += 1
+        elif char == quote:
+            if sql[i + 1 : i + 2] == quote:
+                out.append(char * 2)
+                i += 1
+            else:
+                quote = None
+                out.append(char)
+        else:
+            out.append(char)
+        i += 1
+    return "".join(out)
+
+
 def _databricks_rows(
-    connection: sqlalchemy.Connection, sql: str
+    connection: sqlalchemy.Connection,
+    sql: str,
+    params: Mapping[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     # The Databricks connector builds rows through pandas' nullable floats,
     # which read NaN as missing, so the connector returns None to SQLAlchemy
@@ -99,7 +151,10 @@ def _databricks_rows(
     # The connector's Arrow table keeps NaN.
     cursor = connection.connection.cursor()
     try:
-        cursor.execute(sql)
+        if params:
+            cursor.execute(sql, dict(params))
+        else:
+            cursor.execute(sql)
         if cursor.description is None:
             return []
         return cursor.fetchall_arrow().to_pylist()
@@ -115,11 +170,15 @@ class EngineBackend:
     def engine(self) -> sqlalchemy.Engine:
         return self._engine
 
-    def query(self, sql: str) -> list[dict[str, Any]]:
+    def query(
+        self, sql: str, params: Mapping[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
         with self._engine.connect() as connection:
             if self.dialect() == "databricks":
-                return _databricks_rows(connection, sql)
-            result = connection.execute(sqlalchemy.text(sql))
+                return _databricks_rows(connection, sql, params)
+            result = connection.execute(
+                sqlalchemy.text(escape_colons(sql, params)), dict(params or {})
+            )
             return [dict(row) for row in result.mappings()]
 
     def list_tables(self) -> list[str]:
@@ -148,6 +207,30 @@ class EngineBackend:
 
     def dialect(self) -> str:
         return self._engine.dialect.name
+
+    def table_types(
+        self, catalog: str, schema: str | None
+    ) -> dict[tuple[str, str], str] | None:
+        """Each table's type as Databricks' table metadata reports it.
+
+        Unity Catalog reports a metric view as VIEW here, where
+        `information_schema` says METRIC_VIEW; `relation_kind` reads both,
+        and either naming a metric view decides. None off Databricks, or when
+        the metadata cannot be read.
+        """
+        if self.dialect() != "databricks":
+            return None
+        try:
+            with self._engine.connect() as connection:
+                cursor = connection.connection.cursor()
+                try:
+                    cursor.tables(catalog_name=catalog, schema_name=schema)
+                    rows = cursor.fetchall()
+                finally:
+                    cursor.close()
+        except Exception:  # noqa: BLE001 - the table type is the fallback
+            return None
+        return {(str(row[1]), str(row[2])): str(row[3]) for row in rows}
 
     def inspector(self) -> Callable[[TableId], bool] | None:
         inspector = sqlalchemy.inspect(self._engine)

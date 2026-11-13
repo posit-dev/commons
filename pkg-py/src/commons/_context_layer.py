@@ -142,9 +142,9 @@ def augment_context_layer(
     chunks: list[str] = []
     for source in sources:
         chunks.extend(_dictionary_chunks(source.dictionary))
-        # A warehouse's own semantic models contribute their retrieval prose
-        # here too, as they do in pkg-r/R/context-layer.R. This package has
-        # no semantic-model surface yet, so there is nothing to fold in.
+        # A warehouse's own semantic models contribute their retrieval prose.
+        for model in source.semantic_models.values():
+            chunks.extend(model.retrieval)
 
     if not chunks:
         return layer

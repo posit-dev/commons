@@ -12,6 +12,8 @@ from commons._context_layer import (
     strip_frontmatter,
 )
 from commons._data_dictionary import DataDictionary
+from commons._data_source import TableId
+from commons._semantic_models import SemanticModel
 
 from ._shared import load_shared_fixture
 
@@ -332,6 +334,16 @@ def test_augment_context_layer_shared_cases(case):
         )
         for spec in case["dictionaries"]
     ]
+    for source, retrieval in zip(sources, case.get("semantic_retrieval", [])):
+        source.semantic_models = {
+            f"MODEL{index}": SemanticModel(
+                id=TableId(table=f"MODEL{index}"),
+                name=f"MODEL{index}",
+                backend="snowflake_semantic_view",
+                retrieval=[text],
+            )
+            for index, text in enumerate(retrieval)
+        }
 
     augmented = augment_context_layer(layer, sources)
 

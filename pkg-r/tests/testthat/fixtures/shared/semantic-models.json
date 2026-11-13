@@ -1,0 +1,878 @@
+{
+  "description": "How a warehouse's semantic models become names an agent can call. Every source's models feed one registry of members: each model's dimensions and metrics, and the facts labelled as filters. A member answers to its bare name, to `parent.name`, and to either qualified by its model as `MODEL::name` or `MODEL::parent.name`; the last of these is its key. An error is pinned by the names its message must mention, since the wording belongs to each language. Its `error` field names the kind of failure for a reader, and neither suite asserts it.",
+  "models": {
+    "description": "The models every case below reads, all on the source `warehouse`, with the governed data-dict definitions on the same source. Members not given a parent belong to no logical table. `parameters` are a model's typed parameters, and `stubs` are models listed on the same source but not yet read. `context` is a model's first-touch and retrieval prose. `calculations` are a model's verified queries.",
+    "values": [
+      {
+        "label": "REVENUE",
+        "dimensions": [
+          {
+            "name": "region",
+            "parent": "orders",
+            "description": "Sales region."
+          },
+          {
+            "name": "active_only",
+            "parent": "orders",
+            "filter": true
+          }
+        ],
+        "metrics": [
+          {
+            "name": "revenue",
+            "parent": "orders",
+            "label": "Revenue",
+            "description": "Booked revenue."
+          },
+          {
+            "name": "order_count"
+          }
+        ],
+        "facts": [
+          {
+            "name": "amount",
+            "parent": "orders",
+            "filter": true
+          },
+          {
+            "name": "cost",
+            "parent": "orders"
+          }
+        ],
+        "filters": [
+          {
+            "name": "recent_only",
+            "parent": "orders"
+          }
+        ],
+        "parameters": [
+          {
+            "name": "FY",
+            "type": "integer",
+            "description": "Fiscal year.",
+            "default": 2024,
+            "has_default": true
+          },
+          {
+            "name": "REGION_CODE",
+            "type": "string",
+            "description": null,
+            "default": null,
+            "has_default": false
+          },
+          {
+            "name": "INCLUDE_TEST",
+            "type": "logical",
+            "description": "",
+            "default": true,
+            "has_default": true
+          }
+        ],
+        "description": "Revenue semantics.",
+        "context": [
+          "Use booked revenue for finance questions.",
+          "Native semantic facts:\n- `orders.amount`"
+        ],
+        "calculations": [
+          {
+            "name": "revenue_by_region",
+            "description": "What is booked revenue in each region?",
+            "sql": "SELECT region, SUM(amount) AS revenue FROM orders GROUP BY region"
+          },
+          {
+            "name": "order_total",
+            "description": "How many orders were placed?",
+            "sql": "SELECT COUNT(*) AS orders FROM orders"
+          }
+        ]
+      },
+      {
+        "label": "FINANCE",
+        "dimensions": [
+          {
+            "name": "region",
+            "parent": "ledger"
+          }
+        ],
+        "metrics": [
+          {
+            "name": "revenue",
+            "parent": "ledger"
+          }
+        ],
+        "facts": [],
+        "filters": [],
+        "calculations": [
+          {
+            "name": "revenue_by_region",
+            "description": "Ledger revenue by region.",
+            "sql": "SELECT region, SUM(amount) AS revenue FROM ledger GROUP BY region"
+          }
+        ]
+      },
+      {
+        "label": "EMPTY",
+        "dimensions": [],
+        "metrics": [],
+        "facts": [],
+        "filters": []
+      }
+    ],
+    "definitions": [
+      {
+        "name": "net_revenue",
+        "table": "sales",
+        "kind": "metric"
+      },
+      {
+        "name": "order_count",
+        "table": "sales",
+        "kind": "metric"
+      },
+      {
+        "name": "emea",
+        "table": "sales",
+        "kind": "filter"
+      }
+    ],
+    "stubs": [
+      {
+        "label": "ANALYTICS.PUBLIC.LEDGER_MODEL",
+        "description": "Ledger semantics for finance."
+      },
+      {
+        "label": "ANALYTICS.PUBLIC.EMPTY_MODEL",
+        "description": null
+      }
+    ]
+  },
+  "registry": {
+    "description": "The members the registry lists for those models, in order: per model, its dimensions, then its metrics, then the facts labelled as filters. Named filters and other facts are context only and are not listed. `synonyms` is the member's synonyms joined by spaces.",
+    "members": [
+      {
+        "name": "region",
+        "model": "REVENUE",
+        "source": "warehouse",
+        "kind": "dimension",
+        "parent": "orders",
+        "label": null,
+        "description": "Sales region.",
+        "type": null,
+        "synonyms": "",
+        "filter": false
+      },
+      {
+        "name": "active_only",
+        "model": "REVENUE",
+        "source": "warehouse",
+        "kind": "dimension",
+        "parent": "orders",
+        "label": null,
+        "description": null,
+        "type": null,
+        "synonyms": "",
+        "filter": true
+      },
+      {
+        "name": "revenue",
+        "model": "REVENUE",
+        "source": "warehouse",
+        "kind": "metric",
+        "parent": "orders",
+        "label": "Revenue",
+        "description": "Booked revenue.",
+        "type": null,
+        "synonyms": "",
+        "filter": false
+      },
+      {
+        "name": "order_count",
+        "model": "REVENUE",
+        "source": "warehouse",
+        "kind": "metric",
+        "parent": null,
+        "label": null,
+        "description": null,
+        "type": null,
+        "synonyms": "",
+        "filter": false
+      },
+      {
+        "name": "amount",
+        "model": "REVENUE",
+        "source": "warehouse",
+        "kind": "fact",
+        "parent": "orders",
+        "label": null,
+        "description": null,
+        "type": null,
+        "synonyms": "",
+        "filter": true
+      },
+      {
+        "name": "region",
+        "model": "FINANCE",
+        "source": "warehouse",
+        "kind": "dimension",
+        "parent": "ledger",
+        "label": null,
+        "description": null,
+        "type": null,
+        "synonyms": "",
+        "filter": false
+      },
+      {
+        "name": "revenue",
+        "model": "FINANCE",
+        "source": "warehouse",
+        "kind": "metric",
+        "parent": "ledger",
+        "label": null,
+        "description": null,
+        "type": null,
+        "synonyms": "",
+        "filter": false
+      }
+    ]
+  },
+  "resolution": {
+    "description": "Resolving names against the registry as one kind of member. `filter` resolves only the members labelled as filters. Braces around a name, as the SQL token syntax writes it, are ignored. `expected` is the keys resolved, in order, or an error: `ambiguous` when more than one member of the kind answers to the name, `wrong_kind` when members answer to it but none of the kind, and `missing` when none does.",
+    "cases": [
+      {
+        "names": [
+          "revenue"
+        ],
+        "kind": "metric",
+        "expected": {
+          "error": "ambiguous",
+          "mentions": [
+            "revenue",
+            "REVENUE::orders.revenue",
+            "FINANCE::ledger.revenue"
+          ]
+        }
+      },
+      {
+        "names": [
+          "REVENUE::revenue"
+        ],
+        "kind": "metric",
+        "expected": {
+          "keys": [
+            "REVENUE::orders.revenue"
+          ]
+        }
+      },
+      {
+        "names": [
+          "orders.revenue"
+        ],
+        "kind": "metric",
+        "expected": {
+          "keys": [
+            "REVENUE::orders.revenue"
+          ]
+        }
+      },
+      {
+        "names": [
+          "FINANCE::ledger.revenue",
+          "{{order_count}}"
+        ],
+        "kind": "metric",
+        "expected": {
+          "keys": [
+            "FINANCE::ledger.revenue",
+            "REVENUE::order_count"
+          ]
+        }
+      },
+      {
+        "names": [
+          "region"
+        ],
+        "kind": "metric",
+        "expected": {
+          "error": "wrong_kind",
+          "mentions": [
+            "region",
+            "native dimension"
+          ]
+        }
+      },
+      {
+        "names": [
+          "nope"
+        ],
+        "kind": "metric",
+        "expected": {
+          "error": "missing",
+          "mentions": [
+            "nope",
+            "revenue",
+            "order_count"
+          ]
+        }
+      },
+      {
+        "names": [
+          "region"
+        ],
+        "kind": "dimension",
+        "expected": {
+          "error": "ambiguous",
+          "mentions": [
+            "region",
+            "REVENUE::orders.region",
+            "FINANCE::ledger.region"
+          ]
+        }
+      },
+      {
+        "names": [
+          "ledger.region"
+        ],
+        "kind": "dimension",
+        "expected": {
+          "keys": [
+            "FINANCE::ledger.region"
+          ]
+        }
+      },
+      {
+        "names": [
+          "amount"
+        ],
+        "kind": "dimension",
+        "expected": {
+          "error": "wrong_kind",
+          "mentions": [
+            "amount",
+            "native fact"
+          ]
+        }
+      },
+      {
+        "names": [
+          "recent_only"
+        ],
+        "kind": "dimension",
+        "expected": {
+          "error": "missing",
+          "mentions": [
+            "recent_only",
+            "region",
+            "active_only"
+          ]
+        }
+      },
+      {
+        "names": [
+          "active_only",
+          "amount"
+        ],
+        "kind": "filter",
+        "expected": {
+          "keys": [
+            "REVENUE::orders.active_only",
+            "REVENUE::orders.amount"
+          ]
+        }
+      },
+      {
+        "names": [
+          "region"
+        ],
+        "kind": "filter",
+        "expected": {
+          "error": "missing",
+          "mentions": [
+            "region",
+            "active_only",
+            "amount"
+          ]
+        }
+      }
+    ]
+  },
+  "metric_origin": {
+    "description": "Which pool a metric name belongs to when data-dict metric definitions and native semantic metrics share a source. A definition answers to `name` or `table::name`. A name both pools answer to is ambiguous, and must be qualified. When the source lists models it has not read, a refused name also names them, at most ten with a count of the rest, since only a `MODEL::metric` name reaches their metrics; a name that matches nothing then says no metrics are known yet rather than that none are defined. A case's `unread` replaces the unread labels, which are otherwise the `stubs`, and `empty` leaves out the definitions and the read models. A label is shown as written, whatever characters it holds. An error's `omits` lists text the message must not contain.",
+    "cases": [
+      {
+        "name": "net_revenue",
+        "expected": {
+          "origin": "definition"
+        }
+      },
+      {
+        "name": "sales::net_revenue",
+        "expected": {
+          "origin": "definition"
+        }
+      },
+      {
+        "name": "REVENUE::revenue",
+        "expected": {
+          "origin": "semantic_model"
+        }
+      },
+      {
+        "name": "order_count",
+        "expected": {
+          "error": "ambiguous",
+          "mentions": [
+            "order_count",
+            "sales::order_count",
+            "REVENUE::order_count"
+          ]
+        }
+      },
+      {
+        "name": "emea",
+        "expected": {
+          "error": "wrong_kind",
+          "mentions": [
+            "emea",
+            "filter",
+            "ANALYTICS.PUBLIC.LEDGER_MODEL"
+          ]
+        }
+      },
+      {
+        "name": "region",
+        "expected": {
+          "error": "wrong_kind",
+          "mentions": [
+            "region",
+            "dimension"
+          ]
+        }
+      },
+      {
+        "name": "nothing",
+        "expected": {
+          "error": "missing",
+          "mentions": [
+            "nothing",
+            "net_revenue",
+            "order_count",
+            "revenue",
+            "ANALYTICS.PUBLIC.LEDGER_MODEL",
+            "ANALYTICS.PUBLIC.EMPTY_MODEL",
+            "MODEL::metric"
+          ]
+        }
+      },
+      {
+        "name": "nothing",
+        "unread": [
+          "ANALYTICS.PUBLIC.M01",
+          "ANALYTICS.PUBLIC.M02",
+          "ANALYTICS.PUBLIC.M03",
+          "ANALYTICS.PUBLIC.M04",
+          "ANALYTICS.PUBLIC.M05",
+          "ANALYTICS.PUBLIC.M06",
+          "ANALYTICS.PUBLIC.M07",
+          "ANALYTICS.PUBLIC.M08",
+          "ANALYTICS.PUBLIC.M09",
+          "ANALYTICS.PUBLIC.M10",
+          "ANALYTICS.PUBLIC.M11",
+          "ANALYTICS.PUBLIC.M12"
+        ],
+        "expected": {
+          "error": "missing",
+          "mentions": [
+            "ANALYTICS.PUBLIC.M10",
+            "and 2 more that search_pool finds"
+          ],
+          "omits": [
+            "ANALYTICS.PUBLIC.M11",
+            "ANALYTICS.PUBLIC.M12"
+          ]
+        }
+      },
+      {
+        "name": "revenue",
+        "empty": true,
+        "expected": {
+          "error": "missing",
+          "mentions": [
+            "No metrics are known until a listed semantic model is read",
+            "ANALYTICS.PUBLIC.LEDGER_MODEL"
+          ]
+        }
+      },
+      {
+        "name": "nothing",
+        "unread": [
+          "ANALYTICS.PUBLIC.{stop('markup')}\\x"
+        ],
+        "expected": {
+          "error": "missing",
+          "mentions": [
+            "ANALYTICS.PUBLIC.{stop('markup')}\\x"
+          ]
+        }
+      }
+    ]
+  },
+  "pool_text": {
+    "description": "What search_pool returns when the pool holds only these models, the stubs beside them, and no measures or definitions. Members and stubs are ranked with the pool's lexical ranking: a member by its name, model, kind, label, description, and synonyms, a stub by its name, label, backend, and description, and a verified query by its key, name, and description. A member is written by its bare name when that is unambiguous and by its key otherwise. `source_names` are the sources an agent with several names; a member on one of them says so. `empty` is the reply for a pool with nothing in it.",
+    "cases": [
+      {
+        "query": "revenue",
+        "source_names": [],
+        "text": "### REVENUE::orders.region --- native dimension on semantic model `REVENUE`\nSales region.\ncall_metrics arguments JSON: `FY` (integer, optional; default: 2024): Fiscal year., `REGION_CODE` (string, required), `INCLUDE_TEST` (logical, optional; default: TRUE).\nUse as a call_metrics dimension: REVENUE::orders.region.\n\n### active_only --- native dimension on semantic model `REVENUE`\n\ncall_metrics arguments JSON: `FY` (integer, optional; default: 2024): Fiscal year., `REGION_CODE` (string, required), `INCLUDE_TEST` (logical, optional; default: TRUE).\nUse as a call_metrics dimension: active_only.\nMay be applied as a call_metrics filter: active_only.\n\n### REVENUE::orders.revenue --- native metric on semantic model `REVENUE`\nBooked revenue.\ncall_metrics arguments JSON: `FY` (integer, optional; default: 2024): Fiscal year., `REGION_CODE` (string, required), `INCLUDE_TEST` (logical, optional; default: TRUE).\nQuery with call_metrics (metrics = [\"REVENUE::orders.revenue\"]).\n\n### order_count --- native metric on semantic model `REVENUE`\n\ncall_metrics arguments JSON: `FY` (integer, optional; default: 2024): Fiscal year., `REGION_CODE` (string, required), `INCLUDE_TEST` (logical, optional; default: TRUE).\nQuery with call_metrics (metrics = [\"order_count\"]).\n\n### amount --- native fact on semantic model `REVENUE`\n\ncall_metrics arguments JSON: `FY` (integer, optional; default: 2024): Fiscal year., `REGION_CODE` (string, required), `INCLUDE_TEST` (logical, optional; default: TRUE).\nMay be applied as a call_metrics filter: amount."
+      },
+      {
+        "query": "region",
+        "source_names": [
+          "warehouse",
+          "archive"
+        ],
+        "text": "### REVENUE::orders.region --- native dimension on semantic model `REVENUE`\nSales region.\nsources: warehouse\ncall_metrics arguments JSON: `FY` (integer, optional; default: 2024): Fiscal year., `REGION_CODE` (string, required), `INCLUDE_TEST` (logical, optional; default: TRUE).\nUse as a call_metrics dimension: REVENUE::orders.region.\n\n### FINANCE::ledger.region --- native dimension on semantic model `FINANCE`\n\nsources: warehouse\nUse as a call_metrics dimension: FINANCE::ledger.region.\n\n### REVENUE::revenue_by_region --- trusted query\nWhat is booked revenue in each region?\nArguments: none.\nSource: `warehouse`.\nRun with `call_calculation`.\n\n### FINANCE::revenue_by_region --- trusted query\nLedger revenue by region.\nArguments: none.\nSource: `warehouse`.\nRun with `call_calculation`."
+      },
+      {
+        "query": "ledger finance",
+        "source_names": [],
+        "text": "### ANALYTICS.PUBLIC.LEDGER_MODEL --- Snowflake semantic view\nLedger semantics for finance.\nInspect with `describe_table` to find its public members and verified queries.\n\n### FINANCE::revenue_by_region --- trusted query\nLedger revenue by region.\nArguments: none.\nRun with `call_calculation`.\n\n### FINANCE::ledger.region --- native dimension on semantic model `FINANCE`\n\nUse as a call_metrics dimension: FINANCE::ledger.region.\n\n### FINANCE::ledger.revenue --- native metric on semantic model `FINANCE`\n\nQuery with call_metrics (metrics = [\"FINANCE::ledger.revenue\"])."
+      },
+      {
+        "query": "order count",
+        "source_names": [],
+        "text": "### order_count --- native metric on semantic model `REVENUE`\n\ncall_metrics arguments JSON: `FY` (integer, optional; default: 2024): Fiscal year., `REGION_CODE` (string, required), `INCLUDE_TEST` (logical, optional; default: TRUE).\nQuery with call_metrics (metrics = [\"order_count\"]).\n\n### REVENUE::order_total --- trusted query\nHow many orders were placed?\nArguments: none.\nRun with `call_calculation`."
+      },
+      {
+        "query": "active",
+        "source_names": [],
+        "text": "### active_only --- native dimension on semantic model `REVENUE`\n\ncall_metrics arguments JSON: `FY` (integer, optional; default: 2024): Fiscal year., `REGION_CODE` (string, required), `INCLUDE_TEST` (logical, optional; default: TRUE).\nUse as a call_metrics dimension: active_only.\nMay be applied as a call_metrics filter: active_only."
+      },
+      {
+        "query": "EMPTY_MODEL",
+        "source_names": [],
+        "text": "### ANALYTICS.PUBLIC.EMPTY_MODEL --- Snowflake semantic view\n\nInspect with `describe_table` to find its public members and verified queries.\n\n### ANALYTICS.PUBLIC.LEDGER_MODEL --- Snowflake semantic view\nLedger semantics for finance.\nInspect with `describe_table` to find its public members and verified queries."
+      },
+      {
+        "query": "nothing like it",
+        "source_names": [],
+        "text": "Nothing in the semantic layer matches \"nothing like it\". Consider writing a SQL query."
+      },
+      {
+        "query": "orders placed",
+        "source_names": [],
+        "text": "### REVENUE::order_total --- trusted query\nHow many orders were placed?\nArguments: none.\nRun with `call_calculation`."
+      },
+      {
+        "query": "orders placed",
+        "source_names": [
+          "warehouse",
+          "archive"
+        ],
+        "text": "### REVENUE::order_total --- trusted query\nHow many orders were placed?\nArguments: none.\nSource: `warehouse`.\nRun with `call_calculation`."
+      }
+    ],
+    "empty": "The semantic layer is empty."
+  },
+  "call_metrics": {
+    "description": "Calls over native metrics that are refused before any SQL runs, on the source holding these models and definitions. A call draws its metrics from data-dict definitions or from one native semantic model, never both and never two models, resolves its dimensions within that model, and binds `arguments` only to that model's declared parameters. `arguments` is the JSON text the model writes. Each pinned phrase must appear in the error.",
+    "cases": [
+      {
+        "name": "metrics from both pools in one call are refused",
+        "metrics": [
+          "net_revenue",
+          "REVENUE::revenue"
+        ],
+        "expected": {
+          "error": "refused",
+          "mentions": [
+            "Metrics in one call must come from either data-dict definitions or one native semantic model."
+          ]
+        }
+      },
+      {
+        "name": "native metrics from two models in one call are refused",
+        "metrics": [
+          "REVENUE::revenue",
+          "FINANCE::revenue"
+        ],
+        "expected": {
+          "error": "refused",
+          "mentions": [
+            "Metrics in one call must belong to one native semantic model."
+          ]
+        }
+      },
+      {
+        "name": "arguments are refused for data-dict metrics",
+        "metrics": [
+          "net_revenue"
+        ],
+        "arguments": "{\"FY\": 2024}",
+        "expected": {
+          "error": "refused",
+          "mentions": [
+            "`arguments` is supported only for native semantic metrics."
+          ]
+        }
+      },
+      {
+        "name": "a required parameter must be given",
+        "metrics": [
+          "REVENUE::revenue"
+        ],
+        "expected": {
+          "error": "refused",
+          "mentions": [
+            "Missing required argument",
+            "REGION_CODE"
+          ]
+        }
+      },
+      {
+        "name": "an argument the model does not declare is refused",
+        "metrics": [
+          "REVENUE::revenue"
+        ],
+        "arguments": "{\"REGION_CODE\": \"EU\", \"YEAR\": 2024}",
+        "expected": {
+          "error": "refused",
+          "mentions": [
+            "Unexpected argument",
+            "YEAR"
+          ]
+        }
+      },
+      {
+        "name": "an argument of the wrong type is refused",
+        "metrics": [
+          "REVENUE::revenue"
+        ],
+        "arguments": "{\"REGION_CODE\": \"EU\", \"FY\": \"next\"}",
+        "expected": {
+          "error": "refused",
+          "mentions": [
+            "FY",
+            "must be an integer value"
+          ]
+        }
+      },
+      {
+        "name": "a dimension resolves within the metrics' model",
+        "metrics": [
+          "FINANCE::revenue"
+        ],
+        "dimensions": [
+          "orders.region"
+        ],
+        "expected": {
+          "error": "refused",
+          "mentions": [
+            "No native semantic dimension is named",
+            "orders.region"
+          ]
+        }
+      },
+      {
+        "name": "no metrics is refused",
+        "metrics": [],
+        "expected": {
+          "error": "refused",
+          "mentions": [
+            "`metrics` must contain at least one metric name."
+          ]
+        }
+      }
+    ]
+  },
+  "description_text": {
+    "description": "What describe_table returns for a semantic model: its name and description, every public member qualified by the model with its kind and detail, the parameters call_metrics binds, its verified queries, and the model's context prose. A member's detail is its description, or its label when it has none. `error` is the reason a listed model's definition could not be read, which is described in place of its members.",
+    "cases": [
+      {
+        "model": "REVENUE",
+        "text": "Semantic model `REVENUE`.\n\nRevenue semantics.\n\nPublic members:\n\n- `REVENUE::orders.revenue` (metric): Booked revenue.\n\n- `REVENUE::order_count` (metric)\n\n- `REVENUE::orders.region` (dimension): Sales region.\n\n- `REVENUE::orders.active_only` (dimension)\n\n- `REVENUE::orders.amount` (fact)\n\n- `REVENUE::orders.cost` (fact)\n\n- `REVENUE::orders.recent_only` (filter)\n\ncall_metrics arguments JSON: `FY` (integer, optional; default: 2024): Fiscal year., `REGION_CODE` (string, required), `INCLUDE_TEST` (logical, optional; default: TRUE).\n\nVerified queries (run with `call_calculation`):\n\n- `REVENUE::revenue_by_region`: What is booked revenue in each region?\n\n- `REVENUE::order_total`: How many orders were placed?\n\nUse booked revenue for finance questions.\n\nNative semantic facts:\n- `orders.amount`"
+      },
+      {
+        "model": "FINANCE",
+        "text": "Semantic model `FINANCE`.\n\nPublic members:\n\n- `FINANCE::ledger.revenue` (metric)\n\n- `FINANCE::ledger.region` (dimension)\n\nVerified queries (run with `call_calculation`):\n\n- `FINANCE::revenue_by_region`: Ledger revenue by region."
+      },
+      {
+        "model": "EMPTY",
+        "text": "Semantic model `EMPTY`.\n\nPublic members:\n\n- No public members."
+      },
+      {
+        "model": "ANALYTICS.PUBLIC.LEDGER_MODEL",
+        "error": "The view was dropped.",
+        "text": "Semantic model `ANALYTICS.PUBLIC.LEDGER_MODEL` is listed in the catalog, but its definition could not be read.\n\nThe view was dropped."
+      }
+    ]
+  },
+  "first_touch": {
+    "description": "The semantic-model prose a table's first touch adds: the first-touch context of every model that reads the table, de-duplicated in model order. A model reads a table when one of its dependencies is the relation's warehouse identity, or its id when it has none, compared exactly, so a Snowflake name differing only in case is another table. A label that names no relation gets nothing.",
+    "relations": {
+      "ANALYTICS.PUBLIC.ORDERS": {
+        "id": {
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "ORDERS"
+        }
+      },
+      "orders": {
+        "id": {
+          "table": "orders"
+        },
+        "identity": {
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "ORDERS"
+        }
+      },
+      "ANALYTICS.PUBLIC.SALES": {
+        "id": {
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "SALES"
+        }
+      },
+      "ANALYTICS.PUBLIC.orders": {
+        "id": {
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "orders"
+        }
+      }
+    },
+    "models": [
+      {
+        "label": "REVENUE",
+        "dependencies": [
+          {
+            "catalog": "ANALYTICS",
+            "schema": "PUBLIC",
+            "table": "ORDERS"
+          }
+        ],
+        "context": [
+          "Use booked revenue.",
+          "Shared note."
+        ]
+      },
+      {
+        "label": "MARGIN",
+        "dependencies": [
+          {
+            "catalog": "ANALYTICS",
+            "schema": "PUBLIC",
+            "table": "ORDERS"
+          },
+          {
+            "catalog": "ANALYTICS",
+            "schema": "PUBLIC",
+            "table": "SALES"
+          }
+        ],
+        "context": [
+          "Shared note.",
+          "Margin is net of cost."
+        ]
+      }
+    ],
+    "cases": [
+      {
+        "table": "ANALYTICS.PUBLIC.ORDERS",
+        "expected": [
+          "Use booked revenue.",
+          "Shared note.",
+          "Margin is net of cost."
+        ]
+      },
+      {
+        "table": "orders",
+        "expected": [
+          "Use booked revenue.",
+          "Shared note.",
+          "Margin is net of cost."
+        ]
+      },
+      {
+        "table": "ANALYTICS.PUBLIC.SALES",
+        "expected": [
+          "Shared note.",
+          "Margin is net of cost."
+        ]
+      },
+      {
+        "table": "ANALYTICS.PUBLIC.orders",
+        "expected": []
+      },
+      {
+        "table": "missing",
+        "expected": []
+      }
+    ]
+  },
+  "calculations": {
+    "description": "The verified queries the models offer, as call_calculation finds them. A query's key is its model's label and its name joined by `::`. A query answers to its name or its key among the queries on the source the call names, and a name more than one query answers to must be given as a key.",
+    "keys": [
+      "REVENUE::revenue_by_region",
+      "REVENUE::order_total",
+      "FINANCE::revenue_by_region"
+    ],
+    "cases": [
+      {
+        "name": "revenue_by_region",
+        "source": "warehouse",
+        "expected": {
+          "error": "ambiguous",
+          "mentions": [
+            "revenue_by_region",
+            "REVENUE::revenue_by_region",
+            "FINANCE::revenue_by_region"
+          ]
+        }
+      },
+      {
+        "name": "REVENUE::revenue_by_region",
+        "source": "warehouse",
+        "expected": {
+          "key": "REVENUE::revenue_by_region"
+        }
+      },
+      {
+        "name": "order_total",
+        "source": "warehouse",
+        "expected": {
+          "key": "REVENUE::order_total"
+        }
+      },
+      {
+        "name": "FINANCE::revenue_by_region",
+        "source": "warehouse",
+        "expected": {
+          "key": "FINANCE::revenue_by_region"
+        }
+      },
+      {
+        "name": "nothing",
+        "source": "warehouse",
+        "expected": {
+          "error": "missing",
+          "mentions": [
+            "nothing",
+            "REVENUE::order_total"
+          ]
+        }
+      },
+      {
+        "name": "order_total",
+        "source": "archive",
+        "expected": {
+          "error": "missing",
+          "mentions": [
+            "order_total",
+            "REVENUE::order_total"
+          ]
+        }
+      }
+    ]
+  }
+}

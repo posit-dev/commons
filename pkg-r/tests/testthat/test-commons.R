@@ -275,7 +275,8 @@ test_that("parsed where literals retain quoting for native semantic metrics", {
       as_where_triples("region = '001' AND region <> 1"),
       members,
       con,
-      member_references = function(dimension, con) "region"
+      member_references = function(dimension, con) "region",
+      quote_string = function(value) DBI::dbQuoteString(con, value)
     ),
     c("(region = '001')", "(region != 1)")
   )

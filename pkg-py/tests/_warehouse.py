@@ -10,6 +10,8 @@ answer different queries because the two readers ask different ones, and a
 fake that answered both would hide a reader wired to the wrong warehouse.
 """
 
+import re
+
 from commons._catalog import MergedDictionary, Relation, merge_dictionary
 from commons._data_dictionary import DataDictionary
 from commons._data_source import TableId
@@ -23,6 +25,7 @@ __all__ = [
     "databricks_relation_row",
     "merge_shared_case",
     "relation_row",
+    "semantic_view_row",
 ]
 
 
@@ -43,6 +46,16 @@ def _shape(backend: str, group: str, accept) -> dict:
 def relation_row(name: str, catalog: str = "ANALYTICS", schema: str = "PUBLIC") -> dict:
     row = _shape("snowflake", "relations", lambda row: row["kind"] == "TABLE")
     row.update(name=name, database_name=catalog, schema_name=schema, comment="")
+    return row
+
+
+def semantic_view_row(
+    name: str, catalog: str = "ANALYTICS", schema: str = "PUBLIC"
+) -> dict:
+    """A `SHOW SEMANTIC VIEWS` row, shaped like the shared fixture's."""
+    case = load_shared_fixture("snowflake-semantic-views")["show_rows"]["cases"][0]
+    row = dict(case["rows"][0])
+    row.update(name=name, database_name=catalog, schema_name=schema)
     return row
 
 
@@ -76,6 +89,7 @@ def databricks_column_row(name: str) -> dict:
 class _Recorder:
     def __init__(self):
         self.queries: list[str] = []
+        self.params: list[dict | None] = []
         self.refuse: set[str] = set()
 
     def _probe(self, sql: str):
@@ -100,16 +114,30 @@ class FakeWarehouse(_Recorder):
     """A Snowflake standing in for the network, answering from canned rows."""
 
     def __init__(
-        self, dialect="snowflake", relations=None, role="REPORTER", columns=("ID",)
+        self,
+        dialect="snowflake",
+        relations=None,
+        role="REPORTER",
+        columns=("ID",),
+        semantic_views=None,
+        semantic_listing_fails=False,
     ):
         super().__init__()
         self._dialect = dialect
         self._relations = relations if relations is not None else ["SALES", "ORDERS"]
         self._columns = list(columns)
         self.role = role
+        # View name to the YAML specification Snowflake returns for it, all in
+        # ANALYTICS.PUBLIC.
+        self.semantic_views = dict(semantic_views or {})
+        self.semantic_listing_fails = semantic_listing_fails
+        self.yaml_reads: list[str] = []
+        # What a SEMANTIC_VIEW query that is not a zero-row probe returns.
+        self.semantic_rows: list[dict] = [{"revenue": 1200.0}]
 
-    def query(self, sql: str):
+    def query(self, sql: str, params=None):
         self.queries.append(sql)
+        self.params.append(params)
         if sql.startswith("SELECT CURRENT_USER()"):
             return [
                 {
@@ -130,8 +158,26 @@ class FakeWarehouse(_Recorder):
             ]
         if sql.startswith("DESC TABLE"):
             return [column_row(name) for name in self._columns]
+        if sql.startswith("SHOW SEMANTIC VIEWS"):
+            if self.semantic_listing_fails:
+                raise PermissionError("SHOW SEMANTIC VIEWS is not authorized")
+            return [
+                semantic_view_row(name)
+                for name in self.semantic_views
+                if f"'{name}'" in sql or "LIKE" not in sql
+            ]
+        if sql.startswith("SELECT SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW"):
+            name = re.findall(r'"([^"]*)"', sql)[-1]
+            self.yaml_reads.append(name)
+            return [{"SPECIFICATION": self.semantic_views[name]}]
+        if sql.startswith("SELECT * FROM SEMANTIC_VIEW(") and "LIMIT 0" not in sql:
+            self._probe(sql)
+            return [dict(row) for row in self.semantic_rows]
         if sql.startswith("SELECT * FROM"):
             return self._probe(sql)
+        if sql.startswith("WITH "):
+            self._probe(sql)
+            return [{"N": 1}]
         raise AssertionError(f"unexpected query: {sql}")
 
     def list_tables(self) -> list[str]:
@@ -148,13 +194,34 @@ class FakeDatabricks(_Recorder):
     nothing here selects it.
     """
 
-    def __init__(self, relations=None, columns=("id",)):
+    def __init__(
+        self,
+        relations=None,
+        columns=("id",),
+        metric_views=None,
+        metadata=None,
+        metric_view_type="METRIC_VIEW",
+    ):
         super().__init__()
+        # What information_schema reports for a metric view. The connector's
+        # table metadata (table_types) reports the other type: VIEW, as Unity
+        # Catalog does, beside METRIC_VIEW, and METRIC_VIEW beside VIEW.
+        self.metric_view_type = metric_view_type
         self._relations = relations if relations is not None else ["sales", "orders"]
         self._columns = list(columns)
+        # Metric view name to its YAML definition, and to the JSON table
+        # metadata DESCRIBE TABLE EXTENDED reports, all in main.sales.
+        self.metric_views = dict(metric_views or {})
+        self.metadata = dict(metadata or {})
+        self.semantic_rows: list[dict] = [{"revenue": 1200.0}]
 
-    def query(self, sql: str):
+    def table_types(self, catalog: str, schema: str | None):
+        other = "VIEW" if self.metric_view_type == "METRIC_VIEW" else "METRIC_VIEW"
+        return {(schema or "", name): other for name in self.metric_views}
+
+    def query(self, sql: str, params=None):
         self.queries.append(sql)
+        self.params.append(params)
         if sql.startswith("SELECT CURRENT_USER()"):
             return [
                 {"principal": "analyst@example.com", "catalog": "main", "schema": "sales"}
@@ -168,14 +235,31 @@ class FakeDatabricks(_Recorder):
                 {"column_name": name, "is_nullable": "YES"} for name in self._columns
             ]
         if "system.information_schema.tables" in sql:
-            return [
-                databricks_relation_row(name)
-                for name in self._relations
-                if f"'{name}'" in sql or "table_name =" not in sql
+            rows = [databricks_relation_row(name) for name in self._relations]
+            rows += [
+                {**databricks_relation_row(name), "table_type": self.metric_view_type}
+                for name in self.metric_views
             ]
+            return [
+                row
+                for row in rows
+                if f"'{row['table_name']}'" in sql or "table_name =" not in sql
+            ]
+        if "system.information_schema.views" in sql:
+            name = re.findall(r"table_name = '([^']*)'", sql)[-1]
+            text = self.metric_views[name]
+            return [{"definition_length": len(text), "view_definition": text}]
+        if sql.startswith("DESCRIBE TABLE EXTENDED"):
+            name = re.findall(r"`([^`]*)`", sql)[-1]
+            if name not in self.metadata:
+                raise RuntimeError("no metadata")
+            return [{"json_metadata": self.metadata[name]}]
+        if "MEASURE(" in sql and "LIMIT 0" not in sql:
+            self._probe(sql)
+            return [dict(row) for row in self.semantic_rows]
         if sql.startswith("DESCRIBE TABLE"):
             return [databricks_column_row(name) for name in self._columns]
-        if sql.startswith("SELECT * FROM"):
+        if sql.startswith("SELECT * FROM") or "LIMIT 0" in sql:
             return self._probe(sql)
         raise AssertionError(f"unexpected query: {sql}")
 

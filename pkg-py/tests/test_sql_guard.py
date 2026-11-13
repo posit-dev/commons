@@ -145,7 +145,9 @@ def test_read_only_dialect_syntax_is_accepted(sql: str) -> None:
 def test_sql_the_parser_cannot_read_is_rejected_rather_than_guessed() -> None:
     # Fail closed: a statement the guard cannot classify is one it cannot
     # vouch for.
-    with pytest.raises(ValueError, match="could not be parsed"):
+    from commons._sql_guard import UnparseableQuery
+
+    with pytest.raises(UnparseableQuery, match="could not be parsed"):
         check_query("SELECT FROM WHERE )(", dialect="duckdb")
 
 

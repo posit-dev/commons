@@ -85,8 +85,8 @@ def test_an_excluded_relation_is_left_out():
 
 def test_a_session_that_moves_during_discovery_is_refused():
     class Moving(FakeWarehouse):
-        def query(self, sql):
-            rows = super().query(sql)
+        def query(self, sql, params=None):
+            rows = super().query(sql, params)
             if sql.startswith("SELECT CURRENT_USER()"):
                 self.role = "ADMIN"
             return rows
@@ -136,7 +136,9 @@ def _kinds(queries: list[str]) -> list[str]:
             steps.append("session")
         elif sql.startswith(("SELECT CURRENT_DATABASE()", "SELECT CURRENT_CATALOG()")):
             steps.append("namespace")
-        elif sql.startswith("SHOW OBJECTS") or "information_schema.tables" in sql:
+        elif sql.startswith(("SHOW OBJECTS", "SHOW SEMANTIC VIEWS")) or (
+            "information_schema.tables" in sql
+        ):
             steps.append("list")
         elif (
             sql.startswith(("DESC TABLE", "DESCRIBE TABLE"))
