@@ -52,36 +52,13 @@ works anywhere a bslib theme does.
 \section{Sharing on Posit Connect}{
 
 On Posit Connect, viewers can publish a read-only copy of a conversation,
-document, plot, or table. \code{commons_server()} adds a share button to a
-\code{\link[shinychat:page_chat]{shinychat::page_chat()}} toolbar for the conversation, the same control to
-documents in the chat's drawer, and one beside plots and tables. An app
-built with \code{\link[shinychat:chat_ui]{shinychat::chat_ui()}} has no toolbar, so its conversations
-can't be shared, but its documents, plots, and tables can.
+document, plot, or table. Sharing is available only when the app runs on
+Posit Connect. Shared items are published as the viewer who shares it, so
+only viewers whose Connect account can publish content can share. Items
+can only be shared with people who can view the commons apps.
 
-Sharing is available only when the app runs on Posit Connect and its
-deployer has associated a Connect integration of the "Connect API" type
-with the "Visitor API Key" authentication type and a max role of Publisher
-or Admin. Through it, a copy is published as the viewer who shares it, so
-only viewers whose Connect account can publish content can share.
-
-Sharing opens a dialog with a link to the copy, which is published as the
-dialog opens. The copy is static content that belongs to the viewer who
-shared it. In the dialog, they add people and groups who can open it, or
-open it to anyone who can access the app: for an app shared with a list of
-people, that list is copied once, so people added to the app later aren't
-added to the copy. A first share canceled before its link is copied or
-anyone is added is deleted.
-
-The dialog offers only people who can access the app, but the copy belongs
-to the viewer, who can open it to anyone from the Connect dashboard. Treat
-that limit as a convenience, not a data boundary.
-
-A copy shows what was displayed, including the results of the agent's
-calculations, so anyone it is shared with sees those results without
-needing access to the data behind them. A shared plot or table includes the
-code that made it. Nothing in a copy can reach the model or continue the
-conversation. Sharing the same thing again opens the existing copy at the
-same link and, if what it shows has changed, offers to update it.
+To turn sharing on, add Connect's "Connect Visitor API Key" integration to
+the deployed app under \strong{Runtime} > \strong{Integrations} in its settings.
 }
 
 \examples{

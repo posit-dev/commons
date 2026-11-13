@@ -167,6 +167,8 @@ Reconcile new evidence with earlier assumptions and decisions as it appears. Sur
 
    `agent$prewarm()` finishes building the context index before it returns. It also starts pin downloads in a background process; do not claim that pins are bundled unless the board cache is project-local and those downloads are known to have finished before deployment.
 
+   After the first deploy, add Connect's "Connect Visitor API Key" integration to the app so viewers can share conversations and results. Connect ships this integration by default. Add it in the app's settings under **Runtime** > **Integrations**, or with `PUT /v1/content/{guid}/oauth/integrations/associations`. That request replaces the app's existing associations, so include them too.
+
    Verify that the agent starts, that representative context searches retrieve the intended guidance, and that it can answer a few representative questions. Check that it reaches for each extracted measure, as described at the end of extraction step 9.
 
    Give the user a working way to try out the agent. Ask them to check that representative answers, business meanings, source choices, and stated limitations match their expectations, and address what they find. Add only unresolved implementation constraints to the agent instruction file; do not record the review itself. Follow the scope the user confirmed, whether incremental or comprehensive. Once the user chooses a comprehensive first version, do not defer confirmed material merely to produce a smaller agent.

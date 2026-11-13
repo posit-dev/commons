@@ -51,7 +51,7 @@
 
 * The CSS classes on `run_r`'s display are now `commons-run-display`, `commons-run-details`, `commons-run-code`, and `commons-run-plot`, without the `-r`, because the Python package's code tool uses the same classes. App CSS that targets the old `commons-run-r-*` names needs updating.
 
-* On Posit Connect, viewers share a read-only copy of a conversation, a document, a plot, or a table as static content they own, from a share button in the `page_chat()` toolbar, the document drawer, or a button on the plot or table. `commons_server()` adds these controls, so existing apps need no changes. A dialog gives the link and sets who can open it: specific people and groups, or anyone who can access the app. The dialog offers only people who can access the app, but the viewer owns the copy and can widen its access from the Connect dashboard. A shared plot or table includes the code that made it. Sharing is available when the app's deployer associates a Connect "Visitor API Key" integration with a max role of Publisher or Admin.
+* On Posit Connect, users can now share conversations, documents, plots, or tables as static content they own. Existing apps need no changes to enable this feature. A shared plot or table includes the code that made it, the date it was created, and a link back to the original agent. To turn sharing on, add Connect's "Connect Visitor API Key" integration to the app under **Runtime** > **Integrations** in its settings.
 
 # commons 0.1.1
 
