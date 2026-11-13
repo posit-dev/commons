@@ -91,7 +91,9 @@ table names, and the values are pin names passed to <code><a href="https://pins.
 
 <dt id="arg-exclude">exclude<a class="anchor" aria-label="anchor" href="#arg-exclude"></a></dt>
 <dd><p>For Snowflake and Databricks namespace selections, optional
-unqualified object-name globs to omit, such as <code>"TMP_*"</code>.</p></dd>
+unqualified object-name globs to omit, such as <code>"TMP_*"</code>. A glob matches
+a semantic view or metric view by its own name, not by the tables it
+reads, so a view over an excluded table can still answer metric queries.</p></dd>
 
 
 <dt id="arg-dictionary">dictionary<a class="anchor" aria-label="anchor" href="#arg-dictionary"></a></dt>

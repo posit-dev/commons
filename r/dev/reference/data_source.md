@@ -55,7 +55,10 @@ data_source(..., tables = NULL, exclude = NULL, dictionary = NULL)
 - exclude:
 
   For Snowflake and Databricks namespace selections, optional
-  unqualified object-name globs to omit, such as `"TMP_*"`.
+  unqualified object-name globs to omit, such as `"TMP_*"`. A glob
+  matches a semantic view or metric view by its own name, not by the
+  tables it reads, so a view over an excluded table can still answer
+  metric queries.
 
 - dictionary:
 
