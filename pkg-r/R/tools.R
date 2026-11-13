@@ -50,7 +50,7 @@ tool_search_catalog <- function(private) {
         return(tool_result(
           "This data source does not have a searchable catalog.",
           title = "Searched for a trusted calculation",
-          icon = maybe_icon("search")
+          icon = bsicons::bs_icon("search")
         ))
       }
       results <- catalog_search(src, query, kinds)
@@ -67,7 +67,7 @@ tool_search_catalog <- function(private) {
       tool_result(
         body,
         title = "Searched for a trusted calculation",
-        icon = maybe_icon("search"),
+        icon = bsicons::bs_icon("search"),
         markdown = body
       )
     },
@@ -87,7 +87,7 @@ tool_search_catalog <- function(private) {
     name = "search_catalog",
     annotations = ellmer::tool_annotations(
       title = "Searching for a trusted calculation",
-      icon = maybe_icon("search"),
+      icon = bsicons::bs_icon("search"),
       read_only_hint = TRUE
     )
   )
@@ -166,7 +166,7 @@ tool_search_pool <- function(private) {
       tool_result(
         body,
         title = "Searched for a trusted calculation",
-        icon = maybe_icon("search"),
+        icon = bsicons::bs_icon("search"),
         markdown = display_body
       )
     },
@@ -191,7 +191,7 @@ tool_search_pool <- function(private) {
     name = "search_pool",
     annotations = ellmer::tool_annotations(
       title = "Searching for a trusted calculation",
-      icon = maybe_icon("search"),
+      icon = bsicons::bs_icon("search"),
       read_only_hint = TRUE
     )
   )
@@ -281,7 +281,7 @@ tool_call_metrics <- function(private) {
     name = "call_metrics",
     annotations = ellmer::tool_annotations(
       title = "Running a trusted calculation",
-      icon = maybe_icon("shield-check"),
+      icon = bsicons::bs_icon("shield-check"),
       read_only_hint = TRUE
     )
   )
@@ -318,7 +318,7 @@ tool_call_calculation <- function(private) {
     name = "call_calculation",
     annotations = ellmer::tool_annotations(
       title = "Running a trusted calculation",
-      icon = maybe_icon("shield-check"),
+      icon = bsicons::bs_icon("shield-check"),
       read_only_hint = TRUE
     )
   )
@@ -357,7 +357,7 @@ tool_call_measure <- function(private) {
     name = "call_measure",
     annotations = ellmer::tool_annotations(
       title = "Running a trusted calculation",
-      icon = maybe_icon("shield-check"),
+      icon = bsicons::bs_icon("shield-check"),
       read_only_hint = TRUE
     )
   )
@@ -371,7 +371,7 @@ tool_search_context <- function(private) {
         return(tool_result(
           result,
           title = "Searched context",
-          icon = maybe_icon("book"),
+          icon = bsicons::bs_icon("book"),
           markdown = result
         ))
       }
@@ -386,7 +386,7 @@ tool_search_context <- function(private) {
     name = "search_context",
     annotations = ellmer::tool_annotations(
       title = "Searching context",
-      icon = maybe_icon("book"),
+      icon = bsicons::bs_icon("book"),
       read_only_hint = TRUE
     )
   )
@@ -446,7 +446,7 @@ tool_describe_table <- function(private) {
     name = "describe_table",
     annotations = ellmer::tool_annotations(
       title = "Inspecting a table",
-      icon = maybe_icon("table"),
+      icon = bsicons::bs_icon("table"),
       read_only_hint = TRUE
     )
   )
@@ -482,7 +482,7 @@ tool_run_sql <- function(private) {
     name = "run_sql",
     annotations = ellmer::tool_annotations(
       title = "Retrieving data",
-      icon = maybe_icon("code-square"),
+      icon = bsicons::bs_icon("code-square"),
       read_only_hint = TRUE
     )
   )
@@ -572,7 +572,7 @@ call_measure_tool <- function(
   tool_result(
     paste(c(format_measure_value(value), advert), collapse = "\n\n"),
     title = "Ran a trusted calculation",
-    icon = maybe_icon("shield-check"),
+    icon = bsicons::bs_icon("shield-check"),
     html = measure_display_html(args, value, metadata),
     footer = footer,
     tag = "A",
@@ -630,7 +630,7 @@ measure_content_tool_result <- function(
   }
 
   title <- "Ran a trusted calculation"
-  icon <- maybe_icon("shield-check")
+  icon <- bsicons::bs_icon("shield-check")
   if (is.null(display)) {
     display <- shinychat::tool_result_display(
       title = title,
@@ -732,7 +732,7 @@ measure_plot_tool_result <- function(
   tool_result(
     model_value,
     title = "Ran a trusted calculation",
-    icon = maybe_icon("shield-check"),
+    icon = bsicons::bs_icon("shield-check"),
     html = measure_display_with_result_html(
       args,
       measure_result_html(share_wrap(
@@ -767,7 +767,7 @@ measure_failure_result <- function(
   tool_result(
     paste(c(model_content, note, advert), collapse = "\n\n"),
     title = "Ran a trusted calculation",
-    icon = maybe_icon("shield-check"),
+    icon = bsicons::bs_icon("shield-check"),
     html = measure_display_with_result_html(
       args,
       measure_result_html(html_escape(note), class),
@@ -840,7 +840,7 @@ measure_gt_table_tool_result <- function(
       collapse = "\n\n"
     ),
     title = "Ran a trusted calculation",
-    icon = maybe_icon("shield-check"),
+    icon = bsicons::bs_icon("shield-check"),
     html = display_html,
     footer = footer,
     tag = "A",
@@ -862,7 +862,7 @@ search_context_tool <- function(context, query) {
   tool_result(
     body,
     title = "Searched context",
-    icon = maybe_icon("book"),
+    icon = bsicons::bs_icon("book"),
     markdown = body
   )
 }
@@ -894,7 +894,7 @@ describe_table_tool <- function(
     return(tool_result(
       body,
       title = "Inspected a table",
-      icon = maybe_icon("table"),
+      icon = bsicons::bs_icon("table"),
       markdown = body
     ))
   }
@@ -914,7 +914,7 @@ describe_table_tool <- function(
     return(tool_result(
       body,
       title = "Inspected a table",
-      icon = maybe_icon("table"),
+      icon = bsicons::bs_icon("table"),
       markdown = body
     ))
   }
@@ -966,7 +966,7 @@ describe_table_tool <- function(
   tool_result(
     body,
     title = "Inspected a table",
-    icon = maybe_icon("table"),
+    icon = bsicons::bs_icon("table"),
     markdown = body
   )
 }
@@ -1006,7 +1006,7 @@ run_sql_tool <- function(
   tool_result(
     paste(c(body, note, advert, entries), collapse = "\n\n"),
     title = "Retrieved data",
-    icon = maybe_icon("code-square"),
+    icon = bsicons::bs_icon("code-square"),
     markdown = display_md,
     tag = "B",
     open = FALSE,

@@ -7,6 +7,9 @@
 #'
 #' All arguments must be named.
 #'
+#' To share a commons across projects, put its setup code in an R package;
+#' see `vignette("sharing", package = "commons")`.
+#'
 #' @param ... These dots are for future extensions and must be empty.
 #' @param data_sources A [data_source()], or a named list of them. Measures
 #'   can take a source's connection as an argument named after the source; see

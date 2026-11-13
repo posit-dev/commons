@@ -26,6 +26,13 @@ S7::method(
   shinychat::contents_shinychat(chat)
 }
 
+new_trajectory_chat <- function() {
+  ellmer::chat_openai(
+    credentials = \() "unused",
+    model = "transcript-display"
+  )
+}
+
 # Assistant text as the model wrote it, with the projection the chat showed:
 # citations as asides and documents as links. shinychat rebuilds a restored
 # conversation from its turns, so without this it would show the raw markup.
@@ -41,7 +48,11 @@ S7::method(contents_shinychat, ContentProjectedText) <- function(content) {
 
 project_turns_display <- function(turns, from, corpus, artifacts = NULL) {
   on_artifact <- function(event) {
-    if (identical(event$type, "close")) artifact_turn_link(artifacts, event) else ""
+    if (identical(event$type, "close")) {
+      artifact_turn_link(artifacts, event)
+    } else {
+      ""
+    }
   }
   for (i in seq_along(turns)[seq_along(turns) >= from]) {
     if (!S7::S7_inherits(turns[[i]], ellmer::AssistantTurn)) {

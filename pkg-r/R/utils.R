@@ -58,15 +58,6 @@ word_pattern <- function(x) {
   paste0("\\b", escape_regex(x), "\\b")
 }
 
-# Icons are decorative, so bsicons is optional.
-maybe_icon <- function(name) {
-  if (is_installed("bsicons")) {
-    bsicons::bs_icon(name)
-  } else {
-    NULL
-  }
-}
-
 # Run `expr` when `envir` exits, like withr::defer(). Works inside coro
 # generator frames, which persist across yields and exit on completion.
 defer <- function(expr, envir = parent.frame()) {

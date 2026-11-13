@@ -18,65 +18,10 @@ The answer uses SQL with little documentation and the agent had to inspect table
 ## Workflow
 
 1. Find the agent definition.
-   Search for `agent(`, `commons(`, `data_source(`, `semantic_layer(`, `measure(`, and `context_layer(`. Identify where the semantic layer and context layer are constructed. If they are wrapped in project helpers, follow those helpers. Note that measure arguments without `@param` documentation are never seen by the model: an argument named after a data source receives that source's connection, and any other undocumented argument keeps its default. A new measure that queries a database should take the connection this way rather than referencing a global; other objects it needs (a pins board, an API client) should come from a default written as a call, e.g. `board = pins::board_connect()`.
+   Find the agent definition and follow any project helpers to locate its semantic layer and context layer.
 
-2. Choose the evidence path.
-   Do not always begin by loading raw trajectories. First look for a `commons-reviews/` directory.
-
-### Path 1: Reviewed trajectories
-
-Use review documents whenever they are available. They contain the conversations and exchanges a reviewer flagged or annotated, so treat them as the primary qualitative evidence rather than starting over from the raw log.
-
-- Read each `conversation-*.md` file. Parse its YAML frontmatter for the conversation id, active conversation and exchange flags, and reviewer notes. Read the Markdown body for the transcript, provenance outcomes, tool calls, tool results, and notes in context.
-- Treat flags as requests for attention, not conclusions. Use review notes to understand what the reviewer wants investigated.
-- Treat tool results as excerpts because the Markdown renderer truncates long results.
-- Supplement the reviews with raw trajectories only when needed to quantify how common a theme is, inspect a truncated result, or analyze conversations that were not reviewed.
-
-### Path 2: Raw trajectories
-
-When no review documents exist, analyze raw logs now; do not make reviewer setup a prerequisite.
-
-Use `commons::trajectory_read()`. With no arguments it resolves automatically: on Posit Connect it reads this content's own traces, in a deployed project it reads the deployment's traces from Connect, and otherwise it reads local trace files. You can also pass a Connect content GUID, a content URL, or a directory of OTLP trace files. Connect reads require `CONNECT_API_KEY` and editor access to the content.
-
-If resolution is unclear, inspect the project for `log =`, `COMMONS_TRACES_DIR`, `OTEL_*` environment variables, or deployment setup. When the store is large, use `n`, `from`, or `to`, for example:
-
-```r
-trajectories <- commons::trajectory_read(
-  n = 25,
-  from = Sys.Date() - 7
-)
-
-turns <- trajectories[[1]][["turns"]]
-print(turns)
-```
-
-If traces are absent, confirm that the agent runs with `log = TRUE`, that
-`OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true` was passed through
-`rsconnect::deployApp(envVars = ...)`, and that OpenTelemetry tracing is active.
-
-### Set up trajectory review
-
-When the project has no review workflow, recommend setting one up for future iterations after completing the current raw-log analysis.
-
-For local review:
-
-```r
-commons::trajectory_review(
-  commons::trajectory_read() # set n to limit the number of trajectories
-)
-```
-
-For a deployed reviewer, pass an explicit review directory when durable writable
-storage is available:
-
-```r
-commons::trajectory_review(
-  commons::trajectory_read("<agent-content-guid-or-url>"),
-  review_dir = "<path-to-review-directory>"
-)
-```
-
-Files in a Posit Connect app's working directory are replaced on redeployment. Use one Connect process because separate processes do not coordinate review writes. Prepare local reviewer code when the user asks, but obtain explicit confirmation before deploying content or creating external resources.
+2. Read trajectories.
+   Reuse loaded trajectories or read recent conversations with `commons::trajectory_read(n = 25, from = Sys.Date() - 7)`. For user-facing visual or interactive review, use the review reference linked from `SKILL.md`.
 
 3. Analyze themes.
    Group conversations by the business concept being asked about, not by exact wording. Note which themes already hit Path A, which are documented Path B, and which are exploratory Path B.
@@ -95,4 +40,4 @@ Files in a Posit Connect app's working directory are replaced on redeployment. U
 5. Wait before editing.
    Do not make semantic layer or context layer edits until the user chooses which proposed changes to apply. The data scientist should confirm any new business definition, canonical table, exclusion rule, or SQL pattern.
 
-   When a proposal is accepted, new measures and context land in the agent project layout defined in `SKILL.md`: measures in `measures/`, free-text in `context/`. Because these changes are born from trajectory analysis rather than an artifact, they carry the self-referencing provenance `trajectory analysis (<yyyy-mm-dd>)` — a `#' @provenance` tag on measures, YAML frontmatter on context files.
+   When a proposal is accepted, new measures and context land in the agent project layout defined in `SKILL.md`: measures in `measures/`, free-text in `context/`. Because these changes are born from trajectory analysis rather than an artifact, they carry the self-referencing provenance `trajectory analysis (<yyyy-mm-dd>)` — a `#' @provenance` tag on measures, YAML frontmatter on context files. Then check that the agent reaches for each new measure, as in extraction step 9.

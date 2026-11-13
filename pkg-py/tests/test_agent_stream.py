@@ -219,8 +219,7 @@ async def test_a_verified_citation_earns_the_query_its_own_aside_instead(
 
     # The citation's own aside says the answer is cited, so no second marker.
     assert provenance_aside(Tag.C) not in streamed
-    assert provenance_aside(Tag.B, include_cited=True) not in streamed
-    assert "<shiny-aside" in streamed
+    assert streamed.count("<shiny-aside") == 1
 
 
 async def test_an_earlier_answers_tag_cannot_classify_a_later_one(

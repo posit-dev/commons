@@ -67,9 +67,8 @@ authenticated Shiny session user, when supplied by Connect, for attribution.}
 \item{share_with}{An optional character vector of Connect usernames granted
 access to this content's trajectories when running on Posit Connect.
 Reading traces requires editor-level access, so named users are added as
-collaborators on the content. Note that users whose Connect \emph{account}
-role is viewer cannot read traces even when named here; trace readers
-need at least a publisher account.}
+collaborators on the content. Named users must have at least a publisher
+account.}
 }
 \value{
 An \link[ellmer:Chat]{ellmer::Chat} subclass.

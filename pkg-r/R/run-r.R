@@ -74,7 +74,7 @@ tool_run_r <- function(private) {
     name = "run_r",
     annotations = ellmer::tool_annotations(
       title = "Analyzing data",
-      icon = maybe_icon("terminal"),
+      icon = bsicons::bs_icon("terminal"),
       read_only_hint = FALSE,
       open_world_hint = identical(private$worker$network, "full")
     )
@@ -142,11 +142,14 @@ run_r_tool <- function(worker, handles, code, fn_sources = character()) {
 }
 
 run_r_result <- function(code, res) {
+  if (is.null(res$failure) && !run_r_plots_valid(res$segments)) {
+    res <- list(failure = "the R session returned a plot that isn't a PNG image.")
+  }
   if (!is.null(res$failure)) {
     return(tool_result(
       sprintf("Error: %s", res$failure),
       title = "Analyzed data",
-      icon = maybe_icon("terminal"),
+      icon = bsicons::bs_icon("terminal"),
       html = run_r_html(code, list(list(type = "error", text = res$failure))),
       tag = "B",
       show_tag = FALSE
@@ -160,12 +163,23 @@ run_r_result <- function(code, res) {
   tool_result(
     run_r_value(segments),
     title = "Analyzed data",
-    icon = maybe_icon("terminal"),
+    icon = bsicons::bs_icon("terminal"),
     html = run_r_html(code, segments),
     tag = "B",
     open = has_plot,
     show_tag = FALSE
   )
+}
+
+# Plots arrive as bytes rather than paths, so the host reads no file the
+# worker names.
+run_r_plots_valid <- function(segments) {
+  plots <- Filter(function(seg) identical(seg$type, "plot"), segments)
+  all(vapply(
+    plots,
+    function(seg) is_png_data(seg$png) && is_png_data(seg$model_png),
+    logical(1)
+  ))
 }
 
 # The model-facing value: text segments merged in order, plots as inline
@@ -189,7 +203,10 @@ run_r_value <- function(segments) {
       source = NULL,
       plot = {
         flush()
-        out[[length(out) + 1L]] <- model_plot_image(seg$model_path)
+        out[[length(out) + 1L]] <- ellmer::ContentImageInline(
+          "image/png",
+          plot_base64_data(seg$model_png)
+        )
       },
       warning = buffer <- c(buffer, paste0("Warning: ", seg$text)),
       error = buffer <- c(buffer, paste0("Error: ", seg$text)),
@@ -233,7 +250,7 @@ run_r_html <- function(code, segments) {
           "<img class=\"commons-run-plot\" src=\"data:image/png;base64,%s\" ",
           "alt=\"Plot produced by R code\" width=\"%d\" height=\"%d\"/>"
         ),
-        plot_image_data(seg$path),
+        plot_base64_data(seg$png),
         dims$width,
         dims$height
       ), "figure", plot_code_title(code)))
@@ -306,9 +323,7 @@ worker_ensure <- function(worker, fn_sources = character()) {
   callr_dir <- tempfile("commons-callr-")
   dir.create(callr_dir, recursive = TRUE)
   rs <- callr::r_session$new(
-    callr::r_session_options(
-      env = worker_scrubbed_env(work_dir, worker_single_thread("auto"))
-    ),
+    worker_session_options(work_dir, worker_single_thread("auto")),
     wait = TRUE
   )
   # Load the worker runtime before engaging the sandbox. No user-provided code
@@ -419,6 +434,17 @@ close_worker_session <- function(rs) {
   try(rs$close(), silent = TRUE)
   .Call(c_kill_group, pid)
   invisible()
+}
+
+# R startup files would re-add what the scrub removes (`.Renviron` often holds
+# API keys), so the worker reads none. callr still passes the host's
+# .libPaths(), so libraries a `.Rprofile` activates, like renv's, stay visible.
+worker_session_options <- function(work_dir, single_thread = FALSE) {
+  callr::r_session_options(
+    env = worker_scrubbed_env(work_dir, single_thread),
+    user_profile = FALSE,
+    cmdargs = c(callr::r_session_options()$cmdargs, "--no-environ")
+  )
 }
 
 # The content environment holds credentials (API keys, session tokens,

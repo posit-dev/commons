@@ -42,6 +42,15 @@ plot_base64_data <- function(data) {
   gsub("\n", "", jsonlite::base64_enc(data), fixed = TRUE)
 }
 
+# The 16 MiB cap is well above a full-size plot's PNG.
+is_png_data <- function(data, max_bytes = 16 * 1024^2) {
+  signature <- as.raw(c(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a))
+  is.raw(data) &&
+    length(data) > length(signature) &&
+    length(data) <= max_bytes &&
+    identical(data[seq_along(signature)], signature)
+}
+
 render_plot_pngs <- function(plot, paths, dims, call = rlang::caller_env()) {
   open_plot_device(paths$ui, dims, dims$pixel_ratio)
   recording <- tryCatch(

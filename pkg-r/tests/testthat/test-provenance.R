@@ -101,7 +101,6 @@ test_that("provenance_display uses R display copy", {
     expect_identical(entry$label, expected$label, info = tag)
     expect_identical(entry$body, expected$body, info = tag)
     expect_identical(entry$icon, expected$icon, info = tag)
-    expect_identical(entry$pill_class, expected$pill_class, info = tag)
   }
 })
 
@@ -112,7 +111,7 @@ test_that("provenance_aside matches the shared fixture", {
 
   for (case in cases) {
     tag <- case$tag %||% NA_character_
-    aside <- provenance_aside(tag, include_cited = case$include_cited)
+    aside <- provenance_aside(tag)
 
     if (!isTRUE(case$emits)) {
       expect_identical(aside, "", info = case$name)
@@ -129,9 +128,7 @@ test_that("provenance_aside matches the shared fixture", {
 })
 
 test_that("the rendered marker carries its icon from the asset bundle", {
-  # Per-package, so out of the shared fixture: the URL is served by this
-  # package's own dependency, and the Python renderer omits it until its UI
-  # ships one.
+  # Asset URLs are package-specific, so they are checked outside the shared fixture.
   trusted <- provenance_aside("A")
   untrusted <- provenance_aside("C")
 

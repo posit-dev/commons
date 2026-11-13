@@ -56,9 +56,8 @@
 #' @param share_with An optional character vector of Connect usernames granted
 #'   access to this content's trajectories when running on Posit Connect.
 #'   Reading traces requires editor-level access, so named users are added as
-#'   collaborators on the content. Note that users whose Connect *account*
-#'   role is viewer cannot read traces even when named here; trace readers
-#'   need at least a publisher account.
+#'   collaborators on the content. Named users must have at least a publisher
+#'   account.
 #'
 #' @section Cache pre-warming:
 #' A commons agent builds its context search index and downloads uncached pins
@@ -66,7 +65,7 @@
 #' agent's `prewarm()` method automatically during post-startup idle time.
 #'
 #' To warm the caches before deployment, call `agent$prewarm()` in a
-#' pre-deploy script. The context index is cached on disk once per version of 
+#' pre-deploy script. The context index is cached on disk once per version of
 #' the context documents; pin downloads populate the local pins cache.
 #'
 #' To ship a pre-built context index with an app, configure a directory inside
@@ -437,7 +436,11 @@ Commons <- R6::R6Class(
           super$stream_async,
           c(
             private$prepare_turn_inputs(list()),
-            list(tool_mode = tool_mode, stream = stream, controller = controller)
+            list(
+              tool_mode = tool_mode,
+              stream = stream,
+              controller = controller
+            )
           )
         )
       }
@@ -488,7 +491,10 @@ Commons <- R6::R6Class(
           ) {
             break
           }
-          await(unless_cancelled(artifact_store_settled(artifact_store), controller))
+          await(unless_cancelled(
+            artifact_store_settled(artifact_store),
+            controller
+          ))
           if (
             length(artifact_store$reminders) == 0 ||
               isTRUE(controller$cancelled)
@@ -593,8 +599,7 @@ Commons <- R6::R6Class(
             "commons.context.n_docs" = length(layer_state$docs),
             # tryCatch: telemetry must not abort prewarming (resolving the
             # cache dir can fail or warn on an unwritable root).
-            "commons.context.cache_hit" =
-              !is.null(layer_state$store) ||
+            "commons.context.cache_hit" = !is.null(layer_state$store) ||
               isTRUE(tryCatch(
                 context_cache_enabled() &&
                   file.exists(context_store_path(layer_state$docs)),
@@ -687,13 +692,16 @@ check_trusted_tools <- function(tools) {
 
 # A hidden follow-up turn continues the user's request rather than making one.
 turn_has_user_message <- function(turn) {
-  any(!vapply(
-    turn@contents,
-    function(content) {
-      is_tool_result_content(content) || S7::S7_inherits(content, ContentTurnReminder)
-    },
-    logical(1)
-  ))
+  any(
+    !vapply(
+      turn@contents,
+      function(content) {
+        is_tool_result_content(content) ||
+          S7::S7_inherits(content, ContentTurnReminder)
+      },
+      logical(1)
+    )
+  )
 }
 
 # Measures can take a named source's connection as an argument.

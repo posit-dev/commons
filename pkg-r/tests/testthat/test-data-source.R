@@ -49,6 +49,46 @@ test_that("fallback descriptions sample rows only to infer R column classes", {
   )
 })
 
+test_that("fallback descriptions work on dialects without LIMIT (#468)", {
+  skip_if_not_installed("RSQLite")
+  # A SQLite connection that rejects LIMIT the way T-SQL does.
+  methods::setClass(
+    "NoLimitConnection",
+    contains = "SQLiteConnection",
+    where = globalenv()
+  )
+  withr::defer(methods::removeClass("NoLimitConnection", where = globalenv()))
+  methods::setMethod(
+    DBI::dbSendQuery,
+    c("NoLimitConnection", "character"),
+    function(conn, statement, ...) {
+      if (grepl("LIMIT", statement, fixed = TRUE)) {
+        cli::cli_abort("Incorrect syntax near '5'.")
+      }
+      send <- methods::getMethod(
+        DBI::dbSendQuery,
+        c("SQLiteConnection", "character")
+      )
+      send(conn, statement, ...)
+    },
+    where = globalenv()
+  )
+  con <- methods::as(DBI::dbConnect(RSQLite::SQLite()), "NoLimitConnection")
+  withr::defer(DBI::dbDisconnect(con))
+  DBI::dbExecute(con, "CREATE TABLE typed (id INTEGER, label TEXT)")
+
+  schema <- fallback_describe_relation(
+    con,
+    DBI::Id(table = "typed"),
+    n_fallback_rows = 5L
+  )
+
+  expect_equal(
+    schema,
+    data.frame(column = c("id", "label"), type = c("integer", "character"))
+  )
+})
+
 test_that("fallback description errors are contextualized", {
   con <- DBI::dbConnect(duckdb::duckdb())
   withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))

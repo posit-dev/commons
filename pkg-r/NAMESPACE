@@ -11,7 +11,6 @@ export(data_source)
 export(measure)
 export(semantic_layer)
 export(trajectory_read)
-export(trajectory_review)
 importFrom(R6,R6Class)
 importFrom(coro,
   async_generator,

@@ -19,6 +19,7 @@ BugReports: https://github.com/posit-dev/commons/issues
 Depends:
     R (>= 4.1.0)
 Imports:
+    bsicons,
     bslib (>= 0.11.0),
     callr (>= 3.8.0),
     cli,
@@ -50,7 +51,6 @@ Imports:
     yaml
 Suggests:
     bit64,
-    bsicons,
     chromote,
     dbplyr,
     dplyr,
@@ -60,7 +60,6 @@ Suggests:
     otel (>= 0.2.0),
     otelsdk (>= 0.2.0),
     pins,
-    plotly,
     pkgload,
     readr,
     rmarkdown,
@@ -75,7 +74,7 @@ VignetteBuilder: knitr
 Config/testthat/edition: 3
 Config/testthat/parallel: true
 Config/testthat/start-first: run-r, citation-scan, citation-browser, commons,
-    data-source, pool, definitions, trajectory-review
+    data-source, pool, definitions
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 Config/roxygen2/version: 8.1.0

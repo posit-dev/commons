@@ -13,7 +13,6 @@ rsconnect/
 CLAUDE.local.md
 AGENTS.override.md
 .shinychat/
-commons-reviews/
 .worktrees/
 /sandbox/commons-openai-citation-smoke/
 .kata.local.toml

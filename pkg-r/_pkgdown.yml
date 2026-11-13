@@ -31,5 +31,5 @@ reference:
   description: Put a commons agent inside of an interactive chat app.
   contents: starts_with("commons_")
 - title: Trajectories
-  description: Read and annotate conversation histories.
+  description: Read logged conversation histories.
   contents: starts_with("trajectory_")

@@ -84,6 +84,39 @@ test_that("worker entry points stay outside the model environment", {
   expect_no_match(res@value, "secret", fixed = TRUE)
 })
 
+test_that("run_r never reads a file the worker names as a plot", {
+  worker <- local_worker()
+  store <- new_handle_store()
+  outside <- withr::local_tempfile(tmpdir = dirname(tempdir()))
+  writeLines("secret", outside)
+  path <- encodeString(outside, quote = "'")
+  code <- sprintf(
+    paste0(
+      "for (frame in sys.frames()) ",
+      "if (exists('segments', frame, inherits = FALSE)) ",
+      "assign('segments', list(list(type = 'plot', path = %s, ",
+      "model_path = %s)), frame)"
+    ),
+    path,
+    path
+  )
+
+  res <- sync_promise(run_r_tool(worker, store, code))
+
+  expect_match(res@value, "isn't a PNG image", fixed = TRUE)
+  expect_no_match(
+    res@extra$display$html,
+    plot_base64_data(readBin(outside, "raw", file.size(outside))),
+    fixed = TRUE
+  )
+})
+
+test_that("run_r accepts only PNG data as plots", {
+  not_png <- list(type = "plot", png = charToRaw("x"), model_png = raw())
+  res <- run_r_result("plot(1)", list(segments = list(not_png)))
+  expect_match(res@value, "isn't a PNG image", fixed = TRUE)
+})
+
 test_that("run_r prepends a worker-local package library", {
   worker <- local_guardrail_worker()
   worker_ensure(worker)
@@ -279,6 +312,26 @@ test_that("the worker cannot see parent-only environment variables", {
   ))
 
   expect_match(res@value, "FALSE")
+})
+
+test_that("the worker skips the host's R startup files", {
+  project <- withr::local_tempdir()
+  writeLines("COMMONS_TEST_SECRET=s3cret", file.path(project, ".Renviron"))
+  writeLines(
+    "Sys.setenv(COMMONS_TEST_PROFILE = 'ran')",
+    file.path(project, ".Rprofile")
+  )
+  withr::local_dir(project)
+  worker <- local_worker()
+  store <- new_handle_store()
+
+  res <- sync_promise(run_r_tool(
+    worker,
+    store,
+    "unname(Sys.getenv(c('COMMONS_TEST_SECRET', 'COMMONS_TEST_PROFILE'), NA))"
+  ))
+
+  expect_match(res@value, "[1] NA NA", fixed = TRUE)
 })
 
 test_that("run_r interrupts code exceeding the time limit, keeping the session", {

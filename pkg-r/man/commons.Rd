@@ -61,6 +61,9 @@ that a coding agent already controls.
 }
 \details{
 All arguments must be named.
+
+To share a commons across projects, put its setup code in an R package;
+see \code{vignette("sharing", package = "commons")}.
 }
 \section{Using commons with other coding agents}{
 

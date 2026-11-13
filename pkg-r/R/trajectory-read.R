@@ -674,6 +674,22 @@ turn_has_tool_result <- function(turn) {
   any(vapply(turn@contents, is_tool_result_content, logical(1)))
 }
 
+# Matched by text, since a recorded trajectory doesn't keep the content's class.
+# `<reminder>` is what trajectories recorded before the rename used.
+is_internal_turn_reminder <- function(content) {
+  S7::S7_inherits(content, ellmer::ContentText) &&
+    grepl(
+      "(?s)^<(system-instruction|reminder)>.*</\\1>$",
+      content@text,
+      perl = TRUE
+    )
+}
+
+is_internal_turn <- function(turn) {
+  identical(turn@role, "user") &&
+    all(vapply(turn@contents, is_internal_turn_reminder, logical(1)))
+}
+
 # Edited histories make exchange ordinals unstable, so match reconstructed content.
 exchange_signature <- function(exchange) {
   lapply(exchange, turn_signature)
