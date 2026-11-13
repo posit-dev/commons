@@ -233,7 +233,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
             <ul class="navbar-nav navbar-nav-scroll ms-auto">
   <li class="nav-item">
     <span class="nav-link">
-<div id="github-widget" data-owner="posit-dev" data-repo="commons" data-stars="74" data-forks="6"></div>
+<div id="github-widget" data-owner="posit-dev" data-repo="commons" data-stars="76" data-forks="6"></div>
     </span>
   </li>  
 </ul>
@@ -293,6 +293,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   <li><a href="#information-layers" id="toc-information-layers" class="nav-link" data-scroll-target="#information-layers">Information layers</a>
   <ul class="collapse">
   <li><a href="#semantic-layer" id="toc-semantic-layer" class="nav-link" data-scroll-target="#semantic-layer">Semantic layer</a></li>
+  <li><a href="#warehouse-semantic-layers" id="toc-warehouse-semantic-layers" class="nav-link" data-scroll-target="#warehouse-semantic-layers">Warehouse semantic layers</a></li>
   <li><a href="#context-layer" id="toc-context-layer" class="nav-link" data-scroll-target="#context-layer">Context layer</a></li>
   <li><a href="#examples" id="toc-examples" class="nav-link" data-scroll-target="#examples">Examples</a></li>
   </ul></li>
@@ -371,14 +372,18 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td><code>Trusted</code> <img class="commons-documentation-marker" src="assets/figs/trusted-icon.svg" alt=""></td>
 </tr>
 <tr class="odd">
+<td>A metric from a <a href="#warehouse-semantic-layers">Snowflake semantic view</a>, possibly grouped or filtered by its dimensions</td>
+<td><code>Trusted</code> <img class="commons-documentation-marker" src="assets/figs/trusted-icon.svg" alt=""></td>
+</tr>
+<tr class="even">
 <td>Custom SQL, including SQL that uses <a href="#definitions">data dictionary definitions</a></td>
 <td><code>Cited</code> <img class="commons-documentation-marker" src="assets/figs/citation-mark.svg" alt=""> when the answer quotes a trusted source and <code>commons</code> verifies the quote; otherwise <code>Untrusted</code> <img class="commons-documentation-marker" src="assets/figs/warning-icon.svg" alt=""></td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td>Custom Python</td>
 <td><code>Cited</code> <img class="commons-documentation-marker" src="assets/figs/citation-mark.svg" alt=""> when the answer quotes a trusted source and <code>commons</code> verifies the quote; otherwise <code>Untrusted</code> <img class="commons-documentation-marker" src="assets/figs/warning-icon.svg" alt=""></td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td>No data tool used (for example, the agent already had the information, or no accessible information answered the question)</td>
 <td>No provenance outcome</td>
 </tr>
@@ -400,7 +405,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <tbody>
 <tr class="odd">
 <td>Semantic layer</td>
-<td>Measures in <code>.py</code> files and <a href="#definitions"><code>definitions</code></a> in <code>data-dict.yaml</code></td>
+<td>Measures in <code>.py</code> files, <a href="#definitions"><code>definitions</code></a> in <code>data-dict.yaml</code>, and <a href="#warehouse-semantic-layers">Snowflake semantic views</a></td>
 <td>Provides trusted calculations.</td>
 </tr>
 <tr class="even">
@@ -423,6 +428,11 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    ...</span></code></pre></div>
 <p>When a user asks “Which species were observed at Oak Bluff?”, the model reads the description of <code>site</code> and passes <code>"Oak Bluff"</code>. <code>commons</code> passes the connection of the data source named <code>biodiversity</code>, and the measure runs with both.</p>
 <p><code>data-dict.yaml</code> files also add to the semantic layer through <a href="#definitions"><code>definitions</code></a>.</p>
+</section>
+<section id="warehouse-semantic-layers" class="level2">
+<h2 class="anchored" data-anchor-id="warehouse-semantic-layers">Warehouse semantic layers</h2>
+<p>If you have trusted metrics in <a href="https://docs.snowflake.com/en/user-guide/views-semantic/overview">Snowflake semantic views</a>, you can use those calculations directly with commons. It can also group or filter metrics by approved fields from the warehouse. Answers based on these warehouse-defined metrics have the <code>Trusted</code> provenance outcome and display the green check-shield provenance marker.</p>
+<p>A Snowflake data source imports the semantic views its <code>tables</code> selection reaches. A view that you name in <code>tables</code> is read and checked for access when you create the source. A view that a database or schema selection reaches is read only when the agent first uses it. When you name tables exactly, commons also imports the views over them, but only when the selection includes every table that a view reads.</p>
 </section>
 <section id="context-layer" class="level2">
 <h2 class="anchored" data-anchor-id="context-layer">Context layer</h2>
