@@ -165,14 +165,18 @@ def verified_calculations(entries: Any) -> list[TrustedCalculation]:
     calculations = []
     for entry in spec_entries(entries):
         name, sql = entry.get("name"), entry.get("sql")
-        if not isinstance(name, str) or not name or not isinstance(sql, str) or not sql:
+        question = entry.get("question", name)
+        if question is None:
+            question = name
+        if (
+            not isinstance(name, str)
+            or not name
+            or not isinstance(sql, str)
+            or not sql
+            or not isinstance(question, str)
+        ):
             raise ValueError("Snowflake declares an invalid verified query.")
-        question = entry.get("question")
-        calculations.append(
-            new_trusted_calculation(
-                name, question if question is not None else name, sql
-            )
-        )
+        calculations.append(new_trusted_calculation(name, question, sql))
     names = [calculation.name for calculation in calculations]
     if len(set(names)) != len(names):
         raise ValueError("Snowflake verified query names must be unique.")

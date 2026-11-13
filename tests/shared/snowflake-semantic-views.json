@@ -1342,7 +1342,7 @@
     ]
   },
   "verified_queries": {
-    "description": "The exact trusted queries a view's `verified_queries` declare, read as calculations the agent can run unchanged. A query's description is its `question`, or its name when it has none. A query without a name or SQL, a repeated name, SQL that is not one read-only SELECT or WITH, and a `{{placeholder}}` (verified queries take no arguments) each make the view unreadable. Errors are pinned as the phrases the message must contain.",
+    "description": "The exact trusted queries a view's `verified_queries` declare, read as calculations the agent can run unchanged. A query's description is its `question`, or its name when it has none. A query without a name or SQL, a question that is not text, a repeated name, SQL that is not one read-only SELECT or WITH, and a `{{placeholder}}` (verified queries take no arguments) each make the view unreadable. Errors are pinned as the phrases the message must contain; a case with no phrases pins only the refusal, because each language words that error its own way.",
     "cases": [
       {
         "name": "a question describes its query, as Snowflake returns them",
@@ -1421,6 +1421,14 @@
           "mentions": [
             "invalid verified query"
           ]
+        }
+      },
+      {
+        "name": "a question must be text",
+        "yaml": "verified_queries:\n  - name: answer\n    question: 42\n    sql: SELECT 1\n",
+        "expected": {
+          "error": "invalid",
+          "mentions": []
         }
       },
       {
