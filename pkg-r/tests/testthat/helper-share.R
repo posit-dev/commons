@@ -41,6 +41,10 @@ local_fake_connect <- function(env = parent.frame()) {
     app = list(list(id = "app-p1", principal_guid = "bob", principal_type = "user"))
   )
   connect$n <- list()
+  connect$integrations <- list(
+    list(guid = "publisher", template = "connect", auth_type = "Visitor API Key", config = list(max_role = "Publisher"))
+  )
+  connect$associations <- list("publisher")
 
   httr2::local_mocked_responses(function(req) fake_connect_respond(connect, req), env = env)
   connect
@@ -66,14 +70,23 @@ fake_connect_respond <- function(connect, req) {
   }
 
   if (path == "content/app/oauth/integrations/associations") {
-    return(json_response(req, list(list(
-      oauth_integration_guid = "publisher",
-      oauth_integration_template = "connect",
-      oauth_integration_auth_type = "Visitor API Key"
+    if (method == "PUT") {
+      connect$associations <- vapply(req$body$data, function(x) x$oauth_integration_guid, "")
+      return(httr2::new_response("PUT", req$url, 204L, headers = list(), body = raw()))
+    }
+    integrations <- Filter(function(x) x$guid %in% connect$associations, connect$integrations)
+    return(json_response(req, lapply(integrations, function(x) list(
+      oauth_integration_guid = x$guid,
+      oauth_integration_template = x$template,
+      oauth_integration_auth_type = x$auth_type
     ))))
   }
-  if (path == "oauth/integrations/publisher") {
-    return(json_response(req, list(config = list(max_role = "Publisher"))))
+  if (path == "oauth/integrations") {
+    return(json_response(req, connect$integrations))
+  }
+  if (parts[1] == "oauth" && parts[2] == "integrations" && length(parts) == 3 && parts[3] != "credentials") {
+    integration <- Filter(function(x) x$guid == parts[3], connect$integrations)[[1]]
+    return(json_response(req, integration))
   }
   if (path == "oauth/integrations/credentials") {
     return(json_response(req, list(access_token = "visitor-key")))

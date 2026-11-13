@@ -381,7 +381,7 @@ connect_share_audience <- function() {
     ),
     error = function(err) {
       cli::cli_warn(
-        "Couldn't check this content's integrations, so sharing is off.",
+        "Couldn't set up this content's integrations, so sharing is off.",
         parent = err
       )
       NULL
@@ -391,7 +391,9 @@ connect_share_audience <- function() {
 
 share_cache <- new.env(parent = emptyenv())
 
-# An integration capped at the Viewer role can't publish.
+# An integration capped at the Viewer role can't publish. Connect ships a
+# suitable integration, but each content item must be associated with it, so
+# commons associates one when none is, rather than asking the publisher to.
 connect_visitor_integration <- function(client, guid) {
   if (!nzchar(guid)) {
     return(NULL)
@@ -417,7 +419,46 @@ connect_visitor_integration <- function(client, guid) {
       return(association$oauth_integration_guid)
     }
   }
-  NULL
+  attached <- connect_attach_visitor_integration(client, guid, associations)
+  if (is.null(attached)) {
+    cli::cli_warn(
+      "Posit Connect has no Visitor API Key integration that can publish, so sharing is off."
+    )
+  }
+  attached
+}
+
+# Associating replaces the content's associations, so the existing ones are
+# sent along with the new one.
+connect_attach_visitor_integration <- function(client, guid, associations) {
+  integrations <- connect_req(client, "oauth", "integrations") |>
+    httr2::req_perform() |>
+    httr2::resp_body_json()
+  candidates <- Filter(
+    function(integration) {
+      identical(integration$template, "connect") &&
+        identical(integration$auth_type, "Visitor API Key") &&
+        !is.null(integration$config$max_role) &&
+        !identical(integration$config$max_role, "Viewer")
+    },
+    integrations
+  )
+  if (length(candidates) == 0) {
+    return(NULL)
+  }
+  # Prefer the least privilege that can still publish.
+  roles <- vapply(candidates, function(x) x$config$max_role, character(1))
+  chosen <- candidates[[c(which(roles == "Publisher"), 1L)[1]]]
+
+  guids <- c(
+    vapply(associations, function(x) x$oauth_integration_guid, character(1)),
+    chosen$guid
+  )
+  connect_req(client, "content", guid, "oauth", "integrations", "associations") |>
+    httr2::req_method("PUT") |>
+    httr2::req_body_json(lapply(guids, function(g) list(oauth_integration_guid = g))) |>
+    httr2::req_perform()
+  chosen$guid
 }
 
 # Opens a share as the viewer: their key and identity, and the content the

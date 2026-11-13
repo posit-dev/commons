@@ -353,6 +353,46 @@ test_that("a viewer who can share gets the share script and a toolbar button", {
   })
 })
 
+test_that("an app without a visitor key integration is given the least privileged one", {
+  connect <- local_fake_connect()
+  connect$integrations <- list(
+    list(guid = "snowflake", template = "snowflake", auth_type = "Viewer", config = list()),
+    list(guid = "viewer-only", template = "connect", auth_type = "Visitor API Key", config = list(max_role = "Viewer")),
+    list(guid = "admin", template = "connect", auth_type = "Visitor API Key", config = list(max_role = "Admin")),
+    list(guid = "publisher", template = "connect", auth_type = "Visitor API Key", config = list(max_role = "Publisher"))
+  )
+  connect$associations <- c("snowflake", "viewer-only")
+
+  expect_identical(connect_share_audience(), "publisher")
+  expect_identical(connect$associations, c("snowflake", "viewer-only", "publisher"))
+
+  connect$requests <- character()
+  expect_identical(connect_share_audience(), "publisher")
+  expect_length(connect$requests, 0)
+})
+
+test_that("an app that can't get a visitor key integration shows no share buttons", {
+  connect <- local_fake_connect()
+  connect$associations <- character()
+  connect$fail[["PUT content/app/oauth/integrations/associations"]] <- 403L
+  s <- share_test_chat()
+  session <- ShareSession$new()
+
+  expect_warning(
+    shiny::testServer(share_test_app(s), session = session, {
+      settle(session)
+      expect_length(session$inserts, 0)
+    }),
+    "sharing is off"
+  )
+
+  connect$fail <- list()
+  connect$integrations <- list()
+  connect$requests <- character()
+  expect_warning(expect_null(connect_share_audience()), "no Visitor API Key integration")
+  expect_false("PUT content/app/oauth/integrations/associations" %in% connect$requests)
+})
+
 # The toolbar class is private to shinychat; this flags a release that drops it
 # in our CI. Skipped on CRAN so shinychat's reverse dependency checks don't fail.
 test_that("shinychat's page still has the toolbar the share button joins", {
