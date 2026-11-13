@@ -203,7 +203,12 @@ test_that("Databricks metric scope retains source and join dependencies", {
     )
   )
   expect_equal(model$relationships, specification$joins)
-  expect_equal(model$filters, list("source.is_active"))
+  expect_length(model$filters, 0L)
+  expect_true(any(grepl(
+    "Metric-view filter: source.is_active",
+    model$context$first_touch,
+    fixed = TRUE
+  )))
   expect_true(any(grepl("Treat returned orders", model$context$retrieval)))
   expect_true(any(grepl("customer", model$context$first_touch)))
   expect_true(any(grepl("sales regions", model$context$retrieval)))
@@ -610,4 +615,177 @@ test_that("Databricks current namespace requires a catalog and schema", {
     databricks_current_namespace(NULL),
     error = TRUE
   )
+})
+
+# The Databricks metric view contract both packages consume. The Python suite
+# runs the same cases from the same file. See tests/shared/README.md.
+metric_view_cases <- function(section) {
+  cases <- shared_fixture("databricks-metric-views")[[section]]$cases
+  # An empty section would enumerate no cases and the runner would pass.
+  expect_gt(length(cases), 0)
+  cases
+}
+
+test_that("Databricks metric view definitions read as the shared fixture says", {
+  member <- function(m) {
+    list(
+      name = m$name, kind = m$kind, parent = m$parent, label = m$label,
+      description = m$description, type = m$type,
+      synonyms = as.list(m$synonyms), filter = m$filter
+    )
+  }
+  for (case in metric_view_cases("specifications")) {
+    model <- tryCatch(
+      databricks_semantic_model_from_spec(
+        do.call(DBI::Id, case$id),
+        yaml::yaml.load(case$yaml, handlers = yaml12_booleans()),
+        description = case$description,
+        columns = case$columns %||% list()
+      ),
+      error = function(err) err
+    )
+    if (!is.null(case$expected$unsupported)) {
+      expect_s3_class(model, "commons_unsupported_semantic_parameter")
+      for (mention in case$expected$unsupported) {
+        expect_true(grepl(mention, conditionMessage(model), fixed = TRUE), info = case$name)
+      }
+      next
+    }
+    if (!is.null(case$expected$error)) {
+      expect_fixture_error(model, case$expected, info = case$name)
+      next
+    }
+    actual <- list(
+      name = model$name,
+      description = model$description,
+      dimensions = lapply(model$dimensions, member),
+      metrics = lapply(model$metrics, member),
+      facts = lapply(model$facts, member),
+      filters = lapply(model$filters, member),
+      parameters = lapply(model$parameters, function(p) {
+        list(
+          type = p$type, description = p$description,
+          has_default = p$has_default, default = p$default, sql_type = p$sql_type
+        )
+      }),
+      dependencies = lapply(model$dependencies, function(id) as.list(id@name)),
+      dependencies_complete = model$dependencies_complete,
+      first_touch = as.list(model$context$first_touch),
+      retrieval = as.list(model$context$retrieval)
+    )
+    expected <- case$expected
+    if (length(expected$parameters) == 0L) {
+      expected$parameters <- list()
+      actual$parameters <- list()
+    }
+    expect_equal(actual, expected, info = case$name)
+  }
+})
+
+test_that("Databricks qualified names split as the shared fixture says", {
+  for (case in metric_view_cases("qualified_names")) {
+    expect_identical(
+      as.list(databricks_qualified_name_parts(case$value)),
+      case$parts,
+      info = case$value
+    )
+  }
+})
+
+test_that("Databricks column types read as the shared fixture says", {
+  for (case in metric_view_cases("type_text")) {
+    expect_identical(databricks_type_text(case$type), case$text, info = deparse(case$type))
+  }
+})
+
+test_that("Databricks relation kinds follow the shared fixture", {
+  for (case in metric_view_cases("relation_kinds")) {
+    rows <- data.frame(
+      table_catalog = "main", table_schema = "sales", table_name = "x",
+      table_type = case$table_type, comment = NA_character_
+    )
+    object_types <- if (is.null(case$object_type)) {
+      character()
+    } else {
+      stats::setNames(case$object_type, databricks_object_key("sales", "x"))
+    }
+    expect_identical(
+      databricks_relations_from_information_schema(rows, object_types)[[1]]$kind,
+      case$kind,
+      info = paste(case$table_type, case$object_type)
+    )
+  }
+})
+
+test_that("Databricks metric view selection follows the shared fixture", {
+  section <- shared_fixture("databricks-metric-views")$selection
+  expect_gt(length(section$cases), 0)
+  for (case in section$cases) {
+    local_mocked_bindings(
+      dbGetQuery = fixture_databricks_reply(section$warehouse),
+      .package = "DBI"
+    )
+    result <- tryCatch(
+      databricks_table_registry(
+        DBI::ANSI(),
+        if (is.null(case$tables)) NULL else unlist(case$tables),
+        exclude = unlist(case$exclude)
+      ),
+      error = function(err) err
+    )
+    if (!is.null(case$expected$error)) {
+      expect_fixture_error(result, case$expected, info = case$name)
+      next
+    }
+    expect_equal(as.list(result$labels), case$expected$tables, info = case$name)
+    expect_equal(as.list(names(result$semantic_models)), case$expected$models, info = case$name)
+    expect_equal(as.list(names(result$semantic_stubs)), case$expected$stubs, info = case$name)
+  }
+})
+
+test_that("Databricks metric view queries compile as the shared fixture says", {
+  section <- shared_fixture("databricks-metric-views")$metric_sql
+  spec <- section$model
+  member <- function(entries, kind) {
+    lapply(entries, function(entry) new_semantic_member(entry$name, kind))
+  }
+  model <- new_semantic_model(
+    do.call(DBI::Id, spec$id),
+    spec$label,
+    backend = "databricks_metric_view",
+    dimensions = member(spec$dimensions, "dimension"),
+    metrics = member(spec$metrics, "metric")
+  )
+  source <- test_source()
+  state <- data_source_state(source)
+  state$semantic_models <- stats::setNames(list(model), spec$label)
+  members <- registry_semantic_members(
+    semantic_models_registry(list(warehouse = source)),
+    "warehouse"
+  )
+  # DBI::ANSI() quotes identifiers in double quotes; Databricks uses backticks.
+  backticks <- function(sql) gsub('"([^"]*)"', "`\\1`", sql)
+  expect_gt(length(section$cases), 0)
+  for (case in section$cases) {
+    result <- tryCatch({
+      arguments <- stats::setNames(
+        as.list(seq_along(case$arguments)),
+        unlist(case$arguments)
+      )
+      backticks(databricks_semantic_metric_sql(
+        model,
+        resolve_semantic_members(unlist(case$metrics), members, "metric"),
+        resolve_semantic_members(unlist(case$dimensions), members, "dimension"),
+        case$where,
+        members,
+        DBI::ANSI(),
+        arguments = arguments
+      ))
+    }, error = function(err) err)
+    if (is.null(case$expected$error)) {
+      expect_identical(result, case$expected$sql, info = case$name)
+    } else {
+      expect_fixture_error(result, case$expected, info = case$name)
+    }
+  }
 })

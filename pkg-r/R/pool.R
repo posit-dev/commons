@@ -527,6 +527,18 @@ normalize_where <- function(where) {
 
 where_ops <- c("=", "!=", "<", "<=", ">", ">=")
 
+# A `where` value as a string literal. The warehouses read a backslash in
+# one as an escape, which DBI's quoting does not account for.
+where_quote_string <- function(con, x) {
+  if (is_snowflake_connection(con)) {
+    return(snowflake_quote_string(con, x))
+  }
+  if (is_databricks_connection(con)) {
+    return(databricks_quote_string(x))
+  }
+  as.character(DBI::dbQuoteString(con, x))
+}
+
 compile_where_triple <- function(triple, columns, con) {
   for (field in c("column", "op", "value")) {
     value <- triple[[field]]
@@ -558,7 +570,7 @@ compile_where_triple <- function(triple, columns, con) {
   ) {
     triple$value
   } else {
-    as.character(DBI::dbQuoteString(con, triple$value))
+    where_quote_string(con, triple$value)
   }
   sprintf(
     "(%s %s %s)",

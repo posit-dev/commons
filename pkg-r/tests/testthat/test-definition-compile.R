@@ -210,7 +210,7 @@ test_that("warehouse refusals match the shared contract", {
     raw <- list(tables = list(list(
       name = case[["table"]],
       columns = case[["columns"]],
-      definitions = list(case[["definition"]])
+      definitions = c(case[["siblings"]], list(case[["definition"]]))
     )))
     # The source only has to expose the table; the dictionary supplies the
     # rest. DuckDB lowers every construct here, so its translation records
@@ -226,7 +226,10 @@ test_that("warehouse refusals match the shared contract", {
     for (target in names(case[["targets"]])) {
       expected <- case[["targets"]][[target]]
       info <- paste(case_name, target)
-      unknown <- setdiff(names(expected), c("code", "error_contains"))
+      unknown <- setdiff(
+        names(expected),
+        c("code", "composed_code", "error_contains")
+      )
       expect_true(
         length(unknown) == 0,
         info = paste(info, paste(unknown, collapse = ", "))
@@ -251,6 +254,21 @@ test_that("warehouse refusals match the shared contract", {
             definition_mock_source(case[["table"]])
           ),
           "cannot be compiled",
+          info = info
+        )
+      } else if (!is.null(expected[["composed_code"]])) {
+        # Composition happens at construction, on a source of that dialect.
+        dialect <- sub("^SQL\\((.*)\\)$", "\\1", target)
+        local_mocked_bindings(
+          is_snowflake_connection = function(con) dialect == "snowflake",
+          is_databricks_connection = function(con) dialect == "databricks"
+        )
+        composed <- definition_compiled_table(
+          definition_compile_source(raw, definition_mock_source(case[["table"]]))
+        )
+        expect_equal(
+          composed[[case[["definition"]][["name"]]]]$sql,
+          expected[["composed_code"]],
           info = info
         )
       } else {

@@ -76,10 +76,12 @@ def test_the_listing_reports_the_provisioned_relations(backend):
 
     relations = reader.list_relations(live.engine_backend, _selector(live))
 
-    listed = {_folded(live, relation.id.table) for relation in relations}
-    assert {_folded(live, table) for table in FIXTURE_TABLES} <= listed
-    for relation in relations:
-        assert relation.kind in ("table", "view")
+    kinds = {_folded(live, relation.id.table): relation.kind for relation in relations}
+    fixture = {_folded(live, table): "table" for table in FIXTURE_TABLES}
+    assert fixture.items() <= kinds.items()
+    if backend == "databricks":
+        model = _folded(live, live.provisioned["parameterized_model"])
+        assert kinds[model] == "metric_view"
 
 
 @pytest.mark.parametrize("backend", BACKENDS)
@@ -370,3 +372,29 @@ def test_live_snowflake_executes_an_imported_verified_query():
     )
 
     assert result.extra[TAG_EXTRA_KEY] == Tag.A
+
+
+def test_live_databricks_binds_native_metric_view_parameters():
+    live = require_live_warehouse("databricks")
+    configured = live.fixture_table_id("parameterized_model")
+    source = _semantic_source(live, configured.label)
+    model = source.semantic_models[configured.label]
+    assert model.parameters
+    assert model.metrics
+    arguments = live.provisioned["parameterized_model_arguments"]
+
+    from commons._definitions import Registry
+    from commons._handles import HandleStore
+    from commons._pool import call_metrics
+
+    handles, defaults = HandleStore(), HandleStore()
+    metric = [model.metrics[0].name]
+    result = call_metrics(
+        Registry(), source, "databricks", handles, metrics=metric, arguments=arguments
+    )
+    call_metrics(Registry(), source, "databricks", defaults, metrics=metric)
+
+    assert result.extra[TAG_EXTRA_KEY] == Tag.A
+    # The configured arguments differ from the view's defaults, so a value
+    # that was not bound would answer as the defaults do.
+    assert not handles.get("r1").equals(defaults.get("r1"))

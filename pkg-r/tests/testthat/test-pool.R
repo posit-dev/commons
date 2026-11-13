@@ -426,3 +426,22 @@ test_that("call_metrics rejects mixed-grain definitions", {
   )
   expect_match(expansion$sql, '"revenue" > min("revenue")', fixed = TRUE)
 })
+
+test_that("where values are quoted as the shared fixture says", {
+  cases <- shared_fixture("where-literals")$cases
+  expect_gt(length(cases), 0)
+  for (case in cases) {
+    for (dialect in names(case$literals)) {
+      local_mocked_bindings(
+        is_snowflake_connection = function(con) identical(dialect, "snowflake"),
+        is_databricks_connection = function(con) identical(dialect, "databricks")
+      )
+      triple <- list(column = "region", op = "=", value = case$value)
+      expect_equal(
+        compile_where_triple(triple, "region", DBI::ANSI()),
+        sprintf('("region" = %s)', case$literals[[dialect]]),
+        info = paste(case$name, dialect)
+      )
+    }
+  }
+})

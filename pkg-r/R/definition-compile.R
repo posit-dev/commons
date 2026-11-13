@@ -472,13 +472,16 @@ definition_compose_identifiers <- function(code, replacements, target) {
     return(code)
   }
   quote <- if (identical(target, "SQL(databricks)")) "`" else '"'
+  # The warehouses read a backslash in a string literal as an escape, so an
+  # escaped quote does not end the literal there.
+  escapes <- target %in% c("SQL(snowflake)", "SQL(databricks)")
   chars <- strsplit(code, "", fixed = TRUE)[[1]]
   out <- character()
   i <- 1L
   while (i <= length(chars)) {
     char <- chars[[i]]
     if (identical(char, "'")) {
-      token <- definition_take_quoted(chars, i, "'")
+      token <- definition_take_quoted(chars, i, "'", escapes = escapes)
       out <- c(out, token$text)
       i <- token$next_index
       next
@@ -502,12 +505,17 @@ definition_compose_identifiers <- function(code, replacements, target) {
   paste0(out, collapse = "")
 }
 
-definition_take_quoted <- function(chars, start, quote) {
+definition_take_quoted <- function(chars, start, quote, escapes = FALSE) {
   out <- quote
   i <- start + 1L
   while (i <= length(chars)) {
     char <- chars[[i]]
     out <- c(out, char)
+    if (escapes && identical(char, "\\") && i < length(chars)) {
+      out <- c(out, chars[[i + 1L]])
+      i <- i + 2L
+      next
+    }
     if (identical(char, quote)) {
       if (i < length(chars) && identical(chars[[i + 1L]], quote)) {
         out <- c(out, quote)

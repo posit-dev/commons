@@ -103,12 +103,15 @@ def test_warehouse_refusals_match_the_shared_contract():
     assert unsupported, "the unsupported section is empty"
     checked = 0
     for case_name, case in unsupported.items():
-        table = {"name": case["table"], "definitions": [case["definition"]]}
+        table = {
+            "name": case["table"],
+            "definitions": [*case.get("siblings", []), case["definition"]],
+        }
         if "columns" in case:
             table["columns"] = case["columns"]
         for target, expected in case["targets"].items():
             info = f"{case_name} {target}"
-            unknown = set(expected) - {"code", "error_contains"}
+            unknown = set(expected) - {"code", "composed_code", "error_contains"}
             assert not unknown, f"{info}: {sorted(unknown)}"
             dictionary = DataDictionary.model_validate({"tables": [table]})
             dialect = target[len("SQL(") : -1]
@@ -121,8 +124,14 @@ def test_warehouse_refusals_match_the_shared_contract():
                     assert fragment in str(excinfo.value), info
             else:
                 attach_compiled_definitions(dictionary, dialect, set(dictionary.tables))
-                (record,) = dictionary.tables[case["table"]].compiled_definitions
-                assert record.sql == expected["code"], info
+                (record,) = [
+                    record
+                    for record in dictionary.tables[case["table"]].compiled_definitions
+                    if record.name == case["definition"]["name"]
+                ]
+                assert record.sql == expected.get(
+                    "code", expected.get("composed_code")
+                ), info
             checked += 1
     assert checked >= 8
 

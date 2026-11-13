@@ -194,10 +194,30 @@ class FakeDatabricks(_Recorder):
     nothing here selects it.
     """
 
-    def __init__(self, relations=None, columns=("id",)):
+    def __init__(
+        self,
+        relations=None,
+        columns=("id",),
+        metric_views=None,
+        metadata=None,
+        metric_view_type="METRIC_VIEW",
+    ):
         super().__init__()
+        # What information_schema reports for a metric view. The connector's
+        # table metadata (table_types) reports the other type: VIEW, as Unity
+        # Catalog does, beside METRIC_VIEW, and METRIC_VIEW beside VIEW.
+        self.metric_view_type = metric_view_type
         self._relations = relations if relations is not None else ["sales", "orders"]
         self._columns = list(columns)
+        # Metric view name to its YAML definition, and to the JSON table
+        # metadata DESCRIBE TABLE EXTENDED reports, all in main.sales.
+        self.metric_views = dict(metric_views or {})
+        self.metadata = dict(metadata or {})
+        self.semantic_rows: list[dict] = [{"revenue": 1200.0}]
+
+    def table_types(self, catalog: str, schema: str | None):
+        other = "VIEW" if self.metric_view_type == "METRIC_VIEW" else "METRIC_VIEW"
+        return {(schema or "", name): other for name in self.metric_views}
 
     def query(self, sql: str, params=None):
         self.queries.append(sql)
@@ -215,14 +235,31 @@ class FakeDatabricks(_Recorder):
                 {"column_name": name, "is_nullable": "YES"} for name in self._columns
             ]
         if "system.information_schema.tables" in sql:
-            return [
-                databricks_relation_row(name)
-                for name in self._relations
-                if f"'{name}'" in sql or "table_name =" not in sql
+            rows = [databricks_relation_row(name) for name in self._relations]
+            rows += [
+                {**databricks_relation_row(name), "table_type": self.metric_view_type}
+                for name in self.metric_views
             ]
+            return [
+                row
+                for row in rows
+                if f"'{row['table_name']}'" in sql or "table_name =" not in sql
+            ]
+        if "system.information_schema.views" in sql:
+            name = re.findall(r"table_name = '([^']*)'", sql)[-1]
+            text = self.metric_views[name]
+            return [{"definition_length": len(text), "view_definition": text}]
+        if sql.startswith("DESCRIBE TABLE EXTENDED"):
+            name = re.findall(r"`([^`]*)`", sql)[-1]
+            if name not in self.metadata:
+                raise RuntimeError("no metadata")
+            return [{"json_metadata": self.metadata[name]}]
+        if "MEASURE(" in sql and "LIMIT 0" not in sql:
+            self._probe(sql)
+            return [dict(row) for row in self.semantic_rows]
         if sql.startswith("DESCRIBE TABLE"):
             return [databricks_column_row(name) for name in self._columns]
-        if sql.startswith("SELECT * FROM"):
+        if sql.startswith("SELECT * FROM") or "LIMIT 0" in sql:
             return self._probe(sql)
         raise AssertionError(f"unexpected query: {sql}")
 

@@ -7,7 +7,6 @@ from dataclasses import asdict
 from typing import Any
 
 import pytest
-import yaml
 
 from commons._catalog._snowflake_semantic import (
     model_from_spec,
@@ -15,7 +14,11 @@ from commons._catalog._snowflake_semantic import (
     sql_type,
 )
 from commons._data_source import TableId
-from commons._semantic_models import SemanticMember, UnsupportedSemanticParameter
+from commons._semantic_models import (
+    SemanticMember,
+    UnsupportedSemanticParameter,
+    load_spec_yaml,
+)
 
 from ._shared import load_shared_fixture
 
@@ -60,7 +63,7 @@ def test_show_rows(case: dict[str, Any]) -> None:
 def test_specification(case: dict[str, Any]) -> None:
     table_id = _id(case["id"])
     identity = _id(case["identity"]) if "identity" in case else None
-    spec = yaml.safe_load(case["yaml"])
+    spec = load_spec_yaml(case["yaml"])
     expected = case["expected"]
     if "unsupported" in expected:
         with pytest.raises(UnsupportedSemanticParameter) as raised:
@@ -243,7 +246,7 @@ def test_verified_queries(case: dict[str, Any]) -> None:
 
     from ._semantic_fixture import assert_fixture_error
 
-    entries = (yaml.safe_load(case["yaml"]) or {}).get("verified_queries")
+    entries = (load_spec_yaml(case["yaml"]) or {}).get("verified_queries")
     if "error" in case["expected"]:
         with pytest.raises(ValueError) as raised:
             verified_calculations(entries)

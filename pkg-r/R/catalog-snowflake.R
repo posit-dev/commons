@@ -4,6 +4,12 @@ is_snowflake_connection <- function(con) {
   rlang::is_string(name) && identical(tolower(name), "snowflake")
 }
 
+# Snowflake reads a backslash in a string literal as an escape, and DBI's
+# quoting escapes only the quote character.
+snowflake_quote_string <- function(con, x) {
+  as.character(DBI::dbQuoteString(con, gsub("\\", "\\\\", x, fixed = TRUE)))
+}
+
 snowflake_table_registry <- function(
   con,
   tables = NULL,
@@ -545,7 +551,7 @@ snowflake_read_semantic_model <- function(
     }
   )
   specification <- tryCatch(
-    yaml::yaml.load(text),
+    yaml::yaml.load(text, handlers = yaml12_booleans()),
     error = function(err) {
       cli::cli_abort(
         "Snowflake semantic view {.val {label}} returned invalid YAML.",
@@ -901,7 +907,8 @@ snowflake_semantic_where <- function(where, members, con) {
     where,
     members,
     con,
-    snowflake_semantic_member_references
+    snowflake_semantic_member_references,
+    quote_string = function(value) snowflake_quote_string(con, value)
   )
 }
 

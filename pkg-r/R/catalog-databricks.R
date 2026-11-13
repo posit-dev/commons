@@ -5,6 +5,15 @@ is_databricks_connection <- function(con) {
   length(labels) > 0L && any(grepl("databricks", labels, ignore.case = TRUE))
 }
 
+# Databricks reads a backslash in a string literal as an escape and joins
+# adjacent literals, so 'O''Brien' reads as OBrien. Both characters are
+# escaped with a backslash, whatever class the connection has.
+databricks_quote_string <- function(x) {
+  x <- gsub("\\", "\\\\", x, fixed = TRUE)
+  x <- gsub("'", "\\'", x, fixed = TRUE)
+  paste0("'", x, "'")
+}
+
 databricks_table_registry <- function(
   con,
   tables = NULL,
@@ -237,19 +246,19 @@ databricks_list_unity_relations <- function(
   predicates <- c(
     paste0(
       "table_catalog = ",
-      DBI::dbQuoteString(con, components[["catalog"]])
+      databricks_quote_string(components[["catalog"]])
     ),
     "table_schema <> 'information_schema'",
     if ("schema" %in% names(components)) {
       paste0(
         "table_schema = ",
-        DBI::dbQuoteString(con, components[["schema"]])
+        databricks_quote_string(components[["schema"]])
       )
     },
     if ("table" %in% names(components)) {
       paste0(
         "table_name = ",
-        DBI::dbQuoteString(con, components[["table"]])
+        databricks_quote_string(components[["table"]])
       )
     }
   )
@@ -467,7 +476,7 @@ databricks_read_semantic_model <- function(
     )
   }
   specification <- tryCatch(
-    yaml::yaml.load(text),
+    yaml::yaml.load(text, handlers = yaml12_booleans()),
     error = function(err) {
       cli::cli_abort(
         "Databricks metric view {.val {label}} returned invalid YAML.",
@@ -599,9 +608,9 @@ databricks_view_definition_chunk_size <- 900L
 databricks_view_definition <- function(con, id) {
   components <- id@name
   predicates <- c(
-    paste0("table_catalog = ", DBI::dbQuoteString(con, components[["catalog"]])),
-    paste0("table_schema = ", DBI::dbQuoteString(con, components[["schema"]])),
-    paste0("table_name = ", DBI::dbQuoteString(con, components[["table"]]))
+    paste0("table_catalog = ", databricks_quote_string(components[["catalog"]])),
+    paste0("table_schema = ", databricks_quote_string(components[["schema"]])),
+    paste0("table_name = ", databricks_quote_string(components[["table"]]))
   )
   where <- paste(predicates, collapse = " AND ")
   length_row <- tryCatch(
@@ -695,6 +704,8 @@ databricks_semantic_model_from_spec <- function(
   )
   dependencies <- databricks_semantic_dependencies(specification)
   relationships <- specification$joins %||% list()
+  # A metric view's filter is SQL the view always applies, not a member the
+  # agent can name, so it is described in the context and not listed.
   filters <- Filter(Negate(is.null), list(specification$filter))
   parameters <- semantic_parameters_from_spec(
     specification$parameters,
@@ -712,7 +723,6 @@ databricks_semantic_model_from_spec <- function(
     backend = "databricks_metric_view",
     dimensions = dimensions,
     metrics = metrics,
-    filters = filters,
     parameters = parameters,
     dependencies = dependencies$ids,
     dependencies_complete = dependencies$complete,
@@ -960,7 +970,8 @@ databricks_semantic_metric_sql <- function(
     where,
     members,
     con,
-    databricks_semantic_member_references
+    databricks_semantic_member_references,
+    quote_string = databricks_quote_string
   )
   if (length(conditions)) {
     sql <- paste(sql, "WHERE", paste(conditions, collapse = " AND "))
@@ -1008,9 +1019,9 @@ databricks_column_nullability <- function(
     return(logical())
   }
   predicates <- c(
-    paste0("table_catalog = ", DBI::dbQuoteString(con, components[["catalog"]])),
-    paste0("table_schema = ", DBI::dbQuoteString(con, components[["schema"]])),
-    paste0("table_name = ", DBI::dbQuoteString(con, components[["table"]]))
+    paste0("table_catalog = ", databricks_quote_string(components[["catalog"]])),
+    paste0("table_schema = ", databricks_quote_string(components[["schema"]])),
+    paste0("table_name = ", databricks_quote_string(components[["table"]]))
   )
   rows <- tryCatch(
     DBI::dbGetQuery(

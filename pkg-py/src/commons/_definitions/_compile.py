@@ -272,9 +272,7 @@ def _bind_table(
 
 
 def _bind_ir(ir: Ir, columns: dict[str, str | None], definition: str, table: str) -> Ir:
-    attrs = _map_children(
-        ir, lambda child: _bind_ir(child, columns, definition, table)
-    )
+    attrs = _map_children(ir, lambda child: _bind_ir(child, columns, definition, table))
     # A reference to a sibling definition is a name in the dictionary, not a
     # column in the warehouse, and is inlined later rather than bound.
     if ir.kind == "column" and ir.attrs.get("reference") != "definition":
@@ -357,7 +355,7 @@ def _compile_table(
                 f"for {target}. {result['error']}"
             )
         emitted[name] = result
-    composed = _compose(table, definitions, emitted, markers, _quote_for(target))
+    composed = _compose(table, definitions, emitted, markers, target)
     return [
         ExportRecord(
             name=name,
@@ -476,12 +474,17 @@ def _quote_for(target: str) -> str:
     return "`" if target == "SQL(databricks)" else '"'
 
 
+def _backslash_escapes(target: str) -> bool:
+    """Whether the target reads a backslash in a string literal as an escape."""
+    return target in ("SQL(snowflake)", "SQL(databricks)")
+
+
 def _compose(
     table: str,
     definitions: dict[str, DefinitionExport],
     emitted: dict[str, dict[str, Any]],
     markers: dict[str, str],
-    quote: str,
+    target: str,
 ) -> dict[str, dict[str, Any]]:
     """Inline each definition's references, in dependency order."""
     composed: dict[str, dict[str, Any]] = {}
@@ -511,7 +514,7 @@ def _compose(
                 notes.extend(composed[reference]["notes"])
             composed[name] = {
                 "code": _substitute_identifiers(
-                    emitted[name]["code"], replacements, quote
+                    emitted[name]["code"], replacements, target
                 ),
                 "notes": sorted(set(notes)),
             }
@@ -519,27 +522,33 @@ def _compose(
     return composed
 
 
-def _substitute_identifiers(code: str, replacements: dict[str, str], quote: str) -> str:
+def _substitute_identifiers(
+    code: str, replacements: dict[str, str], target: str
+) -> str:
     """Replace quoted marker identifiers with the SQL they stand for.
 
-    `quote` is how the target writes an identifier, which is a backtick for
+    The target decides how an identifier is quoted, which is a backtick for
     Databricks and a double quote otherwise. Getting it wrong leaves the
     marker in the emitted SQL as a column that does not exist.
 
     A scan rather than a string replace, so a marker inside a string literal
-    is left alone and a doubled quote is read as one literal character rather
-    than the end of the identifier. The substituted SQL is parenthesised
-    because it lands in the middle of an expression whose precedence it does
-    not know.
+    is left alone, and a doubled quote, or on a warehouse a backslash-escaped
+    one, is read as one literal character rather than the end of the value.
+    The substituted SQL is parenthesised because it lands in the middle of an
+    expression whose precedence it does not know.
     """
     if not replacements:
         return code
+    quote = _quote_for(target)
+    escapes = _backslash_escapes(target)
     out: list[str] = []
     index = 0
     while index < len(code):
         char = code[index]
         if char in ("'", quote):
-            token, index = _take_quoted(code, index, char)
+            token, index = _take_quoted(
+                code, index, char, escapes=escapes and char == "'"
+            )
             if char == quote:
                 name = token[1:-1].replace(quote * 2, quote)
                 if name in replacements:
@@ -552,9 +561,14 @@ def _substitute_identifiers(code: str, replacements: dict[str, str], quote: str)
     return "".join(out)
 
 
-def _take_quoted(code: str, start: int, quote: str) -> tuple[str, int]:
+def _take_quoted(
+    code: str, start: int, quote: str, *, escapes: bool = False
+) -> tuple[str, int]:
     index = start + 1
     while index < len(code):
+        if escapes and code[index] == "\\":
+            index += 2
+            continue
         if code[index] == quote:
             if index + 1 < len(code) and code[index + 1] == quote:
                 index += 2

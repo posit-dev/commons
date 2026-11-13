@@ -13,9 +13,34 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any
 
+import yaml
+
 from ._data_source import TableId
 
 _TYPES = ("string", "integer", "number", "logical", "date", "datetime")
+
+
+class _Yaml12Loader(yaml.SafeLoader):
+    """A safe loader where only true and false are booleans.
+
+    YAML 1.1 also reads `on`, `off`, `yes`, and `no` as booleans, which turns a
+    metric view join's `on:` key into True. The warehouses read YAML 1.2.
+    """
+
+
+_BOOL = "tag:yaml.org,2002:bool"
+_Yaml12Loader.yaml_implicit_resolvers = {
+    first: [(tag, pattern) for tag, pattern in resolvers if tag != _BOOL]
+    for first, resolvers in yaml.SafeLoader.yaml_implicit_resolvers.items()
+}
+_Yaml12Loader.add_implicit_resolver(
+    _BOOL, re.compile(r"^(?:true|True|TRUE|false|False|FALSE)$"), list("tTfF")
+)
+
+
+def load_spec_yaml(text: str) -> Any:
+    """Parse a warehouse's semantic model YAML. Raises `yaml.YAMLError`."""
+    return yaml.load(text, Loader=_Yaml12Loader)
 
 
 @dataclass(frozen=True)
@@ -165,7 +190,21 @@ class SemanticStub:
     def kind(self) -> str:
         if self.backend == "snowflake_semantic_view":
             return "semantic_view"
+        if self.backend == "databricks_metric_view":
+            return "metric_view"
         return "semantic_model"
+
+
+def semantic_key(table_id: TableId, backend: str) -> tuple[str, ...]:
+    """A table's identity as a model's backend compares it.
+
+    Databricks identifiers compare without regard to case; Snowflake's, once
+    resolved, compare exactly.
+    """
+    parts = table_id.parts
+    if backend == "databricks_metric_view":
+        return tuple(part.lower() for part in parts)
+    return tuple(parts)
 
 
 class UnsupportedSemanticParameter(ValueError):
@@ -692,11 +731,15 @@ def model_qualifier(name: str) -> str:
 
 def model_from_stub(source: Any, stub: SemanticStub, label: str) -> SemanticModel:
     """Read a listed model. Raises when it is unreadable or unsupported."""
-    from ._catalog import _snowflake_semantic
+    from ._catalog import _databricks_semantic, _snowflake_semantic
 
-    if stub.backend != _snowflake_semantic.BACKEND:
+    readers = {
+        _snowflake_semantic.BACKEND: _snowflake_semantic.read_semantic_model,
+        _databricks_semantic.BACKEND: _databricks_semantic.read_semantic_model,
+    }
+    if stub.backend not in readers:
         raise ValueError(f"Unsupported semantic-model backend {stub.backend!r}.")
-    model = _snowflake_semantic.read_semantic_model(source.backend, stub)
+    model = readers[stub.backend](source.backend, stub)
     if isinstance(model, _snowflake_semantic.Unsupported):
         raise ValueError(  # noqa: TRY004 - an unusable model, not a wrong argument type
             f"Semantic model {label!r} is not supported: {model.reason}."
@@ -873,12 +916,13 @@ def semantic_first_touch(source: Any, table: str) -> list[str]:
     relation = (source.relations or {}).get(table)
     if relation is None:
         return []
-    key = relation.identity or relation.id
+    table_id = relation.identity or relation.id
     return list(
         dict.fromkeys(
             text
             for model in source.semantic_models.values()
-            if key in model.dependencies
+            if semantic_key(table_id, model.backend)
+            in {semantic_key(d, model.backend) for d in model.dependencies}
             for text in model.first_touch
             if text
         )

@@ -405,12 +405,14 @@ def probe_semantic_model(backend: Any, model: Any) -> Probe:
     Each required parameter is bound to a typed null, which satisfies the
     view's signature without inventing a business value.
     """
-    from . import _snowflake_semantic
+    from . import _databricks_semantic, _snowflake_semantic
 
     required = [name for name, p in model.parameters.items() if not p.has_default]
     sql = None
     if model.backend == _snowflake_semantic.BACKEND:
         sql = _snowflake_semantic.probe_statement(model, required)
+    elif model.backend == _databricks_semantic.BACKEND:
+        sql = _databricks_semantic.probe_statement(model, required)
     if sql is None:
         return Probe(
             "unknown", ValueError("The semantic model has no queryable public member.")
