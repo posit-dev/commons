@@ -21,7 +21,12 @@ import sqlglot.errors
 from sqlglot import expressions as exp
 from sqlglot.tokens import TokenType
 
-__all__ = ["check_query", "is_single_select", "sqlglot_dialect"]
+__all__ = ["UnparseableQuery", "check_query", "is_single_select", "sqlglot_dialect"]
+
+
+class UnparseableQuery(ValueError):
+    """The parser could not read the statement, so it gave no verdict on it."""
+
 
 # Statement forms that only read. A set operation carries its branches, and
 # sqlglot parses a leading CTE list onto the statement it belongs to, so
@@ -69,7 +74,7 @@ def check_query(sql: str, dialect: str | None = None) -> None:
     try:
         parsed = sqlglot.parse(sql, dialect=sqlglot_dialect(dialect))
     except sqlglot.errors.SqlglotError as error:
-        raise ValueError(
+        raise UnparseableQuery(
             f"The query could not be parsed as {dialect or 'SQL'}: {error}. "
             "Only read-only SELECT queries are allowed."
         ) from error

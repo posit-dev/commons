@@ -332,9 +332,10 @@ class DataSource:
     def _query_trusted(self, sql: str) -> list[dict[str, Any]]:
         """Run a verified query a warehouse model declares, as written.
 
-        The read-only parse is skipped for the same reason as in
-        `_query_compiled`, but the query may start with WITH, so the
-        trusted-query check guards it instead. The session is still checked.
+        The trusted-query check guards it instead of the read-only parse in
+        `query`. That check runs the same parse, but when the parser cannot
+        read the query (Snowflake's `SEMANTIC_VIEW` clause), it relies on its
+        structural check rather than refusing. The session is still checked.
         """
         from ._catalog import check_session
         from ._semantic_models import check_trusted_query

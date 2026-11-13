@@ -74,8 +74,10 @@ def check_trusted_query(sql: str) -> None:
     """Refuse SQL that is not one read-only SELECT or WITH query.
 
     A structural check from the tokens, so it holds for warehouse SQL the
-    parser does not know. When the parser does read it, its verdict is final
-    too, which catches DML that a leading WITH would otherwise hide.
+    parser does not know. Reading tokens rather than text, it skips comments
+    and the contents of string literals, and it refuses SQL the tokenizer
+    cannot read. When the parser does read it, its verdict is final too, which
+    catches DML that a leading WITH would otherwise hide.
     """
     from sqlglot import tokenize
     from sqlglot.tokens import TokenType
@@ -94,15 +96,16 @@ def check_trusted_query(sql: str) -> None:
         raise ValueError(
             "Trusted calculations must contain exactly one read-only SELECT query."
         )
-    from ._sql_guard import check_query
+    from ._sql_guard import UnparseableQuery, check_query
 
     try:
         check_query(sql, dialect="snowflake")
+    except UnparseableQuery:
+        pass
     except ValueError as error:
-        if "could not be parsed" not in str(error):
-            raise ValueError(
-                "Trusted calculations must contain exactly one read-only SELECT query."
-            ) from error
+        raise ValueError(
+            "Trusted calculations must contain exactly one read-only SELECT query."
+        ) from error
 
 
 def new_trusted_calculation(
