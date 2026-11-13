@@ -48,6 +48,9 @@ test_that("commons_server runs under shiny::testServer without error", {
 })
 
 test_that("commons_server queues a restore reminder when history is restored", {
+  # Drives shinychat internals; skipped on CRAN so shinychat's reverse
+  # dependency checks don't fail.
+  skip_on_cran()
   skip_if_not_installed("shiny")
   skip_if_not_installed("shinychat")
 
@@ -73,6 +76,9 @@ test_that("commons_server queues a restore reminder when history is restored", {
 })
 
 test_that("documents are saved with the chat and editable once restored", {
+  # Drives shinychat internals; skipped on CRAN so shinychat's reverse
+  # dependency checks don't fail.
+  skip_on_cran()
   skip_if_not_installed("shiny")
   skip_if_not_installed("shinychat")
 
