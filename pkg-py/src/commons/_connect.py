@@ -153,9 +153,12 @@ def share_trajectory_access(
     collaborators on the content. That is a wider grant than access to the
     traces alone.
 
+    Named users need an account that can publish. Connect refuses the role to
+    any other account, and to the content's owner.
+
     A grant is durable and agent construction should not fail over one, so any
-    failure, including a Connect outage, warns and leaves the rest of the list
-    ungranted.
+    failure, including a Connect outage, warns. A user Connect refuses warns
+    without stopping the grants to the users after it.
     """
     check_usernames(usernames)
     if not usernames:
@@ -187,11 +190,21 @@ def share_trajectory_access(
             ConnectClient.from_env() if client is None else nullcontext(client)
         ) as connect:
             existing = collaborator_principals(connect, guid)
+            # Connect refuses some users outright, such as the content's
+            # owner or an account that cannot publish, so one refusal must
+            # not cost the users after it their grant.
             for username in pending:
-                principal = user_guid(connect, username)
-                if principal not in existing:
-                    add_collaborator(connect, guid, principal)
-                    existing.add(principal)
+                try:
+                    principal = user_guid(connect, username)
+                    if principal not in existing:
+                        add_collaborator(connect, guid, principal)
+                        existing.add(principal)
+                except (ConnectError, LookupError, ValueError) as error:
+                    warnings.warn(
+                        f"Could not share trajectory access with {username!r}. {error}",
+                        stacklevel=2,
+                    )
+                    continue
                 _GRANTED.add((guid, username))
     except (ConnectError, LookupError, ValueError) as error:
         warnings.warn(

@@ -369,13 +369,26 @@ share_trajectory_access <- function(share_with) {
     {
       client <- connect_client()
       existing <- connect_collaborator_principals(client, guid)
+      # Connect refuses some users outright, such as the content's owner or
+      # an account that cannot publish, so one refusal must not cost the
+      # users after it their grant.
       for (username in share_with) {
-        user_guid <- connect_user_guid(client, username)
-        if (!user_guid %in% existing) {
-          connect_add_collaborator(client, guid, user_guid)
-          existing <- c(existing, user_guid)
-        }
-        assign(share_key(guid, username), TRUE, envir = granted)
+        tryCatch(
+          {
+            user_guid <- connect_user_guid(client, username)
+            if (!user_guid %in% existing) {
+              connect_add_collaborator(client, guid, user_guid)
+              existing <- c(existing, user_guid)
+            }
+            assign(share_key(guid, username), TRUE, envir = granted)
+          },
+          error = function(err) {
+            cli::cli_warn(c(
+              "Could not share trajectory access with {.val {username}}.",
+              i = conditionMessage(err)
+            ))
+          }
+        )
       }
     },
     error = function(err) {

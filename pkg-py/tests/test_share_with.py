@@ -44,11 +44,17 @@ def connect_double(
     *,
     users: dict[str, str] | None = None,
     permitted: Any = None,
+    refused: list[str] | None = None,
     fail: str | None = None,
 ) -> tuple[ConnectClient, list[httpx.Request]]:
-    """A Connect server with the given users and existing permissions."""
+    """A Connect server with the given users and existing permissions.
+
+    A grant for a principal in `refused` gets the 400 Connect gives the
+    content's owner.
+    """
     users = DIRECTORY if users is None else users
     permitted = [] if permitted is None else permitted
+    refused = [] if refused is None else refused
     seen: list[httpx.Request] = []
     page_size = 500
 
@@ -60,6 +66,8 @@ def connect_double(
         if path.endswith("/permissions") and request.method == "GET":
             return httpx.Response(200, json=permitted)
         if path.endswith("/permissions"):
+            if json.loads(request.read())["principal_guid"] in refused:
+                return httpx.Response(400, json={"code": 74})
             return httpx.Response(200, json={})
         if path.endswith("/users"):
             prefix = request.url.params["prefix"].lower()
@@ -112,13 +120,15 @@ def test_the_grant_matches_the_shared_fixture() -> None:
 
 @pytest.mark.parametrize("case", SHARING, ids=lambda case: case["name"])
 def test_who_gets_a_grant_matches_the_shared_fixture(case: dict[str, Any]) -> None:
-    client, seen = connect_double(permitted=case["permitted"])
+    refused = case.get("refused", [])
+    client, seen = connect_double(permitted=case["permitted"], refused=refused)
 
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         share_trajectory_access(case["usernames"], client=client)
 
-    assert [grant["principal_guid"] for grant in grants(seen)] == case["expected"]
+    granted = [grant["principal_guid"] for grant in grants(seen)]
+    assert [guid for guid in granted if guid not in refused] == case["expected"]
     warned = any("Could not share" in str(warning.message) for warning in caught)
     assert warned == case.get("warns", False)
 
@@ -170,6 +180,20 @@ def test_an_unknown_username_warns_rather_than_raising() -> None:
         share_trajectory_access(["mallory"], client=client)
 
     assert grants(seen) == []
+
+
+def test_a_refused_user_is_tried_again_next_time() -> None:
+    # Only a grant that went through is remembered, so a refusal the
+    # publisher fixes on Connect succeeds when the agent is next built.
+    client, seen = connect_double(refused=["guid-ada"])
+
+    with pytest.warns(UserWarning, match="'ada'"):
+        share_trajectory_access(["ada"], client=client)
+    before = len(grants(seen))
+    with pytest.warns(UserWarning, match="'ada'"):
+        share_trajectory_access(["ada"], client=client)
+
+    assert len(grants(seen)) == before + 1
 
 
 def test_a_server_failure_warns_rather_than_raising() -> None:

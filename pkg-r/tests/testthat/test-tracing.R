@@ -218,7 +218,11 @@ test_that("share_trajectory_access grants who the shared fixture says", {
     added <- character()
     httr2::local_mocked_responses(function(req) {
       if (!is.null(req$body)) {
-        added <<- c(added, req$body$data$principal_guid)
+        principal <- req$body$data$principal_guid
+        if (principal %in% unlist(case$refused)) {
+          return(httr2::response(400L, request = req))
+        }
+        added <<- c(added, principal)
         return(json_response(req, structure(list(), names = character())))
       }
       if (grepl("/permissions$", req$url)) {
@@ -323,6 +327,31 @@ test_that("share_trajectory_access skips usernames already handled", {
   share_trajectory_access("jdoe")
 
   expect_equal(state$lookups, 1)
+})
+
+# Only a grant that went through is remembered, so a refusal the publisher
+# fixes on Connect succeeds when the agent is next built.
+test_that("share_trajectory_access tries a refused user again", {
+  withr::local_envvar(CONNECT_CONTENT_GUID = "content-guid")
+  clear_granted_access()
+  state <- new.env()
+  state$attempts <- 0
+  local_mocked_bindings(
+    connect_client = function(...) list(server = "s", api_key = "k"),
+    connect_collaborator_principals = function(client, guid) character(),
+    connect_user_guid = function(client, username, ...) {
+      paste0("guid-", username)
+    },
+    connect_add_collaborator = function(client, guid, principal_guid) {
+      state$attempts <- state$attempts + 1
+      rlang::abort("HTTP 400 Bad Request.")
+    }
+  )
+
+  expect_warning(share_trajectory_access("jdoe"), "jdoe")
+  expect_warning(share_trajectory_access("jdoe"), "jdoe")
+
+  expect_equal(state$attempts, 2)
 })
 
 test_that("share_trajectory_access warns rather than errors on failure", {

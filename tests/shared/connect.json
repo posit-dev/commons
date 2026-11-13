@@ -109,7 +109,7 @@
     }
   },
   "sharing": {
-    "description": "Who gets a grant, given the usernames asked for and the permissions that already exist on the content. `permitted` is the permissions response, and `expected` lists the principals granted, in order. A case with `warns` set expects a warning. Test doubles resolve username `x` to principal `guid-x`.",
+    "description": "Who gets a grant, given the usernames asked for and the permissions that already exist on the content. `permitted` is the permissions response, and `expected` lists the principals granted, in order. Connect answers a grant for a principal in `refused` with a 4xx, as it does for the content's owner or an account that cannot publish. A case with `warns` set expects a warning. Test doubles resolve username `x` to principal `guid-x`.",
     "cases": [
       {
         "name": "a user with no permission is granted one",
@@ -158,6 +158,14 @@
         "usernames": ["ada"],
         "permitted": {},
         "expected": [],
+        "warns": true
+      },
+      {
+        "name": "a user Connect refuses does not stop the grants after it",
+        "usernames": ["grace", "ada"],
+        "permitted": [],
+        "refused": ["guid-grace"],
+        "expected": ["guid-ada"],
         "warns": true
       }
     ]
