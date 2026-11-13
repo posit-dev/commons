@@ -79,6 +79,17 @@ raises there only if a table declaring definitions matched no exposed
 relation, or if a definition names an authored column the selected
 relation does not have.
 
+A Snowflake selection also imports the warehouse's semantic views, and a
+Databricks selection its metric views. Their public metrics become
+trusted calculations, which their dimensions can group and filter. A
+view named in `tables` is read and checked for access when the source is
+created, and raises if it cannot be used. A view a namespace selection
+reaches is listed when the source is created and read only when the
+agent first inspects or uses it. Naming relations exactly also imports,
+where it can, the views in the same schemas that read only those
+relations; their access is checked only when the agent uses one. Name a
+view in `tables` to be sure it is imported.
+
 semantic_layer(*items: 'Any') -> 'SemanticLayer'
 
 Collect measures into a semantic layer.
@@ -202,7 +213,7 @@ Tell the next turn that the session behind its history is gone.
 The objects the constructors return, and the values they carry.
 
 
-DataSource(backend: 'Backend', tables: 'list[str]', table_ids: 'dict[str, TableId]' = <factory>, pending: '_PendingPins | None' = None, dictionary: 'DataDictionary | None' = None, relations: 'dict[str, Relation] | None' = None, manifest: 'Manifest | None' = None, session: 'SessionSnapshot | None' = None, definition_bindings: 'dict[str, Any] | None' = None) -> None
+DataSource(backend: 'Backend', tables: 'list[str]', table_ids: 'dict[str, TableId]' = <factory>, pending: '_PendingPins | None' = None, dictionary: 'DataDictionary | None' = None, relations: 'dict[str, Relation] | None' = None, manifest: 'Manifest | None' = None, session: 'SessionSnapshot | None' = None, definition_bindings: 'dict[str, Any] | None' = None, semantic_models: 'dict[str, SemanticModel]' = <factory>, semantic_stubs: 'dict[str, SemanticStub]' = <factory>) -> None
 
 Tables an agent can query, and the dictionary that describes them.
 
@@ -287,7 +298,9 @@ round trip worth paying for.
 
 `exclude` takes unqualified object-name globs to drop from a
 warehouse catalog listing, such as `"TMP_*"`. Only a warehouse has a
-listing to drop from, so any other engine refuses it.
+listing to drop from, so any other engine refuses it. A glob matches
+a semantic view by its own name, not by the tables it reads, so a
+view over an excluded table can still answer metric queries.
 
 On a warehouse `dictionary` is taken here because the catalog listing
 is folded into it during construction; on any other engine it is
@@ -453,6 +466,8 @@ The table below lists how each provenance outcome can occur:
 |---|---|
 | A trusted Python [measure](#semantic-layer) | `Trusted` <img class="commons-documentation-marker" src="assets/figs/trusted-icon.svg" alt=""> |
 | A [data dictionary metric](#definitions), possibly grouped or filtered with definitions | `Trusted` <img class="commons-documentation-marker" src="assets/figs/trusted-icon.svg" alt=""> |
+| A metric from a [Snowflake semantic view](#warehouse-semantic-layers), possibly grouped or filtered by its dimensions | `Trusted` <img class="commons-documentation-marker" src="assets/figs/trusted-icon.svg" alt=""> |
+| A verified query from a [Snowflake semantic view](#warehouse-semantic-layers) | `Trusted` <img class="commons-documentation-marker" src="assets/figs/trusted-icon.svg" alt=""> |
 | Custom SQL, including SQL that uses [data dictionary definitions](#definitions) | `Cited` <img class="commons-documentation-marker" src="assets/figs/citation-mark.svg" alt=""> when the answer quotes a trusted source and `commons` verifies the quote; otherwise `Untrusted` <img class="commons-documentation-marker" src="assets/figs/warning-icon.svg" alt=""> |
 | Custom Python | `Cited` <img class="commons-documentation-marker" src="assets/figs/citation-mark.svg" alt=""> when the answer quotes a trusted source and `commons` verifies the quote; otherwise `Untrusted` <img class="commons-documentation-marker" src="assets/figs/warning-icon.svg" alt=""> |
 | No data tool used (for example, the agent already had the information, or no accessible information answered the question) | No provenance outcome |
@@ -467,7 +482,7 @@ The agent does not decide the provenance outcome. `commons` derives it from the 
 
 | Layer | Sources | Role |
 |---|---|---|
-| Semantic layer | Measures in `.py` files and [`definitions`](#definitions) in `data-dict.yaml` | Provides trusted calculations. |
+| Semantic layer | Measures in `.py` files, [`definitions`](#definitions) in `data-dict.yaml`, and [Snowflake semantic views](#warehouse-semantic-layers) | Provides trusted calculations. |
 | Context layer | Markdown files and descriptive fields in [`data-dict.yaml`](#data-dictionaries) | Informs custom SQL and guides interpretation. |
 
 ### Semantic layer
@@ -490,6 +505,14 @@ def species_at_site(
 When a user asks "Which species were observed at Oak Bluff?", the model reads the description of `site` and passes `"Oak Bluff"`. `commons` passes the connection of the data source named `biodiversity`, and the measure runs with both.
 
 `data-dict.yaml` files also add to the semantic layer through [`definitions`](#definitions).
+
+### Warehouse semantic layers
+
+If you have trusted metrics in [Snowflake semantic views](https://docs.snowflake.com/en/user-guide/views-semantic/overview), you can use those calculations directly with commons. It can also group or filter metrics by approved fields from the warehouse. Answers based on these warehouse-defined metrics have the `Trusted` provenance outcome and display the green check-shield provenance marker.
+
+A semantic view can also declare verified queries: fixed SQL that answers one question. The agent finds them beside the other trusted calculations and runs one exactly as the view declares it, with the `Trusted` outcome. commons reads a verified query only if it is one read-only `SELECT` or `WITH` statement. A view that declares any other kind of verified query cannot be read. If you name that view in `tables`, creating the source fails. If a database or schema selection reaches it, the agent gets the error when it first uses the view. If commons finds it over tables you named, commons skips it.
+
+A Snowflake data source imports the semantic views its `tables` selection reaches. A view that you name in `tables` is read and checked for access when you create the source. A view that a database or schema selection reaches is read only when the agent first uses it. When you name tables exactly, commons also imports the views over them, but only when the selection includes every table that a view reads.
 
 ### Context layer
 
@@ -812,7 +835,6 @@ While both Python and R packages are first-class implementations of `commons`, t
 
 | R-only feature | What a Python agent does instead |
 |---|---|
-| Snowflake semantic views and Databricks metric views as trusted calculations, with the `Trusted` outcome | Imports the catalog of a Snowflake or Databricks engine, but answers these questions with custom SQL, so `Cited` or `Untrusted` |
 | `trajectory_read()`, for reading logged conversations | No equivalent yet |
 | The commons agent skill for coding agents | Ships with the R package only |
 | Reports written as Quarto documents, shown in the chat's drawer and revised with `edit_artifact` | Answers in the chat only |
