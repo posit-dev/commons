@@ -4,6 +4,21 @@
 
 /* ---- Chat-level polish ---------------------------------------------- */
 
+/* Wraps a plot or table so a share button can sit beside its top-right
+ * corner. Loaded with the chat, not the share assets, so outputs lay out the
+ * same everywhere. */
+.commons-shareable {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.commons-shareable > :not(.commons-share-output) {
+  min-width: 0;
+}
+
 /* Set shinychat CSS variables */
 :root {
   --shiny-tool-card-spinner-color: var(--bs-secondary-color, #6c757d);
@@ -515,23 +530,32 @@ shiny-chat-container
   white-space: normal;
 }
 
-.commons-measure-result-value > table {
+/* A table may sit in a share wrapper; a gt table, nested deeper, keeps its
+   own styling. */
+.commons-measure-result-value > .commons-shareable:has(> table) {
+  width: auto;
+}
+
+.commons-measure-result-value > table,
+.commons-measure-result-value > .commons-shareable > table {
   border-collapse: collapse;
   font-size: 0.85rem;
   width: 100%;
 }
 
-.commons-measure-result-value > table th,
-.commons-measure-result-value > table td {
+.commons-measure-result-value > table :is(th, td),
+.commons-measure-result-value > .commons-shareable > table :is(th, td) {
   border-bottom: 1px solid var(--bs-border-color, #dee2e6);
   padding: 0.3rem 0.5rem;
 }
 
-.commons-measure-result-value > table th {
+.commons-measure-result-value > table th,
+.commons-measure-result-value > .commons-shareable > table th {
   font-weight: 600;
 }
 
-.commons-measure-result-value > table tbody tr:nth-child(even) {
+.commons-measure-result-value > table tbody tr:nth-child(even),
+.commons-measure-result-value > .commons-shareable > table tbody tr:nth-child(even) {
   background: var(--bs-tertiary-bg, #f3f4f6);
 }
 

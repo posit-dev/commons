@@ -245,7 +245,7 @@ run_r_html <- function(code, segments) {
     }
     if (seg$type == "plot") {
       dims <- plot_dimensions()
-      plot_html <- c(plot_html, sprintf(
+      plot_html <- c(plot_html, share_wrap(sprintf(
         paste0(
           "<img class=\"commons-run-plot\" src=\"data:image/png;base64,%s\" ",
           "alt=\"Plot produced by R code\" width=\"%d\" height=\"%d\"/>"
@@ -253,7 +253,7 @@ run_r_html <- function(code, segments) {
         plot_base64_data(seg$png),
         dims$width,
         dims$height
-      ))
+      ), "figure", plot_code_title(code)))
     } else {
       output <- c(
         output,

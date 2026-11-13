@@ -81,6 +81,15 @@ commons_app <- function(client, ...) {
 #' ordinary [bslib::bs_theme()] (via [shinychat::page_chat_theme()]), so it
 #' works anywhere a bslib theme does.
 #'
+#' @section Sharing on Posit Connect:
+#' On Posit Connect, viewers can publish a read-only copy of a conversation,
+#' document, plot, or table. Sharing is available only when the app runs on
+#' Posit Connect. Shared items are published as the viewer who shares it, so
+#' only viewers whose Connect account can publish content can share. Items
+#' can only be shared with people who can view the commons apps. Sharing
+#' works on a default Connect installation, but administrators may have
+#' turned it off.
+#'
 #' @param client An [agent()]. In a deployed app, create the agent
 #'   inside the server function and pass it to `commons_server()` so each
 #'   Shiny session gets its own agent state.
@@ -126,7 +135,13 @@ commons_server <- function(id, client, ...) {
   prewarm_on_idle(client)
 
   chat <- shinychat::chat_server(id, client = client, ...)
-  artifact_drawer_server(id, client)
+  share_input <- share_server(
+    id,
+    client,
+    chat,
+    session = shiny::getDefaultReactiveDomain()
+  )
+  artifact_drawer_server(id, client, share_input = share_input)
   # shinychat owns the conversation identity (it sets the client's
   # `conversation_id` binding, which ellmer stamps on its spans); commons
   # only needs to know that a restore happened.

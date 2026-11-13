@@ -86,6 +86,10 @@ The rows returned by SQL are not the only potentially sensitive information avai
 
 Only include facts and source code that may be shared with both the application's viewers and its model provider. If one audience should not see a fact, use separate applications with separate context or place the facts behind viewer credentials rather than asking the model to hide it from that audience.
 
+## Sharing results
+
+Viewers can publish a copy of a conversation, a document, a plot, or a table as static content they own. A copy holds what the viewer saw, including the results of queries run with their credentials, and anyone the copy is shared with sees those results without needing access to the data behind them. The dialog offers only people who can access the app.
+
 ## Logging trajectories
 
 Trajectory logging is disabled by default. With `agent(log = TRUE)`, commons asks ellmer to include message content in OpenTelemetry spans. These spans contain full conversation histories, including user messages, model responses, tool requests, and tool results. Treat them as another copy of the data available to the agent.

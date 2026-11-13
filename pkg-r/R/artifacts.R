@@ -156,6 +156,21 @@ artifact_get <- function(store, id) {
   if (is.null(artifact) || length(artifact$versions) == 0) NULL else artifact
 }
 
+# Resolves once every document has rendered its latest version, rendering
+# restored ones that were never opened.
+artifact_store_rendered <- function(store) {
+  if (is.null(store)) {
+    return(promises::promise_resolve(NULL))
+  }
+  for (id in ls(store$pending)) {
+    artifact_get(store, id)
+  }
+  rendered <- lapply(ls(store$artifacts), function(id) {
+    store$artifacts[[id]]$rendered
+  })
+  promises::promise_all(.list = drop_nulls(rendered))
+}
+
 artifact_materialize <- function(store, id) {
   artifact <- artifact_ensure(store, id)
   n <- length(artifact$versions)
@@ -490,6 +505,7 @@ artifact_commit <- function(store, id, title, source, run = NULL) {
   rendered <- promises::then(rendered, function(result) {
     artifact_settle(store, artifact, version, doc, run, result)
   })
+  artifact$rendered <- promises::catch(rendered, function(err) NULL)
   list(version = version, rendered = rendered)
 }
 

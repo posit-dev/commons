@@ -735,7 +735,11 @@ measure_plot_tool_result <- function(
     icon = bsicons::bs_icon("shield-check"),
     html = measure_display_with_result_html(
       args,
-      measure_result_html(rendered$html),
+      measure_result_html(share_wrap(
+        rendered$html,
+        "figure",
+        share_clean_title(value$labels$title) %||% title
+      )),
       metadata
     ),
     footer = footer,
@@ -813,7 +817,14 @@ measure_gt_table_tool_result <- function(
   model_note <- paste(model_note, collapse = " ")
   display_html <- measure_display_with_result_html(
     args,
-    measure_result_html(rendered$html, "commons-measure-gt-table"),
+    measure_result_html(
+      share_wrap(
+        rendered$html,
+        "table",
+        share_clean_title(gt_table_title(value)) %||% metadata$title
+      ),
+      "commons-measure-gt-table"
+    ),
     metadata
   )
   if (length(rendered$dependencies) > 0) {
@@ -982,7 +993,13 @@ run_sql_tool <- function(
 ) {
   res <- source_query(source, sql)
   body <- df_to_markdown(res)
-  display_md <- sprintf("```sql\n%s\n```\n\n%s", sql, body)
+  # Markdown gets shinychat's code highlighting, copy button, and table
+  # styling; the table stays HTML so the share wrapper survives.
+  display_md <- sprintf(
+    "```sql\n%s\n```\n\n%s",
+    sql,
+    share_wrap(df_to_html(res), "table")
+  )
   advert <- register_handle(handles, res)
   note <- applied_definitions_text(applied)
   entries <- dictionary_sql_entries(source, sql, source_name, tracker)
@@ -1186,7 +1203,7 @@ measure_args_html <- function(args) {
 measure_display_html <- function(args, value, metadata = NULL) {
   measure_display_with_result_html(
     args,
-    measure_result_html(format_measure_html(value)),
+    measure_result_html(format_measure_html(value, metadata$title)),
     metadata
   )
 }
@@ -1340,10 +1357,10 @@ measure_result_html <- function(content, class = NULL) {
 
 # Render a measure result for display: data frames become HTML tables; other
 # values reuse the text formatting, escaped for HTML.
-format_measure_html <- function(value) {
+format_measure_html <- function(value, title = NULL) {
   value <- collect_lazy_table(value)
   if (is.data.frame(value)) {
-    return(df_to_html(value))
+    return(share_wrap(df_to_html(value), "table", title))
   }
   html_escape(format_measure_value(value))
 }

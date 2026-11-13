@@ -168,3 +168,20 @@ div.commons-pending {
   color: #842029;
   text-decoration: underline dotted;
 }
+
+.commons-share-code {
+  margin: 1.5em 0;
+}
+
+.commons-share-code summary {
+  cursor: pointer;
+  color: #6c757d;
+}
+
+.commons-share-footer {
+  margin-top: 2.5em;
+  padding-top: 1em;
+  border-top: 1px solid #dee2e6;
+  font-size: 0.875em;
+  color: #6c757d;
+}

@@ -82,6 +82,8 @@
   };
 
   const register = () => {
+    // A shared copy is a static page with no Shiny.
+    if (!window.Shiny?.addCustomMessageHandler) return;
     window.Shiny.addCustomMessageHandler("commons-artifact", (msg) => {
       apply(msg);
       for (const el of connected) {
@@ -164,6 +166,19 @@ parent.postMessage("ready", "*");
   class CommonsArtifactView extends HTMLElement {
     connectedCallback() {
       connected.add(this);
+      const share = this.querySelector(".commons-artifact-share");
+      if (share && !share.dataset.bound) {
+        share.dataset.bound = "true";
+        share.addEventListener("click", () => {
+          const state = stateFor(this.getAttribute("view"));
+          if (!state.current || !window.Shiny?.setInputValue) return;
+          window.Shiny.setInputValue(
+            this.getAttribute("share-input"),
+            { artifact: state.current, nonce: Date.now() },
+            { priority: "event" }
+          );
+        });
+      }
       this.render();
     }
 
@@ -208,6 +223,12 @@ parent.postMessage("ready", "*");
       this.toggleAttribute("empty", !a);
       if (!a) return;
       status.textContent = statusText[a.status] ?? "";
+      const share = this.querySelector(".commons-artifact-share");
+      // The share config renders only for viewers who can share.
+      if (share) {
+        share.hidden =
+          a.status !== "ready" || !document.querySelector(".commons-share-config");
+      }
       notice.innerHTML = a.error ? `<p>${escape(a.error)}</p>` : "";
 
       const frame = this.frame();
@@ -279,6 +300,12 @@ parent.postMessage("ready", "*");
         const root = this.attachShadow({ mode: "open" });
         root.innerHTML = `<style>${chipStyle}</style><button type="button" part="button"><span class="shot"></span><span class="title"><slot></slot></span></button>`;
         root.querySelector("button").addEventListener("click", () => {
+          const shared = document.getElementById("commons-shared-documents");
+          if (shared) {
+            const path = JSON.parse(shared.textContent)[this.getAttribute("artifact")];
+            if (path) window.open(path, "_blank", "noopener");
+            return;
+          }
           const input = this.getAttribute("input");
           if (!input || !window.Shiny?.setInputValue) return;
           window.Shiny.setInputValue(

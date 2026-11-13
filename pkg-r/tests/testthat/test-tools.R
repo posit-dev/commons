@@ -423,8 +423,8 @@ test_that("run_sql_tool runs SQL and tags the result", {
   expect_equal(res@extra$display$title, "Retrieved data")
   expect_false(res@extra$display$open)
   expect_false(res@extra$display$show_request)
-  expect_match(res@extra$display$markdown, "```sql")
-  expect_match(res@extra$display$markdown, "SELECT count")
+  expect_match(res@extra$display$markdown, "```sql\nSELECT count", fixed = TRUE)
+  expect_match(res@extra$display$markdown, "data-commons-share-kind=\"table\"", fixed = TRUE)
 })
 
 test_that("run_sql_tool registers its result as a handle", {
