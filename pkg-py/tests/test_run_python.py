@@ -101,6 +101,10 @@ def test_the_preloaded_handles_name_the_registered_tools_that_store_results() ->
         description
     )
     description = run_python_description(
+        ["call_calculation", "run_sql"], has_measures=False, network="none"
+    )
+    assert "Results from call_calculation and run_sql are preloaded" in description
+    description = run_python_description(
         ["run_sql"], has_measures=False, network="none"
     )
     assert "Results from run_sql are preloaded" in description
