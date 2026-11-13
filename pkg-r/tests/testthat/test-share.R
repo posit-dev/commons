@@ -525,6 +525,26 @@ test_that("a failed access change is rolled back", {
   })
 })
 
+test_that("an output still streaming asks the viewer to wait", {
+  connect <- local_fake_connect()
+  s <- share_test_chat()
+  s$chat$status <- function() "streaming"
+  session <- ShareSession$new()
+
+  shiny::testServer(share_test_app(s), session = session, {
+    settle(session)
+    session$setInputs(chat_share_output = list(id = "0123456789abcdef", nonce = 1))
+    settle(session)
+
+    expect_false("POST content" %in% connect$requests)
+    expect_match(
+      session$modals[[length(session$modals)]]$html,
+      "Wait for the answer to finish.",
+      fixed = TRUE
+    )
+  })
+})
+
 test_that("an expired Connect session tells the viewer to reload", {
   connect <- local_fake_connect()
   connect$fail[["POST oauth/integrations/credentials"]] <- "session"

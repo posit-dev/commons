@@ -423,7 +423,10 @@ share_server <- function(id, client, chat, session) {
 
   shiny::observeEvent(input[[ids$output]], {
     target <- share_output_target(client, input[[ids$output]]$id)
-    if (is.null(target)) {
+    # ellmer adds a tool result to the turns only once the answer finishes.
+    if (is.null(target) && identical(chat$status(), "streaming")) {
+      share_modal("Share", "Wait for the answer to finish.")
+    } else if (is.null(target)) {
       share_modal("Share", "This is no longer in the conversation, so it can't be shared.")
     } else {
       offer(target)
