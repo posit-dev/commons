@@ -109,7 +109,7 @@
     }
   },
   "sharing": {
-    "description": "Who gets a grant, given the usernames asked for and the permissions that already exist on the content. `permitted` is the permissions response, and `expected` lists the principals granted, in order. Connect answers a grant for a principal in `refused` with a 4xx, as it does for the content's owner or an account that cannot publish. A case with `warns` set expects a warning. Test doubles resolve username `x` to principal `guid-x`.",
+    "description": "Who gets a grant, given the usernames asked for and the permissions that already exist on the content. `permitted` is the permissions response, and `expected` lists the principals granted, in order. Connect answers a grant for a principal in `refused` with a 4xx, as it does for the content's owner or an account that cannot publish. A case with `warns` set expects a warning. Test doubles resolve username `x` to principal `guid-x`, except a username in `unknown`, which no Connect user has.",
     "cases": [
       {
         "name": "a user with no permission is granted one",
@@ -167,6 +167,33 @@
         "refused": ["guid-grace"],
         "expected": ["guid-ada"],
         "warns": true
+      },
+      {
+        "name": "an unknown username does not stop the grants after it",
+        "usernames": ["mallory", "ada"],
+        "permitted": [],
+        "unknown": ["mallory"],
+        "expected": ["guid-ada"],
+        "warns": true
+      }
+    ]
+  },
+  "sharing_again": {
+    "description": "Which usernames a second share in the same process looks up on Connect. Each case shares with `usernames`, then with `again`, and `looked_up` lists the usernames the second share looks up. A grant that went through is not repeated. A refused one is tried again, so a fix the publisher makes on Connect takes effect when the agent is next built. `refused` means the same as in `sharing`.",
+    "cases": [
+      {
+        "name": "a granted user is not looked up again, in any case",
+        "usernames": ["ada"],
+        "again": ["ADA"],
+        "refused": [],
+        "looked_up": []
+      },
+      {
+        "name": "a refused user is looked up again",
+        "usernames": ["ada"],
+        "again": ["ada"],
+        "refused": ["guid-ada"],
+        "looked_up": ["ada"]
       }
     ]
   }

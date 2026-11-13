@@ -190,20 +190,19 @@ test_that("share_trajectory_access warns off Connect", {
   expect_snapshot(share_trajectory_access("jdoe"))
 })
 
-# Who gets a grant, and what the grant says, are shared with pkg-py; see
-# tests/shared/connect.json.
-test_that("share_trajectory_access grants who the shared fixture says", {
-  spec <- shared_fixture("connect")$sharing
-  expect_setequal(
-    vapply(spec$cases, function(case) length(case$expected) > 0, logical(1)),
-    c(TRUE, FALSE)
-  )
-
+# A Connect server for the shared sharing cases. Username `x` resolves to
+# `guid-x` unless it is in `case$unknown`, and a grant for a principal in
+# `case$refused` gets a 400. `state` records the grants that went through and
+# the usernames looked up.
+local_connect_double <- function(case, state, env = parent.frame()) {
   withr::local_envvar(
     CONNECT_CONTENT_GUID = "content-guid",
     CONNECT_SERVER = "https://connect.example.com",
-    CONNECT_API_KEY = "k"
+    CONNECT_API_KEY = "k",
+    .local_envir = env
   )
+  state$added <- character()
+  state$looked_up <- character()
   json_response <- function(req, body) {
     httr2::new_response(
       "GET", req$url, 200L,
@@ -212,27 +211,45 @@ test_that("share_trajectory_access grants who the shared fixture says", {
       request = req
     )
   }
-
-  for (case in spec$cases) {
-    clear_granted_access()
-    added <- character()
-    httr2::local_mocked_responses(function(req) {
+  httr2::local_mocked_responses(
+    function(req) {
       if (!is.null(req$body)) {
         principal <- req$body$data$principal_guid
         if (principal %in% unlist(case$refused)) {
           return(httr2::response(400L, request = req))
         }
-        added <<- c(added, principal)
+        state$added <- c(state$added, principal)
         return(json_response(req, structure(list(), names = character())))
       }
       if (grepl("/permissions$", req$url)) {
-        return(json_response(req, case$permitted))
+        return(json_response(req, case$permitted %||% list()))
       }
       prefix <- httr2::url_parse(req$url)$query$prefix
+      state$looked_up <- c(state$looked_up, prefix)
+      if (prefix %in% unlist(case$unknown)) {
+        return(json_response(req, list(results = list())))
+      }
       json_response(req, list(results = list(
         list(username = prefix, guid = paste0("guid-", prefix))
       )))
-    })
+    },
+    env = env
+  )
+}
+
+# Who gets a grant, what the grant says, and what a second share looks up are
+# shared with pkg-py; see tests/shared/connect.json.
+test_that("share_trajectory_access grants who the shared fixture says", {
+  spec <- shared_fixture("connect")$sharing
+  expect_setequal(
+    vapply(spec$cases, function(case) length(case$expected) > 0, logical(1)),
+    c(TRUE, FALSE)
+  )
+
+  for (case in spec$cases) {
+    clear_granted_access()
+    state <- new.env()
+    local_connect_double(case, state)
 
     if (isTRUE(case$warns)) {
       expect_warning(
@@ -244,8 +261,26 @@ test_that("share_trajectory_access grants who the shared fixture says", {
     }
 
     expect_equal(
-      added,
+      state$added,
       unlist(case$expected) %||% character(),
+      info = case$name
+    )
+  }
+})
+
+test_that("a second share looks up who the shared fixture says", {
+  for (case in shared_fixture("connect")$sharing_again$cases) {
+    clear_granted_access()
+    state <- new.env()
+    local_connect_double(case, state)
+
+    suppressWarnings(share_trajectory_access(unlist(case$usernames)))
+    state$looked_up <- character()
+    suppressWarnings(share_trajectory_access(unlist(case$again)))
+
+    expect_equal(
+      state$looked_up,
+      unlist(case$looked_up) %||% character(),
       info = case$name
     )
   }
@@ -304,54 +339,6 @@ test_that("share_trajectory_access looks a repeated username up once", {
   share_trajectory_access(c("jdoe", "JDOE"))
 
   expect_equal(state$lookups, 1)
-})
-
-test_that("share_trajectory_access skips usernames already handled", {
-  withr::local_envvar(CONNECT_CONTENT_GUID = "content-guid")
-  clear_granted_access()
-  state <- new.env()
-  state$lookups <- 0
-  local_mocked_bindings(
-    connect_client = function(...) list(server = "s", api_key = "k"),
-    connect_collaborator_principals = function(client, guid) character(),
-    connect_user_guid = function(client, username, ...) {
-      state$lookups <- state$lookups + 1
-      paste0("guid-", username)
-    },
-    connect_add_collaborator = function(client, guid, principal_guid) {
-      invisible(NULL)
-    }
-  )
-
-  share_trajectory_access("jdoe")
-  share_trajectory_access("jdoe")
-
-  expect_equal(state$lookups, 1)
-})
-
-# Only a grant that went through is remembered, so a refusal the publisher
-# fixes on Connect succeeds when the agent is next built.
-test_that("share_trajectory_access tries a refused user again", {
-  withr::local_envvar(CONNECT_CONTENT_GUID = "content-guid")
-  clear_granted_access()
-  state <- new.env()
-  state$attempts <- 0
-  local_mocked_bindings(
-    connect_client = function(...) list(server = "s", api_key = "k"),
-    connect_collaborator_principals = function(client, guid) character(),
-    connect_user_guid = function(client, username, ...) {
-      paste0("guid-", username)
-    },
-    connect_add_collaborator = function(client, guid, principal_guid) {
-      state$attempts <- state$attempts + 1
-      rlang::abort("HTTP 400 Bad Request.")
-    }
-  )
-
-  expect_warning(share_trajectory_access("jdoe"), "jdoe")
-  expect_warning(share_trajectory_access("jdoe"), "jdoe")
-
-  expect_equal(state$attempts, 2)
 })
 
 test_that("share_trajectory_access warns rather than errors on failure", {

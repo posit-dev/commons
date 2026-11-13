@@ -22,6 +22,7 @@ from ._shared import load_shared_fixture
 SPEC = load_shared_fixture("connect")
 GRANT: dict[str, Any] = SPEC["collaborator_grant"]
 SHARING: list[dict[str, Any]] = SPEC["sharing"]["cases"]
+SHARING_AGAIN: list[dict[str, Any]] = SPEC["sharing_again"]["cases"]
 GUID = "01234567-89ab-cdef-0123-456789abcdef"
 DIRECTORY = {"ada": "guid-ada", "grace": "guid-grace"}
 
@@ -121,7 +122,14 @@ def test_the_grant_matches_the_shared_fixture() -> None:
 @pytest.mark.parametrize("case", SHARING, ids=lambda case: case["name"])
 def test_who_gets_a_grant_matches_the_shared_fixture(case: dict[str, Any]) -> None:
     refused = case.get("refused", [])
-    client, seen = connect_double(permitted=case["permitted"], refused=refused)
+    users = {
+        name.lower(): f"guid-{name.lower()}"
+        for name in case["usernames"]
+        if name not in case.get("unknown", [])
+    }
+    client, seen = connect_double(
+        users=users, permitted=case["permitted"], refused=refused
+    )
 
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
@@ -133,16 +141,24 @@ def test_who_gets_a_grant_matches_the_shared_fixture(case: dict[str, Any]) -> No
     assert warned == case.get("warns", False)
 
 
-def test_a_username_handled_once_is_not_looked_up_again() -> None:
-    # Agents are typically built per session, and a durable grant does not
-    # need re-issuing on every one.
-    client, seen = connect_double()
+@pytest.mark.parametrize("case", SHARING_AGAIN, ids=lambda case: case["name"])
+def test_what_a_second_share_looks_up_matches_the_shared_fixture(
+    case: dict[str, Any],
+) -> None:
+    client, seen = connect_double(refused=case["refused"])
 
-    share_trajectory_access(["ada"], client=client)
-    before = len(seen)
-    share_trajectory_access(["ADA"], client=client)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        share_trajectory_access(case["usernames"], client=client)
+        before = len(seen)
+        share_trajectory_access(case["again"], client=client)
 
-    assert len(seen) == before
+    looked_up = [
+        request.url.params["prefix"]
+        for request in seen[before:]
+        if request.url.path.endswith("/users")
+    ]
+    assert looked_up == case["looked_up"]
 
 
 def test_a_username_repeated_in_one_call_is_looked_up_once() -> None:
@@ -180,20 +196,6 @@ def test_an_unknown_username_warns_rather_than_raising() -> None:
         share_trajectory_access(["mallory"], client=client)
 
     assert grants(seen) == []
-
-
-def test_a_refused_user_is_tried_again_next_time() -> None:
-    # Only a grant that went through is remembered, so a refusal the
-    # publisher fixes on Connect succeeds when the agent is next built.
-    client, seen = connect_double(refused=["guid-ada"])
-
-    with pytest.warns(UserWarning, match="'ada'"):
-        share_trajectory_access(["ada"], client=client)
-    before = len(grants(seen))
-    with pytest.warns(UserWarning, match="'ada'"):
-        share_trajectory_access(["ada"], client=client)
-
-    assert len(grants(seen)) == before + 1
 
 
 def test_a_server_failure_warns_rather_than_raising() -> None:
