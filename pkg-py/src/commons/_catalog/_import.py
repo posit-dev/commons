@@ -10,16 +10,19 @@ what was just learned.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from .._data_source import TableId
-from . import _databricks, _snowflake
+from .._semantic_models import SemanticModel, SemanticStub
+from . import _databricks, _snowflake, _snowflake_semantic
 from ._core import (
     Manifest,
     Relation,
     Selector,
     check_exclude,
+    check_object_limit,
+    excluded,
     id_type,
     merge_dictionary,
     table_registry,
@@ -29,6 +32,7 @@ from ._security import (
     check_session,
     require_queryable,
     require_queryable_relations,
+    require_queryable_semantic_models,
     session_snapshot,
 )
 
@@ -52,6 +56,8 @@ class ImportedCatalog:
     dictionary: Any | None
     definition_bindings: dict[str, Any] | None
     session: SessionSnapshot | None
+    semantic_models: dict[str, SemanticModel] = field(default_factory=dict)
+    semantic_stubs: dict[str, SemanticStub] = field(default_factory=dict)
 
 
 def is_warehouse(backend: Any) -> bool:
@@ -69,15 +75,42 @@ def import_catalog(
     check_exclude(exclude)
     session = session_snapshot(backend)
 
+    selectors = _selectors(backend, reader, tables)
+    semantic = None
+    if reader is _snowflake:
+        semantic = _snowflake_semantic.select_semantic_views(
+            backend, selectors, exclude
+        )
+        selectors = semantic.relation_selectors
+
     registry = table_registry(
-        _selectors(backend, reader, tables),
+        selectors,
         exact_relation=lambda selector: reader.exact_relation(backend, selector),
         list_relations=lambda selector: reader.list_relations(backend, selector),
         exclude=exclude,
     )
+    models: dict[str, SemanticModel] = {}
+    stubs: dict[str, SemanticStub] = {}
+    if semantic is not None:
+        # A namespace listing reports a semantic view among its objects too.
+        for label in semantic.views:
+            registry.relations.pop(label, None)
+            registry.validate.pop(label, None)
+        check_object_limit(len(registry.relations) + len(semantic.views))
     if registry.validate:
         require_queryable_relations(backend, registry.validate, registry.relations)
-    if not registry.relations:
+    if semantic is not None:
+        models = _semantic_models(
+            backend, semantic, registry.relations, registry.validate, exclude
+        )
+        stubs = {
+            label: view
+            for label, view in semantic.views.items()
+            if label not in semantic.validate and label not in models
+        }
+        check_object_limit(len(registry.relations) + len(models) + len(stubs))
+        require_queryable_semantic_models(backend, models, semantic.validate)
+    if not registry.relations and not models and not stubs:
         if registry.dropped:
             raise ValueError(
                 "The resolved catalog selection contains no objects: exclude "
@@ -109,7 +142,14 @@ def import_catalog(
     # round trip on first touch at the cost of serving a grant revoked in
     # between, and the sibling implementation re-probes for the same reason.
     manifest = Manifest.build(
-        merged.relations, namespace_selected=registry.namespace_selected
+        merged.relations,
+        namespace_selected=registry.namespace_selected,
+        semantic_stubs={
+            label: Relation(
+                id=stub.id, kind="semantic_view", description=stub.description
+            )
+            for label, stub in stubs.items()
+        },
     )
     return ImportedCatalog(
         tables=list(merged.relations),
@@ -119,7 +159,49 @@ def import_catalog(
         dictionary=merged.dictionary,
         definition_bindings=merged.definition_bindings,
         session=session,
+        semantic_models=models,
+        semantic_stubs=stubs,
     )
+
+
+def _semantic_models(
+    backend: Any,
+    semantic: _snowflake_semantic.SemanticSelection,
+    relations: dict[str, Relation],
+    validate: dict[str, TableId],
+    exclude: list[str] | None,
+) -> dict[str, SemanticModel]:
+    """The models read up front: those named exactly, and those they cover.
+
+    A namespace's views stay stubs until they are inspected or used, so a
+    broad selection costs one listing rather than a read per view.
+    """
+    models: dict[str, SemanticModel] = {}
+    unsupported: list[str] = []
+    for label in semantic.validate:
+        model = _snowflake_semantic.read_semantic_model(backend, semantic.views[label])
+        if isinstance(model, _snowflake_semantic.Unsupported):
+            unsupported.append(f"{label}: {model.reason}")
+        elif not (model.metrics or model.dimensions or model.facts):
+            unsupported.append(f"{label}: {_snowflake_semantic.NO_PUBLIC_MEMBER}")
+        else:
+            models[label] = model
+    if unsupported:
+        raise ValueError(
+            "Some selected Snowflake semantic views are not supported:\n"
+            + "\n".join(f"* {line}" for line in unsupported)
+        )
+    associated = _snowflake_semantic.associated_models(
+        backend, relations, list(validate), models, exclude
+    )
+    for label, model in associated.items():
+        models.setdefault(label, model)
+    hidden = excluded(
+        [(model.identity or model.id).table for model in models.values()], exclude
+    )
+    return {
+        label: model for (label, model), drop in zip(models.items(), hidden) if not drop
+    }
 
 
 def _selectors(backend: Any, reader: Any, tables: Any) -> list[Selector]:

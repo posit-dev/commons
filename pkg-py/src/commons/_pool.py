@@ -15,12 +15,25 @@ from typing import TYPE_CHECKING, Any
 from chatlas import ContentToolResult
 from sqlglot import expressions as exp
 
+from ._catalog._snowflake_semantic import metric_sql
 from ._citations import tool_result
 from ._definitions import ExportRecord, applied_text
 from ._display import TRUSTED_CALL, measure_display_html
 from ._measures import Measure, measure_schema_text
 from ._provenance import Tag
 from ._rows import rows_to_markdown
+from ._semantic_models import (
+    MemberRow,
+    SemanticRegistry,
+    hydrate,
+    member_pool_text,
+    metric_origin,
+    resolve_filters,
+    resolve_members,
+    semantic_registry,
+    stub_pool_text,
+    validate_arguments,
+)
 from ._sql_guard import sqlglot_dialect
 
 if TYPE_CHECKING:
@@ -88,11 +101,14 @@ def search_pool_text(
     registry: Registry,
     query: str,
     source_names: Sequence[str] = (),
+    semantic: SemanticRegistry | None = None,
 ) -> str:
     """The blocks `search_pool` shows for the best matches in the pool."""
     records = registry.records
     entries = list(measures.values())
-    if not entries and not records:
+    members = semantic.members if semantic is not None else []
+    stubs = semantic.stubs if semantic is not None else []
+    if not entries and not records and not members and not stubs:
         return "The semantic layer is empty."
 
     catalog = [f"{record.name} {record.description}" for record in entries]
@@ -111,6 +127,26 @@ def search_pool_text(
         )
         for record in records
     ]
+    catalog += [
+        " ".join(
+            part or ""
+            for part in (
+                row.name,
+                row.model,
+                row.kind,
+                row.label,
+                row.description,
+                row.synonyms,
+            )
+        )
+        for row in members
+    ]
+    catalog += [
+        " ".join(
+            part or "" for part in (row.name, row.model, row.backend, row.description)
+        )
+        for row in stubs
+    ]
 
     hits = lexical_rank(query, catalog)
     if not hits:
@@ -118,12 +154,29 @@ def search_pool_text(
             f'Nothing in the semantic layer matches "{query}". '
             "Consider writing a SQL query."
         )
-    blocks = [
-        measure_schema_text(entries[hit], source_names=source_names)
-        if hit < len(entries)
-        else definition_pool_text(records[hit - len(entries)], records)
-        for hit in hits
-    ]
+    blocks = []
+    for hit in hits:
+        if hit < len(entries):
+            blocks.append(measure_schema_text(entries[hit], source_names=source_names))
+            continue
+        hit -= len(entries)
+        if hit < len(records):
+            blocks.append(definition_pool_text(records[hit], records))
+            continue
+        hit -= len(records)
+        if hit < len(members):
+            row = members[hit]
+            assert semantic is not None
+            blocks.append(
+                member_pool_text(
+                    row,
+                    members,
+                    source_names,
+                    semantic.parameters.get((row.source, row.model)),
+                )
+            )
+            continue
+        blocks.append(stub_pool_text(stubs[hit - len(members)], source_names))
     return "\n\n".join(blocks)
 
 
@@ -203,16 +256,34 @@ def call_metrics(
     dimensions: list[str] | None = None,
     filters: list[str] | None = None,
     where: list[dict[str, Any]] | None = None,
+    arguments: Mapping[str, Any] | None = None,
 ) -> ContentToolResult:
     """Compile and run a governed query over one table's definitions.
 
     The shape semantic layers converge on: metrics by dimensions with
     filters, plus simple column predicates. Names arrive as strings and are
     validated here, because the provider only ever sees `call_metrics`.
+    Metrics may instead come from one of the warehouse's own semantic models,
+    whose parameters `arguments` binds.
     """
     if not metrics:
-        raise ValueError("metrics must name at least one governed metric.")
+        raise ValueError("`metrics` must contain at least one metric name.")
     defs = registry.for_source(label)
+    hydrate(source, metrics)
+    members = semantic_registry({label: source}).members
+    unread = [s for s in source.semantic_stubs if s not in source.semantic_models]
+    origins = {metric_origin(name, defs, members, unread) for name in metrics}
+    if len(origins) > 1:
+        raise ValueError(
+            "Metrics in one call must come from either data-dict definitions or "
+            "one native semantic model."
+        )
+    if origins == {"semantic_model"}:
+        return _semantic_metrics(
+            source, handles, members, metrics, dimensions, filters, where, arguments
+        )
+    if arguments:
+        raise ValueError("`arguments` is supported only for native semantic metrics.")
     metric_records = _resolve_names(metrics, defs, "metric")
     _refuse_mixed_grain(
         metric_records,
@@ -286,6 +357,60 @@ def call_metrics(
         markdown=f"```sql\n{sql}\n```\n\n{rows_to_markdown(rows)}",
         # Only the arguments the caller gave: an omitted one is not how the
         # query ran, unlike a measure argument explicitly set to null.
+        html=measure_display_html(
+            {
+                name: value
+                for name, value in (
+                    ("metrics", metrics),
+                    ("dimensions", dimensions),
+                    ("filters", filters),
+                )
+                if value is not None
+            },
+            rows,
+            from_query=True,
+        ),
+    )
+
+
+def _semantic_metrics(
+    source: DataSource,
+    handles: HandleStore | None,
+    members: list[MemberRow],
+    metrics: list[str],
+    dimensions: list[str] | None,
+    filters: list[str] | None,
+    where: list[dict[str, Any]] | None,
+    arguments: Mapping[str, Any] | None,
+) -> ContentToolResult:
+    """Run native metrics through the one semantic model they belong to."""
+    metric_rows = resolve_members(metrics, members, "metric")
+    models = list(dict.fromkeys(row.model for row in metric_rows))
+    if len(models) != 1:
+        raise ValueError(
+            "Metrics in one call must belong to one native semantic model."
+        )
+    model = source.semantic_models[models[0]]
+    on_model = [row for row in members if row.model == models[0]]
+    values = validate_arguments(model.parameters, dict(arguments or {}))
+    sql = metric_sql(
+        model,
+        metric_rows,
+        resolve_members(dimensions, on_model, "dimension"),
+        resolve_filters(filters, on_model),
+        where,
+        on_model,
+        list(values),
+    )
+    params = {f"p{index}": value for index, value in enumerate(values.values())}
+    rows = source._query_compiled(sql, params or None)
+    advert = handles.register_rows(rows) if handles is not None else None
+    body = "\n\n".join(part for part in (rows_to_markdown(rows), advert) if part)
+    return tool_result(
+        body,
+        tag=Tag.A,
+        title=TRUSTED_CALL.settled,
+        markdown=f"```sql\n{sql}\n```\n\n{rows_to_markdown(rows)}",
         html=measure_display_html(
             {
                 name: value

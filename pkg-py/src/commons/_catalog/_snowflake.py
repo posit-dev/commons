@@ -46,7 +46,8 @@ def _quote_path(parts: list[str]) -> str:
 
 
 def _quote_string(value: str) -> str:
-    escaped = str(value).replace("'", "''")
+    """A string literal. Snowflake reads a backslash in one as an escape."""
+    escaped = str(value).replace("\\", "\\\\").replace("'", "''")
     return f"'{escaped}'"
 
 

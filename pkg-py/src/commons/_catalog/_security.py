@@ -16,6 +16,7 @@ longer apply and the source has to be rebuilt.
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, NoReturn
 
@@ -217,9 +218,9 @@ def changed_session_fields(
     ]
 
 
-def probe_sql(backend: Any, sql: str) -> Probe:
+def probe_sql(backend: Any, sql: str, params: Mapping[str, Any] | None = None) -> Probe:
     try:
-        backend.query(sql)
+        backend.query(sql, params) if params else backend.query(sql)
     except Exception as error:  # noqa: BLE001 - the failure is the answer
         return Probe(classify_access_error(error), error)
     return Probe("queryable")
@@ -396,3 +397,35 @@ def _abort_access(probe: Probe, label: str) -> NoReturn:
     raise CatalogAccessError(
         f"Could not verify query access to {label!r}."
     ) from probe.error
+
+
+def probe_semantic_model(backend: Any, model: Any) -> Probe:
+    """Whether the session can query a semantic model, from a zero-row query.
+
+    Each required parameter is bound to a typed null, which satisfies the
+    view's signature without inventing a business value.
+    """
+    from . import _snowflake_semantic
+
+    required = [name for name, p in model.parameters.items() if not p.has_default]
+    sql = None
+    if model.backend == _snowflake_semantic.BACKEND:
+        sql = _snowflake_semantic.probe_statement(model, required)
+    if sql is None:
+        return Probe(
+            "unknown", ValueError("The semantic model has no queryable public member.")
+        )
+    params = {f"p{index}": None for index in range(len(required))}
+    return probe_sql(backend, sql, params or None)
+
+
+def require_queryable_semantic_models(
+    backend: Any, models: dict[str, Any], validate: list[str]
+) -> None:
+    """Fail construction on a named semantic model the session cannot query."""
+    for label in validate:
+        if label not in models:
+            continue
+        probe = probe_semantic_model(backend, models[label])
+        if probe.state != "queryable":
+            _abort_access(probe, label)

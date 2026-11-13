@@ -46,7 +46,8 @@ query_metrics <- function(
   where = NULL,
   source_name = NULL,
   arguments = "{}",
-  trusted_only = FALSE
+  trusted_only = FALSE,
+  methods = FALSE
 ) {
   source <- resolve_sql_source(sources, source_name)
   label <- source_name %||% rlang::names2(sources)[[1]]
@@ -55,7 +56,15 @@ query_metrics <- function(
   semantic_models <- semantic_models_registry(sources)
   defs <- registry_defs(registry, label)
   semantic_members <- registry_semantic_members(semantic_models, label)
-  origins <- resolve_metric_origins(metrics, defs, semantic_members)
+  state <- data_source_state(source)
+  unread <- setdiff(names(state$semantic_stubs), names(state$semantic_models))
+  origins <- resolve_metric_origins(
+    metrics,
+    defs,
+    semantic_members,
+    unread,
+    methods = methods
+  )
   if (length(unique(origins)) > 1L) {
     cli::cli_abort(
       "Metrics in one call must come from either data-dict definitions or one native semantic model."
@@ -171,7 +180,13 @@ query_metrics <- function(
   )
 }
 
-resolve_metric_origins <- function(metrics, definitions, semantic_members) {
+resolve_metric_origins <- function(
+  metrics,
+  definitions,
+  semantic_members,
+  unread = character(),
+  methods = FALSE
+) {
   metrics <- strip_token_braces(metrics %||% character())
   if (length(metrics) == 0L) {
     cli::cli_abort("{.arg metrics} must contain at least one metric name.")
@@ -181,11 +196,21 @@ resolve_metric_origins <- function(metrics, definitions, semantic_members) {
     metric_origin,
     character(1),
     definitions = definitions,
-    semantic_members = semantic_members
+    semantic_members = semantic_members,
+    unread = unread,
+    methods = methods
   )
 }
 
-metric_origin <- function(name, definitions, semantic_members) {
+# `unread` are the labels of models listed but not read, whose metrics only a
+# `MODEL::metric` name reaches.
+metric_origin <- function(
+  name,
+  definitions,
+  semantic_members,
+  unread = character(),
+  methods = FALSE
+) {
   definition_named <- pool_name_candidates(name, definitions)
   definition_metrics <- definition_named[
     definition_named$kind == "metric",
@@ -217,23 +242,52 @@ metric_origin <- function(name, definitions, semantic_members) {
   } else if (nrow(definition_named) || nrow(semantic_named)) {
     kinds <- unique(c(definition_named$kind, semantic_named$kind))
     kind_text <- paste(kinds, collapse = " or a ")
-    cli::cli_abort(
-      "{.val {name}} is a {kind_text}, not a metric."
-    )
+    # Interpolated rather than spliced, so a label is never read as markup.
+    hint <- metric_origin_unread_text(unread, methods)
+    cli::cli_abort(c(
+      "{.val {name}} is a {kind_text}, not a metric.",
+      "i" = if (!is.null(hint)) "{hint}"
+    ))
   } else {
     available <- c(
       definitions$name[definitions$kind == "metric"],
       semantic_members$name[semantic_members$kind == "metric"]
     )
+    hint <- metric_origin_unread_text(unread, methods)
     cli::cli_abort(c(
       "No governed metric is named {.val {name}}.",
       "i" = if (length(available)) {
         "Available metrics: {.val {available}}."
+      } else if (length(unread)) {
+        "No metrics are known until a listed semantic model is read."
       } else {
         "No governed metrics are defined."
-      }
+      },
+      "i" = if (!is.null(hint)) "{hint}"
     ))
   }
+}
+
+# How many unread models a refusal names; a namespace can list thousands.
+metric_origin_unread_shown <- 10L
+
+metric_origin_unread_text <- function(unread, methods = FALSE) {
+  if (length(unread) == 0L) {
+    return(NULL)
+  }
+  shown <- utils::head(unread, metric_origin_unread_shown)
+  more <- length(unread) - length(shown)
+  search <- if (methods) "`$search()`" else "search_pool"
+  describe <- if (methods) "`$describe()`" else "describe_table"
+  listed <- paste(sprintf('"%s"', shown), collapse = ", ")
+  if (more > 0L) {
+    listed <- sprintf("%s, and %d more that %s finds", listed, more, search)
+  }
+  paste0(
+    "Semantic models not read yet: ", listed, ". ",
+    "Name a metric on one as `MODEL::metric`, or inspect one with ",
+    describe, "."
+  )
 }
 
 query_semantic_metrics <- function(

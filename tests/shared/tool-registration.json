@@ -1,12 +1,12 @@
 {
-  "description": "Which tools an agent registers for a given composition, and what each registered tool tells the model it is for. Registration is what the model can reach at all, and a tool description is prompt text it reads before choosing, so both must agree across the two packages. Cases declare only what registration and the descriptions turn on: the measures, the governed definitions, whether a source's catalog is too broad to list, and how many sources there are. Everything else about a source is each package's own business, so a runner fills it in. Tool arguments are deliberately not pinned here: a JSON Schema property and an ellmer type are different objects, and normalizing one into the other would pin the shape of the plumbing rather than what the model reads. Cases never declare a warehouse's own semantic objects or exact trusted queries, so the tools gated on them never register in either package: call_calculation, and the semantic-model half of call_metrics, wait on kata gcgj, which is deferred, and only the R package implements them today. The execution tool is left out for the same reason from the other end: it is run_r in R and run_python in Python, each built by its own owner rather than by build_commons_tools(), so a runner drops every name in execution_tools from what it enumerated before comparing.",
+  "description": "Which tools an agent registers for a given composition, and what each registered tool tells the model it is for. Registration is what the model can reach at all, and a tool description is prompt text it reads before choosing, so both must agree across the two packages. Cases declare only what registration and the descriptions turn on: the measures, the governed definitions, whether a source's catalog is too broad to list, and how many sources there are. Everything else about a source is each package's own business, so a runner fills it in. Tool arguments are deliberately not pinned here: a JSON Schema property and an ellmer type are different objects, and normalizing one into the other would pin the shape of the plumbing rather than what the model reads. The execution tool is left out for the same reason from the other end: it is run_r in R and run_python in Python, each built by its own owner rather than by build_commons_tools(), so a runner drops every name in execution_tools from what it enumerated before comparing.",
   "execution_tools": ["run_r", "run_python"],
   "pending_tools": {
-    "description": "Tools one package registers ahead of the other. Each runner drops these names from what it enumerated before comparing, and an entry is removed once both packages register the tool. edit_artifact belongs to documents, which the R package implements first; tests/shared/artifact-edit.json pins its behavior for when the Python package does.",
-    "names": ["edit_artifact"]
+    "description": "Tools one package registers ahead of the other. Each runner drops these names from what it enumerated before comparing, and an entry is removed once both packages register the tool. edit_artifact belongs to documents, which the R package implements first; tests/shared/artifact-edit.json pins its behavior for when the Python package does. call_calculation runs a warehouse semantic model's verified queries, which only the R package reads so far; a Snowflake semantic model left as a stub earns it in R.",
+    "names": ["edit_artifact", "call_calculation"]
   },
   "shapes": {
-    "description": "The compositions the cases below are built from. `measures` and `definitions` are the pool's two halves; a definition entry with `count` stands for that many definitions with the name as a prefix and a number after it, which is how a case reaches an index too long for the prompt. `catalog_searchable` marks the sources whose catalog listing is too broad to name in the prompt.",
+    "description": "The compositions the cases below are built from. `measures` and `definitions` are the pool's two halves; a definition entry with `count` stands for that many definitions with the name as a prefix and a number after it, which is how a case reaches an index too long for the prompt. `catalog_searchable` marks the sources whose catalog listing is too broad to name in the prompt. `semantic_models` and `semantic_stubs` are a warehouse's own semantic models on the first source: models read with the metrics and dimensions they offer, and models listed but not yet read.",
     "values": {
       "bare": {
         "sources": ["sales_db"],
@@ -77,6 +77,71 @@
         "measures": [],
         "definitions": [],
         "catalog_searchable": ["warehouse"]
+      },
+      "native_metrics": {
+        "sources": [
+          "sales_db"
+        ],
+        "measures": [],
+        "definitions": [],
+        "catalog_searchable": [],
+        "semantic_models": [
+          {
+            "name": "REVENUE_MODEL",
+            "metrics": [
+              "revenue"
+            ],
+            "dimensions": [
+              "region"
+            ]
+          }
+        ]
+      },
+      "semantic_stubs": {
+        "sources": [
+          "sales_db"
+        ],
+        "measures": [],
+        "definitions": [],
+        "catalog_searchable": [],
+        "semantic_stubs": [
+          {
+            "name": "REVENUE_MODEL",
+            "description": "Revenue semantics."
+          }
+        ]
+      },
+      "measures_and_semantic_stubs": {
+        "sources": [
+          "sales_db"
+        ],
+        "measures": [
+          {
+            "name": "order_count",
+            "description": "Count orders in a region."
+          }
+        ],
+        "definitions": [
+          {
+            "name": "net_revenue",
+            "table": "sales",
+            "kind": "metric"
+          }
+        ],
+        "catalog_searchable": [],
+        "semantic_models": [
+          {
+            "name": "REVENUE_MODEL",
+            "metrics": [
+              "revenue"
+            ]
+          }
+        ],
+        "semantic_stubs": [
+          {
+            "name": "FINANCE_MODEL"
+          }
+        ]
       }
     }
   },
@@ -172,11 +237,48 @@
           "run_sql",
           "load_skill"
         ]
+      },
+      {
+        "name": "a native semantic metric earns the pool and call_metrics",
+        "shape": "native_metrics",
+        "tools": [
+          "search_pool",
+          "call_metrics",
+          "search_context",
+          "describe_table",
+          "run_sql",
+          "load_skill"
+        ]
+      },
+      {
+        "name": "a semantic model left as a stub earns the pool and call_metrics",
+        "shape": "semantic_stubs",
+        "tools": [
+          "search_pool",
+          "call_metrics",
+          "search_context",
+          "describe_table",
+          "run_sql",
+          "load_skill"
+        ]
+      },
+      {
+        "name": "every trusted kind together earns every trusted tool",
+        "shape": "measures_and_semantic_stubs",
+        "tools": [
+          "search_pool",
+          "call_measure",
+          "call_metrics",
+          "search_context",
+          "describe_table",
+          "run_sql",
+          "load_skill"
+        ]
       }
     ]
   },
   "descriptions": {
-    "description": "What each registered tool says it is for. Four of them vary with the composition, and the cases cover every branch: search_pool names the kinds the pool holds, call_metrics names where the model reads metric names from, run_sql names the fallbacks it is the fallback for, and the rest are fixed whatever the agent is made of.",
+    "description": "What each registered tool says it is for. Four of them vary with the composition, and the cases cover every branch: search_pool names the kinds the pool holds, call_metrics names where the model reads metric names from, describe_table says whether it also describes semantic models, run_sql names the fallbacks it is the fallback for, and the rest are fixed whatever the agent is made of.",
     "cases": [
       {
         "name": "search_context",
@@ -261,6 +363,54 @@
         "shape": "broad_catalog",
         "tool": "search_catalog",
         "text": "Search a broad selected catalog by object name and description. Results are stable object names for describe_table."
+      },
+      {
+        "name": "search_pool over native semantic metrics",
+        "shape": "native_metrics",
+        "tool": "search_pool",
+        "text": "Search the semantic layer's trusted calculations: native semantic-model metrics (run with call_metrics). For every data question, use this before any other data tool, even if a table looks easy to query directly. Use the exact names it returns."
+      },
+      {
+        "name": "search_pool over a semantic model left as a stub",
+        "shape": "semantic_stubs",
+        "tool": "search_pool",
+        "text": "Search the semantic layer's trusted calculations and models: semantic models (inspect with describe_table). For every data question, use this before any other data tool, even if a table looks easy to query directly. Use the exact names it returns."
+      },
+      {
+        "name": "search_pool over every kind",
+        "shape": "measures_and_semantic_stubs",
+        "tool": "search_pool",
+        "text": "Search the semantic layer's trusted calculations and models: measures (run with call_measure) and governed definitions (apply as {{name}} tokens in run_sql) and native semantic-model metrics (run with call_metrics) and semantic models (inspect with describe_table). For every data question, use this before any other data tool, even if a table looks easy to query directly. Use the exact names it returns."
+      },
+      {
+        "name": "call_metrics beside native semantic metrics",
+        "shape": "native_metrics",
+        "tool": "call_metrics",
+        "text": "Compute trusted calculations from governed metrics, optionally grouped and filtered. Metric, grouping, and filter names come from the system prompt or search_pool; the query is compiled and run for you."
+      },
+      {
+        "name": "call_metrics beside a semantic model left as a stub",
+        "shape": "semantic_stubs",
+        "tool": "call_metrics",
+        "text": "Compute trusted calculations from governed metrics, optionally grouped and filtered. Metric, grouping, and filter names come from the system prompt, search_pool, or describe_table; the query is compiled and run for you."
+      },
+      {
+        "name": "describe_table beside a semantic model",
+        "shape": "native_metrics",
+        "tool": "describe_table",
+        "text": "Describe a catalog object. For tables, return columns, types, and documentation. For semantic models, return public members and any verified queries."
+      },
+      {
+        "name": "describe_table beside a semantic model left as a stub",
+        "shape": "semantic_stubs",
+        "tool": "describe_table",
+        "text": "Describe a catalog object. For tables, return columns, types, and documentation. For semantic models, return public members and any verified queries."
+      },
+      {
+        "name": "run_sql beside native semantic metrics",
+        "shape": "native_metrics",
+        "tool": "run_sql",
+        "text": "Run a read-only SELECT query against a data source."
       }
     ]
   }

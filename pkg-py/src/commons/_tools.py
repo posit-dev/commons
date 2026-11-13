@@ -56,6 +56,13 @@ from ._measures import Measure
 from ._pool import call_metrics, search_pool_text
 from ._provenance import TAG_EXTRA_KEY, Tag
 from ._rows import frame_rows, render_value, rows_to_markdown
+from ._semantic_models import (
+    SemanticRegistry,
+    describe,
+    description_text,
+    semantic_first_touch,
+    semantic_registry,
+)
 from ._skills import Skill, builtin_skills
 
 __all__ = [
@@ -121,14 +128,20 @@ class ToolContext:
 # ---- registration conditions ---------------------------------------------
 
 
-def pool_searchable(measures: Mapping[str, Measure], definitions: Registry) -> bool:
+def pool_searchable(
+    measures: Mapping[str, Measure],
+    definitions: Registry,
+    semantic: SemanticRegistry | None = None,
+) -> bool:
     """Whether the pool holds anything the system prompt does not already show.
 
     Measures are never listed in the prompt, and definitions past their index
     cap are not either; a search tool over a fully visible pool would only
-    cost the model a round trip to confirm what it can already read.
+    cost the model a round trip to confirm what it can already read. A
+    warehouse's own semantic members and models are never listed either.
     """
-    return bool(measures) or index_overflows(definitions)
+    has_semantic = semantic is not None and bool(semantic.members or semantic.stubs)
+    return bool(measures) or index_overflows(definitions) or has_semantic
 
 
 def registry_has_metrics(definitions: Registry) -> bool:
@@ -147,13 +160,18 @@ def build_commons_tools(context: ToolContext) -> list[Tool]:
     The code-execution tool is not among them: it carries a worker process and
     a sandbox, so it is built separately and appended by its owner.
     """
+    semantic = semantic_registry(context.sources)
     tools: list[Tool] = []
-    if pool_searchable(context.measures, context.definitions):
-        tools.append(_search_pool(context))
+    if pool_searchable(context.measures, context.definitions, semantic):
+        tools.append(_search_pool(context, semantic))
     if context.measures:
         tools.append(_call_measure(context))
-    if registry_has_metrics(context.definitions):
-        tools.append(_call_metrics(context))
+    if (
+        registry_has_metrics(context.definitions)
+        or semantic.has_metrics()
+        or semantic.stubs
+    ):
+        tools.append(_call_metrics(context, semantic))
     if any(catalog_searchable(source) for source in context.sources.values()):
         tools.append(_search_catalog(context))
     tools.extend(
@@ -293,7 +311,7 @@ def _resolve_source(
 # ---- search_pool ----------------------------------------------------------
 
 
-def _search_pool(context: ToolContext) -> Tool:
+def _search_pool(context: ToolContext, semantic: SemanticRegistry) -> Tool:
     # The pool's blocks name their source only for an agent that has several.
     source_names = tuple(context.sources) if len(context.sources) > 1 else ()
     kinds = []
@@ -301,11 +319,22 @@ def _search_pool(context: ToolContext) -> Tool:
         kinds.append("measures (run with call_measure)")
     if context.definitions.records:
         kinds.append("governed definitions (apply as {{name}} tokens in run_sql)")
+    if semantic.members:
+        kinds.append("native semantic-model metrics (run with call_metrics)")
+    if semantic.stubs:
+        kinds.append("semantic models (inspect with describe_table)")
+    searched = (
+        "trusted calculations and models" if semantic.stubs else "trusted calculations"
+    )
 
     def search_pool(query: str) -> ContentToolResult:
         return tool_result(
             search_pool_text(
-                context.measures, context.definitions, query, source_names
+                context.measures,
+                context.definitions,
+                query,
+                source_names,
+                semantic=semantic,
             ),
             title=TRUSTED_SEARCH.settled,
         )
@@ -313,7 +342,7 @@ def _search_pool(context: ToolContext) -> Tool:
     return _tool(
         search_pool,
         "search_pool",
-        f"Search the semantic layer's trusted calculations: {' and '.join(kinds)}. "
+        f"Search the semantic layer's {searched}: {' and '.join(kinds)}. "
         "For every data question, use this before any other data tool, even if "
         "a table looks easy to query directly. Use the exact names it returns.",
         _parameters(
@@ -524,18 +553,20 @@ def _format_measure_value(value: Any) -> str:
 # ---- call_metrics ---------------------------------------------------------
 
 
-def _call_metrics(context: ToolContext) -> Tool:
-    named = (
-        "the system prompt or search_pool"
-        if pool_searchable(context.measures, context.definitions)
-        else "the system prompt"
-    )
+def _call_metrics(context: ToolContext, semantic: SemanticRegistry) -> Tool:
+    if not pool_searchable(context.measures, context.definitions, semantic):
+        named = "the system prompt"
+    elif semantic.stubs:
+        named = "the system prompt, search_pool, or describe_table"
+    else:
+        named = "the system prompt or search_pool"
 
     def call_metrics_tool(
         metrics: list[str],
         dimensions: list[str] | None = None,
         filters: list[str] | None = None,
         where: list[dict[str, Any]] | None = None,
+        arguments: str = "{}",
         source: str | None = None,
     ) -> ContentToolResult:
         label, resolved = _resolve_source(context.sources, source)
@@ -548,6 +579,7 @@ def _call_metrics(context: ToolContext) -> Tool:
             dimensions=dimensions,
             filters=filters,
             where=where,
+            arguments=_parse_json_arguments(arguments),
         )
 
     return _tool(
@@ -560,11 +592,11 @@ def _call_metrics(context: ToolContext) -> Tool:
             {
                 "metrics": _string_array(
                     "Metric names to compute. All metrics in one call must "
-                    "belong to the same table."
+                    "belong to the same table or native semantic model."
                 ),
                 "dimensions": _string_array(
-                    "Derived or filter definition names, or documented column "
-                    "names, to group by."
+                    "Derived or filter definition names, documented column "
+                    "names, or native semantic dimensions to group by."
                 ),
                 "filters": _string_array("Governed filter names to apply."),
                 "where": {
@@ -573,7 +605,9 @@ def _call_metrics(context: ToolContext) -> Tool:
                     "items": {
                         "type": "object",
                         "properties": {
-                            "column": _string("A documented column name."),
+                            "column": _string(
+                                "A documented column or native semantic dimension name."
+                            ),
                             "op": {
                                 "type": "string",
                                 "enum": ["=", "!=", "<", "<=", ">", ">="],
@@ -588,6 +622,9 @@ def _call_metrics(context: ToolContext) -> Tool:
                         "additionalProperties": False,
                     },
                 },
+                "arguments": _string(
+                    "A JSON object of native semantic-model parameter values."
+                ),
             },
             ["metrics"],
             context.sources,
@@ -654,6 +691,10 @@ def _catalog_search(
 
 def _queryable(source: DataSource, manifest: Manifest) -> Callable[[str], bool]:
     def queryable(label: str) -> bool:
+        # A semantic view is not a relation a zero-row select can probe; its
+        # access is checked when it is read.
+        if label in source.semantic_stubs:
+            return True
         relation = manifest.objects[label]
         try:
             ensure_queryable(
@@ -713,6 +754,11 @@ DESCRIBE_TABLE_MAX_COLUMNS = 50
 
 
 def _describe_table(context: ToolContext) -> Tool:
+    has_models = any(
+        source.semantic_models or source.semantic_stubs
+        for source in context.sources.values()
+    )
+
     def describe_table(table: str, source: str | None = None) -> ContentToolResult:
         label, resolved = _resolve_source(context.sources, source)
         return tool_result(
@@ -720,16 +766,24 @@ def _describe_table(context: ToolContext) -> Tool:
             title=TABLE_INSPECTION.settled,
         )
 
+    if has_models:
+        description = (
+            "Describe a catalog object. For tables, return columns, types, and "
+            "documentation. For semantic models, return public members and any "
+            "verified queries."
+        )
+        table = "The object name, as listed in the system prompt or search results."
+    else:
+        description = (
+            "Describe a table: its columns, types, and documentation. Use this "
+            "before writing SQL against an unfamiliar table."
+        )
+        table = "The table name, as listed in the system prompt."
     return _tool(
         describe_table,
         "describe_table",
-        "Describe a table: its columns, types, and documentation. Use this "
-        "before writing SQL against an unfamiliar table.",
-        _parameters(
-            {"table": _string("The table name, as listed in the system prompt.")},
-            ["table"],
-            context.sources,
-        ),
+        description,
+        _parameters({"table": _string(table)}, ["table"], context.sources),
         TABLE_INSPECTION.running,
     )
 
@@ -738,11 +792,16 @@ def _describe_table_text(
     source: DataSource, label: str, table: str, tracker: FirstTouch
 ) -> str:
     check_session(source.backend, source.session)
+    if table in source.semantic_models or table in source.semantic_stubs:
+        return description_text(describe(source, table))
     table_id = source.table_ids.get(table)
     if table_id is None:
         raise ValueError(
             f"No table named {table!r}. Available tables: {', '.join(source.tables)}."
         )
+    context = (
+        [] if tracker.touched(label, table) else semantic_first_touch(source, table)
+    )
     ensure_queryable(source.backend, source.manifest, table, table_id)
     source.ensure_tables_loaded([table])
 
@@ -767,6 +826,7 @@ def _describe_table_text(
         parts.extend(
             dictionary.entry_parts(table, f"Columns of `{table}`:\n\n{columns}")
         )
+    parts += context
 
     tracker.mark(label, table)
     return "\n\n".join(parts)
@@ -864,19 +924,23 @@ def _first_touch_entries(
 ) -> list[str]:
     """Entries for the tables this query touches that the model has not seen.
 
-    Matching is by table name in the SQL text, which is reliable in a way
-    column matching is not; a false positive appends a harmless note.
+    An entry is the table's dictionary text and the context of the semantic
+    models that read it. Matching is by table name in the SQL text, which is
+    reliable in a way column matching is not; a false positive appends a
+    harmless note.
     """
     dictionary = source.dictionary
-    if dictionary is None:
-        return []
     entries: list[str] = []
     for table in source.tables:
         if tracker.touched(label, table):
             continue
         if not _table_mentioned(source, table, sql):
             continue
-        entry = dictionary.entry_text(table)
+        parts = []
+        if dictionary is not None and table in dictionary.tables:
+            parts.append(dictionary.entry_text(table))
+        parts += semantic_first_touch(source, table)
+        entry = "\n\n".join(part for part in parts if part)
         if not entry:
             continue
         tracker.mark(label, table)

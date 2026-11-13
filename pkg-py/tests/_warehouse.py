@@ -10,6 +10,8 @@ answer different queries because the two readers ask different ones, and a
 fake that answered both would hide a reader wired to the wrong warehouse.
 """
 
+import re
+
 from commons._catalog import MergedDictionary, Relation, merge_dictionary
 from commons._data_dictionary import DataDictionary
 from commons._data_source import TableId
@@ -23,6 +25,7 @@ __all__ = [
     "databricks_relation_row",
     "merge_shared_case",
     "relation_row",
+    "semantic_view_row",
 ]
 
 
@@ -43,6 +46,16 @@ def _shape(backend: str, group: str, accept) -> dict:
 def relation_row(name: str, catalog: str = "ANALYTICS", schema: str = "PUBLIC") -> dict:
     row = _shape("snowflake", "relations", lambda row: row["kind"] == "TABLE")
     row.update(name=name, database_name=catalog, schema_name=schema, comment="")
+    return row
+
+
+def semantic_view_row(
+    name: str, catalog: str = "ANALYTICS", schema: str = "PUBLIC"
+) -> dict:
+    """A `SHOW SEMANTIC VIEWS` row, shaped like the shared fixture's."""
+    case = load_shared_fixture("snowflake-semantic-views")["show_rows"]["cases"][0]
+    row = dict(case["rows"][0])
+    row.update(name=name, database_name=catalog, schema_name=schema)
     return row
 
 
@@ -76,6 +89,7 @@ def databricks_column_row(name: str) -> dict:
 class _Recorder:
     def __init__(self):
         self.queries: list[str] = []
+        self.params: list[dict | None] = []
         self.refuse: set[str] = set()
 
     def _probe(self, sql: str):
@@ -100,16 +114,30 @@ class FakeWarehouse(_Recorder):
     """A Snowflake standing in for the network, answering from canned rows."""
 
     def __init__(
-        self, dialect="snowflake", relations=None, role="REPORTER", columns=("ID",)
+        self,
+        dialect="snowflake",
+        relations=None,
+        role="REPORTER",
+        columns=("ID",),
+        semantic_views=None,
+        semantic_listing_fails=False,
     ):
         super().__init__()
         self._dialect = dialect
         self._relations = relations if relations is not None else ["SALES", "ORDERS"]
         self._columns = list(columns)
         self.role = role
+        # View name to the YAML specification Snowflake returns for it, all in
+        # ANALYTICS.PUBLIC.
+        self.semantic_views = dict(semantic_views or {})
+        self.semantic_listing_fails = semantic_listing_fails
+        self.yaml_reads: list[str] = []
+        # What a SEMANTIC_VIEW query that is not a zero-row probe returns.
+        self.semantic_rows: list[dict] = [{"revenue": 1200.0}]
 
-    def query(self, sql: str):
+    def query(self, sql: str, params=None):
         self.queries.append(sql)
+        self.params.append(params)
         if sql.startswith("SELECT CURRENT_USER()"):
             return [
                 {
@@ -130,6 +158,21 @@ class FakeWarehouse(_Recorder):
             ]
         if sql.startswith("DESC TABLE"):
             return [column_row(name) for name in self._columns]
+        if sql.startswith("SHOW SEMANTIC VIEWS"):
+            if self.semantic_listing_fails:
+                raise PermissionError("SHOW SEMANTIC VIEWS is not authorized")
+            return [
+                semantic_view_row(name)
+                for name in self.semantic_views
+                if f"'{name}'" in sql or "LIKE" not in sql
+            ]
+        if sql.startswith("SELECT SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW"):
+            name = re.findall(r'"([^"]*)"', sql)[-1]
+            self.yaml_reads.append(name)
+            return [{"SPECIFICATION": self.semantic_views[name]}]
+        if sql.startswith("SELECT * FROM SEMANTIC_VIEW(") and "LIMIT 0" not in sql:
+            self._probe(sql)
+            return [dict(row) for row in self.semantic_rows]
         if sql.startswith("SELECT * FROM"):
             return self._probe(sql)
         raise AssertionError(f"unexpected query: {sql}")
@@ -153,8 +196,9 @@ class FakeDatabricks(_Recorder):
         self._relations = relations if relations is not None else ["sales", "orders"]
         self._columns = list(columns)
 
-    def query(self, sql: str):
+    def query(self, sql: str, params=None):
         self.queries.append(sql)
+        self.params.append(params)
         if sql.startswith("SELECT CURRENT_USER()"):
             return [
                 {"principal": "analyst@example.com", "catalog": "main", "schema": "sales"}

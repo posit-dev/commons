@@ -11,10 +11,13 @@ from chatlas import Tool
 
 from commons import DataSource, data_source, measure
 from commons._catalog import Manifest, Relation
+from commons._data_source import TableId
 from commons._definitions import ExportRecord, Registry
 from commons._measures import Measure, as_measure
+from commons._semantic_models import SemanticStub
 from commons._tools import ToolContext, build_commons_tools, tool_description
 
+from ._semantic_fixture import fixture_model
 from ._shared import load_shared_fixture
 
 SPEC = load_shared_fixture("tool-registration")
@@ -88,6 +91,25 @@ def _tools(shape_name: str) -> list[Tool]:
     broad = set(shape["catalog_searchable"])
     sources = {name: _source(name in broad) for name in shape["sources"]}
     first = shape["sources"][0]
+    # A warehouse's own semantic models and stubs sit on the first source.
+    sources[first].semantic_models = {
+        spec["name"]: fixture_model(
+            {
+                "label": spec["name"],
+                "metrics": [{"name": name} for name in spec.get("metrics", [])],
+                "dimensions": [{"name": name} for name in spec.get("dimensions", [])],
+            }
+        )
+        for spec in shape.get("semantic_models", [])
+    }
+    sources[first].semantic_stubs = {
+        spec["name"]: SemanticStub(
+            id=TableId(catalog="ANALYTICS", schema="PUBLIC", table=spec["name"]),
+            backend="snowflake_semantic_view",
+            description=spec.get("description"),
+        )
+        for spec in shape.get("semantic_stubs", [])
+    }
     return build_commons_tools(
         ToolContext(
             sources=sources,

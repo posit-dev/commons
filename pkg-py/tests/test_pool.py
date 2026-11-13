@@ -357,14 +357,14 @@ def test_the_result_is_reachable_as_a_handle(source: DataSource) -> None:
 
 
 def test_no_metric_at_all_is_refused(source: DataSource) -> None:
-    with pytest.raises(ValueError, match="at least one governed metric"):
+    with pytest.raises(ValueError, match="at least one metric name"):
         metrics(source, Registry([record("net_revenue")]), metrics=[])
 
 
 def test_an_unknown_metric_names_the_ones_that_exist(source: DataSource) -> None:
     registry = Registry([record("net_revenue")])
 
-    with pytest.raises(ValueError, match="Available metrics: net_revenue"):
+    with pytest.raises(ValueError, match="Available metrics: .net_revenue."):
         metrics(source, registry, metrics=["profit"])
 
 
@@ -382,7 +382,7 @@ def test_an_ambiguous_metric_name_asks_for_a_qualified_one(
         [record("total"), record("total", table="regions", sql="count(*)")]
     )
 
-    with pytest.raises(ValueError, match=r"\{\{regions::total\}\}"):
+    with pytest.raises(ValueError, match="regions::total"):
         metrics(source, registry, metrics=["total"])
 
 

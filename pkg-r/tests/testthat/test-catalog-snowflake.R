@@ -617,3 +617,263 @@ test_that("Snowflake current namespace requires a database and schema", {
     error = TRUE
   )
 })
+
+# The Snowflake semantic view contract both packages consume. The Python suite
+# runs the same cases from the same file. See tests/shared/README.md.
+snowflake_semantic_cases <- function(section) {
+  cases <- shared_fixture("snowflake-semantic-views")[[section]]$cases
+  # An empty section would enumerate no cases and the runner would pass.
+  expect_gt(length(cases), 0)
+  cases
+}
+
+fixture_id <- function(id) as.list(id@name)
+
+fixture_member <- function(member) {
+  list(
+    name = member$name,
+    kind = member$kind,
+    parent = member$parent,
+    label = member$label,
+    description = member$description,
+    type = member$type,
+    synonyms = as.list(member$synonyms),
+    filter = member$filter
+  )
+}
+
+fixture_parameter <- function(parameter) {
+  list(
+    type = parameter$type,
+    description = parameter$description,
+    has_default = parameter$has_default,
+    default = parameter$default,
+    sql_type = parameter$sql_type
+  )
+}
+
+test_that("Snowflake SHOW rows read as the shared fixture says", {
+  for (case in snowflake_semantic_cases("show_rows")) {
+    rows <- if (length(case$rows)) {
+      do.call(rbind, lapply(case$rows, function(row) {
+        row[vapply(row, is.null, logical(1))] <- NA_character_
+        as.data.frame(row, stringsAsFactors = FALSE)
+      }))
+    } else {
+      data.frame(
+        name = character(),
+        database_name = character(),
+        schema_name = character(),
+        comment = character()
+      )
+    }
+    views <- lapply(snowflake_semantic_views_from_show(rows), function(view) {
+      list(id = fixture_id(view$id), description = view$description)
+    })
+    expect_equal(views, case$views, info = case$name)
+  }
+})
+
+test_that("Snowflake semantic YAML reads as the shared fixture says", {
+  for (case in snowflake_semantic_cases("specifications")) {
+    id <- do.call(DBI::Id, case$id)
+    identity <- if (is.null(case$identity)) id else do.call(DBI::Id, case$identity)
+    model <- tryCatch(
+      snowflake_semantic_model_from_spec(
+        id,
+        yaml::yaml.load(case$yaml),
+        description = case$description,
+        identity = identity
+      ),
+      commons_unsupported_semantic_parameter = function(err) err
+    )
+    if (!is.null(case$expected$unsupported)) {
+      expect_s3_class(model, "commons_unsupported_semantic_parameter")
+      expect_identical(
+        cli::ansi_strip(conditionMessage(model)),
+        case$expected$unsupported,
+        info = case$name
+      )
+      next
+    }
+    actual <- list(
+      name = model$name,
+      description = model$description,
+      dimensions = lapply(model$dimensions, fixture_member),
+      metrics = lapply(model$metrics, fixture_member),
+      facts = lapply(model$facts, fixture_member),
+      filters = lapply(model$filters, fixture_member),
+      parameters = lapply(model$parameters, fixture_parameter),
+      dependencies = lapply(model$dependencies, fixture_id),
+      dependencies_complete = model$dependencies_complete,
+      first_touch = as.list(model$context$first_touch),
+      retrieval = as.list(model$context$retrieval)
+    )
+    expected <- case$expected
+    if (length(expected$parameters) == 0L) {
+      expect_length(actual$parameters, 0L)
+      expected$parameters <- list()
+      actual$parameters <- list()
+    }
+    expect_equal(actual, expected, info = case$name)
+  }
+})
+
+test_that("Snowflake variable SQL types follow the shared fixture", {
+  for (case in snowflake_semantic_cases("sql_types")) {
+    expect_identical(
+      snowflake_semantic_sql_type(case$declared),
+      case$sql_type,
+      info = case$declared
+    )
+  }
+})
+
+test_that("Snowflake SEMANTIC_VIEW queries compile as the shared fixture says", {
+  section <- shared_fixture("snowflake-semantic-views")$metric_sql
+  model_spec <- section$model
+  parameters <- lapply(names(model_spec$parameters), function(name) {
+    parameter <- new_typed_argument(name, "string")
+    parameter$sql_type <- snowflake_semantic_sql_type(model_spec$parameters[[name]])
+    parameter
+  })
+  names(parameters) <- names(model_spec$parameters)
+  source <- fixture_semantic_source(list(model_spec), parameters = parameters)
+  model <- data_source_state(source)$semantic_models[[model_spec$label]]
+  members <- registry_semantic_members(
+    semantic_models_registry(list(warehouse = source)),
+    "warehouse"
+  )
+  expect_gt(length(section$cases), 0)
+  for (case in section$cases) {
+    result <- tryCatch({
+      arguments <- stats::setNames(
+        as.list(seq_along(case$arguments)),
+        unlist(case$arguments)
+      )
+      snowflake_semantic_metric_sql(
+        model,
+        resolve_semantic_members(unlist(case$metrics), members, "metric"),
+        resolve_semantic_members(unlist(case$dimensions), members, "dimension"),
+        resolve_semantic_filters(unlist(case$filters), members),
+        case$where,
+        members,
+        DBI::ANSI(),
+        arguments = arguments
+      )
+    }, error = function(err) err)
+    if (is.null(case$expected$error)) {
+      expect_identical(result, case$expected$sql, info = case$name)
+    } else {
+      expect_fixture_error(result, case$expected, info = case$name)
+    }
+  }
+})
+
+test_that("Snowflake semantic view selection follows the shared fixture", {
+  section <- shared_fixture("snowflake-semantic-views")$selection
+  expect_gt(length(section$cases), 0)
+  for (case in section$cases) {
+    warehouse <- section$warehouse
+    warehouse$semantic_listing_fails <- case$semantic_listing_fails
+    reply <- fixture_snowflake_reply(warehouse)
+    reads <- character()
+    local_mocked_bindings(
+      dbGetQuery = function(con, sql, ...) {
+        if (startsWith(sql, "SELECT SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW")) {
+          reads <<- c(reads, sub('.*"([^"]*)"\'\\).*', "\\1", sql))
+        }
+        reply(con, sql, ...)
+      },
+      .package = "DBI"
+    )
+    if (!is.null(case$object_limit)) {
+      local_mocked_bindings(catalog_object_limit = as.integer(case$object_limit))
+    }
+    tables <- lapply(case$tables, function(entry) {
+      if (is.list(entry)) do.call(DBI::Id, entry) else entry
+    })
+    result <- tryCatch(
+      snowflake_table_registry(
+        DBI::ANSI(),
+        if (is.null(case$tables)) NULL else tables,
+        exclude = unlist(case$exclude)
+      ),
+      error = function(err) err
+    )
+    if (!is.null(case$expected$error)) {
+      expect_fixture_error(result, case$expected, info = case$name)
+      if (!is.null(case$expected$reads)) {
+        expect_equal(as.list(reads), case$expected$reads, info = case$name)
+      }
+      next
+    }
+    expect_equal(as.list(result$labels), case$expected$tables, info = case$name)
+    expect_equal(
+      as.list(names(result$semantic_models)),
+      case$expected$models,
+      info = case$name
+    )
+    expect_equal(
+      as.list(names(result$semantic_stubs)),
+      case$expected$stubs,
+      info = case$name
+    )
+    if (!is.null(case$expected$reads)) {
+      expect_equal(as.list(reads), case$expected$reads, info = case$name)
+    }
+  }
+})
+
+test_that("listed Snowflake semantic views are read as the shared fixture says", {
+  warehouse <- shared_fixture("snowflake-semantic-views")$selection$warehouse
+  read_view <- snowflake_read_semantic_model
+  for (case in snowflake_semantic_cases("hydration")) {
+    reads <- character()
+    local_mocked_bindings(
+      dbGetQuery = fixture_snowflake_reply(warehouse),
+      .package = "DBI"
+    )
+    local_mocked_bindings(
+      snowflake_read_semantic_model = function(view, con, call) {
+        reads <<- c(reads, view$id@name[["table"]])
+        read_view(view, DBI::ANSI(), call = call)
+      },
+      source_query = function(source, sql) data.frame(revenue = 1200),
+      source_query_bind = function(source, sql, bindings) {
+        data.frame(revenue = 1200)
+      }
+    )
+    registry <- snowflake_table_registry(DBI::ANSI())
+    source <- test_source()
+    state <- data_source_state(source)
+    state$semantic_stubs <- registry$semantic_stubs
+    run <- function(step) {
+      if (!is.null(step$describe)) {
+        description <- source_describe(source, step$describe)
+        if (!is.null(description$error)) stop(description$error)
+        return(invisible())
+      }
+      call_metrics_impl(
+        empty_definitions(),
+        list(warehouse = source),
+        new_handle_store(),
+        metrics = unlist(step$call_metrics)
+      )
+    }
+    for (step in case$steps) {
+      result <- tryCatch(run(step), error = function(err) err)
+      if (!is.null(step$error)) {
+        expect_fixture_error(result, step$error, info = case$name)
+      } else {
+        expect_false(inherits(result, "error"), info = case$name)
+      }
+    }
+    expect_equal(as.list(reads), case$expected$reads, info = case$name)
+    expect_equal(
+      as.list(names(state$semantic_models)),
+      case$expected$models,
+      info = case$name
+    )
+  }
+})

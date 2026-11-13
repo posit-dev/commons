@@ -15,6 +15,7 @@ __all__ = [
     "Relation",
     "Selector",
     "check_exclude",
+    "check_object_limit",
     "excluded",
     "id_type",
     "matched_relation",
@@ -208,6 +209,17 @@ def _selector_id(selector: Selector) -> TableId:
     )
 
 
+def check_object_limit(count: int, object_limit: int | None = None) -> None:
+    if object_limit is None:
+        object_limit = OBJECT_LIMIT
+    if count > object_limit:
+        raise ValueError(
+            f"The selection resolves to {count} objects, above the "
+            f"supported limit of {object_limit}. Narrow tables to fewer "
+            f"catalog or schema prefixes."
+        )
+
+
 def table_registry(
     selectors: list[Selector],
     exact_relation: Callable[[Selector], Relation | None],
@@ -257,12 +269,7 @@ def table_registry(
         )
         if not hidden
     ]
-    if len(relations) > object_limit:
-        raise ValueError(
-            f"The selection resolves to {len(relations)} objects, above the "
-            f"supported limit of {object_limit}. Narrow tables to fewer "
-            f"catalog or schema prefixes."
-        )
+    check_object_limit(len(relations), object_limit)
 
     labelled: dict[str, Relation] = {}
     duplicated: list[str] = []
