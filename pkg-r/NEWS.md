@@ -1,7 +1,5 @@
 # commons (development version)
 
-* `agent(share_with = )` now adds a named user as a collaborator on the content even when they could already view the app, so they can read its trajectories. Collaborators have editor-level access to the whole content item. Previously that user was skipped and kept viewer-only access.
-
 * The `run_r` worker reads no R startup files, so variables set in a `.Renviron` file, like API keys, stay out of reach of model-written code.
 
 * `describe_table` works on SQL Server, Oracle, and other databases whose SQL has no `LIMIT` clause (#468).
