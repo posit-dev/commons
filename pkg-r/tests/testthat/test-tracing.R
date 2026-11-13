@@ -199,32 +199,45 @@ test_that("share_trajectory_access grants who the shared fixture says", {
     c(TRUE, FALSE)
   )
 
-  for (case in spec$cases) {
-    withr::local_envvar(CONNECT_CONTENT_GUID = "content-guid")
-    clear_granted_access()
-    state <- new.env()
-    state$added <- character()
-    permitted <- vapply(
-      Filter(function(perm) perm$role == "owner", case$permitted),
-      function(perm) perm$principal_guid,
-      character(1)
+  withr::local_envvar(
+    CONNECT_CONTENT_GUID = "content-guid",
+    CONNECT_SERVER = "https://connect.example.com",
+    CONNECT_API_KEY = "k"
+  )
+  json_response <- function(req, body) {
+    httr2::new_response(
+      "GET", req$url, 200L,
+      list(`Content-Type` = "application/json"),
+      charToRaw(jsonlite::toJSON(body, auto_unbox = TRUE)),
+      request = req
     )
-    local_mocked_bindings(
-      connect_client = function(...) list(server = "s", api_key = "k"),
-      connect_collaborator_principals = function(client, guid) permitted,
-      connect_user_guid = function(client, username, ...) {
-        paste0("guid-", tolower(username))
-      },
-      connect_add_collaborator = function(client, guid, principal_guid) {
-        state$added <- c(state$added, principal_guid)
-        invisible(NULL)
-      }
-    )
+  }
 
-    share_trajectory_access(unlist(case$usernames))
+  for (case in spec$cases) {
+    clear_granted_access()
+    added <- character()
+    httr2::local_mocked_responses(function(req) {
+      if (!is.null(req$body)) {
+        added <<- c(added, req$body$data$principal_guid)
+        return(json_response(req, structure(list(), names = character())))
+      }
+      if (grepl("/permissions$", req$url)) {
+        return(json_response(req, case$permitted))
+      }
+      prefix <- httr2::url_parse(req$url)$query$prefix
+      json_response(req, list(results = list(
+        list(username = prefix, guid = paste0("guid-", prefix))
+      )))
+    })
+
+    if (isTRUE(case$warns)) {
+      expect_warning(share_trajectory_access(unlist(case$usernames)))
+    } else {
+      expect_no_warning(share_trajectory_access(unlist(case$usernames)))
+    }
 
     expect_equal(
-      state$added,
+      added,
       unlist(case$expected) %||% character(),
       info = case$name
     )

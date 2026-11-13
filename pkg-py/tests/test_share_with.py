@@ -9,6 +9,7 @@ both in ``tests/shared/connect.json``.
 from __future__ import annotations
 
 import json
+import warnings
 from typing import Any
 
 import httpx
@@ -42,7 +43,7 @@ def _forget_grants() -> None:
 def connect_double(
     *,
     users: dict[str, str] | None = None,
-    permitted: list[dict[str, str]] | None = None,
+    permitted: Any = None,
     fail: str | None = None,
 ) -> tuple[ConnectClient, list[httpx.Request]]:
     """A Connect server with the given users and existing permissions."""
@@ -113,9 +114,12 @@ def test_the_grant_matches_the_shared_fixture() -> None:
 def test_who_gets_a_grant_matches_the_shared_fixture(case: dict[str, Any]) -> None:
     client, seen = connect_double(permitted=case["permitted"])
 
-    share_trajectory_access(case["usernames"], client=client)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        share_trajectory_access(case["usernames"], client=client)
 
     assert [grant["principal_guid"] for grant in grants(seen)] == case["expected"]
+    assert bool(caught) == case.get("warns", False)
 
 
 def test_a_username_handled_once_is_not_looked_up_again() -> None:
@@ -247,28 +251,6 @@ def test_a_malformed_user_search_warns_rather_than_raising() -> None:
         if request.url.path.endswith("/users"):
             return httpx.Response(200, json=["ada"])
         return httpx.Response(200, json=[])
-
-    client = ConnectClient(
-        "https://connect.example.com",
-        "the-api-key",
-        http=httpx.Client(transport=httpx.MockTransport(malformed)),
-    )
-
-    with pytest.warns(UserWarning, match="Could not share"):
-        share_trajectory_access(["ada"], client=client)
-
-
-def test_a_permissions_object_rather_than_a_list_warns() -> None:
-    # An empty object is not an empty permission list. Reading it as "nobody
-    # has access" would grant on the strength of a response commons could not
-    # actually read. Only the permissions call is wrong, so the warning cannot
-    # come from somewhere else in the sequence.
-    def malformed(request: httpx.Request) -> httpx.Response:
-        if request.url.path.endswith("/permissions"):
-            return httpx.Response(200, json={})
-        return httpx.Response(
-            200, json={"results": [{"username": "ada", "guid": "guid-ada"}]}
-        )
 
     client = ConnectClient(
         "https://connect.example.com",

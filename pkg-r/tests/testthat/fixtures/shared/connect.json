@@ -109,7 +109,7 @@
     }
   },
   "sharing": {
-    "description": "Who gets a grant, given the usernames asked for and the permissions that already exist on the content. `expected` lists the principals granted, in order. Test doubles resolve username `x` to principal `guid-x`.",
+    "description": "Who gets a grant, given the usernames asked for and the permissions that already exist on the content. `permitted` is the permissions response, and `expected` lists the principals granted, in order. A case with `warns` set expects a warning. Test doubles resolve username `x` to principal `guid-x`.",
     "cases": [
       {
         "name": "a user with no permission is granted one",
@@ -152,6 +152,13 @@
         "usernames": ["ada", "ADA"],
         "permitted": [],
         "expected": ["guid-ada"]
+      },
+      {
+        "name": "a permissions object rather than a list grants nobody",
+        "usernames": ["ada"],
+        "permitted": {},
+        "expected": [],
+        "warns": true
       }
     ]
   }

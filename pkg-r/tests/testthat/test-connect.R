@@ -232,47 +232,6 @@ test_that("connect_trace_lines explains auth failures on the traces endpoint", {
   )
 })
 
-test_that("connect_collaborator_principals keeps only the trace-access role", {
-  # A viewer holds a permission but cannot read traces, so treating them as
-  # already granted would leave share_with silently doing nothing for them.
-  httr2::local_mocked_responses(function(req) {
-    httr2::new_response(
-      "GET", req$url, 200L,
-      list(`Content-Type` = "application/json"),
-      charToRaw(jsonlite::toJSON(list(
-        list(principal_guid = "guid-owner", role = "owner"),
-        list(principal_guid = "guid-viewer", role = "viewer")
-      ), auto_unbox = TRUE)),
-      request = req
-    )
-  })
-
-  principals <- connect_collaborator_principals(
-    list(server = "https://connect.example.com", api_key = "k"),
-    "content-guid"
-  )
-
-  expect_equal(principals, "guid-owner")
-})
-
-test_that("connect_collaborator_principals rejects a permissions object", {
-  httr2::local_mocked_responses(function(req) {
-    httr2::new_response(
-      "GET", req$url, 200L,
-      list(`Content-Type` = "application/json"),
-      charToRaw("{}"), request = req
-    )
-  })
-
-  expect_error(
-    connect_collaborator_principals(
-      list(server = "https://connect.example.com", api_key = "k"),
-      "content-guid"
-    ),
-    "unexpected permissions response"
-  )
-})
-
 test_that("connect_user_guid pages past the first page of prefix matches", {
   pages <- list(
     lapply(1:500, function(i) {
