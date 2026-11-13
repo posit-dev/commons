@@ -245,17 +245,21 @@ test_that("share_trajectory_access warns rather than errors on failure", {
   expect_snapshot(share_trajectory_access("jdoe"))
 })
 
-test_that("an explicit content-capture opt-out is respected", {
-  withr::local_envvar(
-    OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = "false"
-  )
-  expect_no_warning(.res <- content_capture_enabled())
-  expect_false(.res)
+test_that("content_capture_enabled matches the shared capture cases", {
+  spec <- shared_fixture("traces")$content_capture
+  expect_gt(length(spec$cases), 0)
+  # Registered first, so it runs last: re-cache ellmer's capture flag once
+  # every case's variable is restored.
+  withr::defer(refresh_ellmer_otel_cache())
 
-  withr::local_envvar(
-    OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = "true"
-  )
-  expect_true(content_capture_enabled())
+  for (case in spec$cases) {
+    withr::local_envvar(
+      stats::setNames(case$value %||% NA_character_, spec$variable)
+    )
+    expect_no_warning(enabled <- content_capture_enabled())
+    expect_identical(enabled, case$enabled, info = case$name)
+    expect_identical(Sys.getenv(spec$variable), case$after, info = case$name)
+  }
 })
 
 test_that("missing content capture uses the ellmer fallback", {

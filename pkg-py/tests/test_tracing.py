@@ -1,14 +1,15 @@
-"""Setup spans: what commons records, and what happens without OpenTelemetry.
+"""Setup spans and trajectory logging: what commons records, and when.
 
-The span and attribute names used here are examples that exercise the helper.
-Nothing emits them yet: the names commons really records arrive with the
-modules that record them (kata w0t2), and the span contract R reads a
-trajectory back through is pinned by a shared fixture (kata 4frb).
+The span and attribute names used here are examples that exercise the helper,
+not the names commons records.
 """
 
 from __future__ import annotations
 
+import os
+import warnings
 from collections.abc import Iterator
+from typing import Any
 
 import pytest
 
@@ -23,7 +24,19 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
     InMemorySpanExporter,
 )
 
-from commons._tracing import TRACER_NAME, commons_span
+from commons._tracing import (
+    CAPTURE_VAR,
+    TRACER_NAME,
+    commons_span,
+    content_capture_enabled,
+    enable_trajectory_tracing,
+    tracing_configured,
+)
+
+from ._fresh_interpreter import run_in_fresh_interpreter
+from ._shared import load_shared_fixture
+
+CONTENT_CAPTURE = load_shared_fixture("traces")["content_capture"]
 
 # The global tracer provider can only be set once per process, so one provider
 # serves the whole module and each test clears the exporter instead.
@@ -48,6 +61,13 @@ def _clear_exporter() -> Iterator[None]:
 
 def exported() -> tuple[ReadableSpan, ...]:
     return _EXPORTER.get_finished_spans()
+
+
+def unset_capture(monkeypatch: pytest.MonkeyPatch) -> None:
+    # delenv records nothing for an absent variable, so a value the code sets
+    # would outlive the test. setenv first records it for removal.
+    monkeypatch.setenv(CAPTURE_VAR, "")
+    monkeypatch.delenv(CAPTURE_VAR)
 
 
 def test_span_is_recorded_with_its_name() -> None:
@@ -122,3 +142,107 @@ def test_the_span_ends_and_records_the_error_when_the_body_raises() -> None:
     assert span.end_time is not None
     assert span.status.is_ok is False
     assert [event.name for event in span.events] == ["exception"]
+
+
+def test_the_shared_capture_fixture_has_cases() -> None:
+    assert CONTENT_CAPTURE["variable"] == CAPTURE_VAR
+    assert CONTENT_CAPTURE["cases"]
+
+
+@pytest.mark.parametrize(
+    "case", CONTENT_CAPTURE["cases"], ids=lambda case: case["name"]
+)
+def test_content_capture_matches_the_shared_cases(
+    monkeypatch: pytest.MonkeyPatch, case: dict[str, Any]
+) -> None:
+    if case["value"] is None:
+        unset_capture(monkeypatch)
+    else:
+        monkeypatch.setenv(CAPTURE_VAR, case["value"])
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        enabled = content_capture_enabled()
+
+    assert enabled is case["enabled"]
+    assert os.environ[CAPTURE_VAR] == case["after"]
+
+
+def test_tracing_is_reported_as_configured_once_a_provider_is_installed() -> None:
+    # The module fixture installed one, so this is the configured case.
+    assert tracing_configured() is True
+
+
+def test_logging_off_leaves_capture_alone(monkeypatch: pytest.MonkeyPatch) -> None:
+    unset_capture(monkeypatch)
+
+    assert enable_trajectory_tracing(log=False) is False
+    assert CAPTURE_VAR not in os.environ
+
+
+def test_logging_on_with_tracing_active_turns_capture_on(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    unset_capture(monkeypatch)
+
+    assert enable_trajectory_tracing(log=True) is True
+    assert os.environ[CAPTURE_VAR] == "true"
+
+
+def test_logging_on_with_capture_turned_off_is_not_stamped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Spans without the messages read back as an empty trajectory.
+    monkeypatch.setenv(CAPTURE_VAR, "false")
+
+    assert enable_trajectory_tracing(log=True) is False
+    assert os.environ[CAPTURE_VAR] == "false"
+
+
+@pytest.mark.parametrize(
+    "env",
+    [{}, {"OTEL_TRACES_EXPORTER": "otlp"}],
+    ids=["nothing configured", "an exporter named but no provider installed"],
+)
+def test_logging_on_without_a_provider_configures_nothing(
+    env: dict[str, str],
+) -> None:
+    # commons installs no provider of its own, and with nothing to send spans
+    # to it leaves the capture variable as it found it.
+    output = run_in_fresh_interpreter(
+        """
+        import os
+
+        from opentelemetry import trace
+
+        from commons._tracing import CAPTURE_VAR, enable_trajectory_tracing
+
+        os.environ.pop(CAPTURE_VAR, None)
+        print(enable_trajectory_tracing(log=True))
+        print(CAPTURE_VAR in os.environ)
+        print(isinstance(trace.get_tracer_provider(), trace.ProxyTracerProvider))
+        """,
+        **env,
+    )
+
+    assert output.split() == ["False", "False", "True"]
+
+
+def test_logging_on_with_a_no_op_provider_is_not_stamped() -> None:
+    # Installing a no-op provider is a decision to turn tracing off.
+    output = run_in_fresh_interpreter(
+        """
+        import os
+
+        from opentelemetry import trace
+
+        from commons._tracing import CAPTURE_VAR, enable_trajectory_tracing
+
+        os.environ.pop(CAPTURE_VAR, None)
+        trace.set_tracer_provider(trace.NoOpTracerProvider())
+        print(enable_trajectory_tracing(log=True))
+        print(CAPTURE_VAR in os.environ)
+        """
+    )
+
+    assert output.split() == ["False", "False"]
