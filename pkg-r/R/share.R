@@ -963,7 +963,7 @@ share_access_note <- function(access, app_access = NULL) {
   }
   htmltools::div(
     class = "commons-share-note",
-    maybe_icon(if (identical(access, "app")) "people" else "lock"),
+    bsicons::bs_icon(if (identical(access, "app")) "people" else "lock"),
     htmltools::span(text)
   )
 }
@@ -975,7 +975,7 @@ share_copy_button <- function(url, copy_id) {
     disabled = if (is.null(url)) NA,
     `data-url` = url,
     `data-input` = copy_id,
-    if (is.null(url)) share_spinner() else maybe_icon("link-45deg"),
+    if (is.null(url)) share_spinner() else bsicons::bs_icon("link-45deg"),
     if (is.null(url)) "Preparing link\u2026" else "Copy link"
   )
 }
