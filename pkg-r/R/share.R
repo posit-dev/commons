@@ -1,44 +1,8 @@
-#' Share a conversation to Posit Connect
-#'
-#' `commons_share_button()` places a button that publishes a read-only copy of
-#' the conversation to Posit Connect. Put it in the page's toolbar, e.g.
-#' `page_chat(toolbar_global = bslib::toolbar(commons_share_button()))`;
-#' [commons_app()] includes it. While the button is on the page, documents the
-#' agent writes get the same control in the chat's drawer, and plots and
-#' tables get one beside them. Without it, nothing can be shared.
-#'
-#' The button appears only when the app runs on Posit Connect and its
-#' deployer has associated a Connect integration of the "Connect API" type
-#' with the "Visitor API Key" authentication type and a max role of Publisher
-#' or Admin. Through it, a copy is published as the viewer who shares it, so
-#' only viewers whose Connect account can publish content can share.
-#'
-#' Sharing opens a dialog with a link to the copy, which is published as the
-#' dialog opens. The copy is static content that belongs to the viewer who
-#' shared it. In the dialog, they add people and groups who can open it, or
-#' open it to anyone who can access the app: for an app shared with a list of
-#' people, that list is copied once, so people added to the app later aren't
-#' added to the copy. A first share canceled before its link is copied or
-#' anyone is added is deleted.
-#'
-#' The dialog offers only people who can access the app, but the copy belongs
-#' to the viewer, who can open it to anyone from the Connect dashboard. Treat
-#' that limit as a convenience, not a data boundary.
-#'
-#' A copy shows what was displayed, including the results of the agent's
-#' calculations, so anyone it is shared with sees those results without
-#' needing access to the data behind them. A shared plot or table includes the
-#' code that made it. Nothing in a copy can reach the model or continue the
-#' conversation. Sharing the same thing again opens the existing copy at the
-#' same link and, if what it shows has changed, offers to update it.
-#'
-#' @param id The ID of the chat element, matching [commons_server()].
-#'
-#' @return A [shiny::uiOutput()].
-#' @export
-commons_share_button <- function(id = "chat") {
-  shiny::uiOutput(paste0(id, "_share"), inline = TRUE)
-}
+# This class is private to shinychat, which has no API for adding toolbar
+# items; we use it knowingly. If shinychat changes it, the conversation's share
+# button just doesn't show up, while documents, plots, and tables can still be
+# shared. test-share.R checks, off CRAN, that page_chat() still renders it.
+shinychat_toolbar_selector <- ".shiny-chat-page-toolbar-global"
 
 # Returns the input the drawer's share control sets, or NULL when this
 # session can't share.
@@ -130,18 +94,10 @@ share_server <- function(id, client, chat, session) {
     }
   }
 
-  output[[ids$button]] <- shiny::renderUI({
-    shiny::req(can_share())
-    htmltools::tagList(
-      bslib::toolbar_input_button(
-        ns(ids$open),
-        label = "Share",
-        icon = share_icon(),
-        tooltip = "Share conversation"
-      ),
-      share_config_tag(ns(ids$output)),
-      commons_share_dependency()
-    )
+  shiny::observeEvent(can_share(), once = TRUE, {
+    if (isTRUE(can_share())) {
+      share_insert_ui(ns, ids, session)
+    }
   })
   output[[ids$people]] <- shiny::renderUI(
     share_people_ui(view$owner, view$people, ns(ids$remove), view$loading)
@@ -590,8 +546,36 @@ share_ids_for <- function(id) {
   ids <- as.list(paste0(id, "_share_", inputs))
   names(ids) <- inputs
   ids$document <- paste0(id, "_artifact_share")
-  ids$button <- paste0(id, "_share")
   ids
+}
+
+# The config and script go in the body rather than the toolbar, so documents,
+# plots, and tables can be shared even when the toolbar can't be found.
+share_insert_ui <- function(ns, ids, session) {
+  shiny::insertUI(
+    "body",
+    where = "beforeEnd",
+    ui = htmltools::tagList(
+      share_config_tag(ns(ids$output)),
+      commons_share_dependency()
+    ),
+    immediate = TRUE,
+    session = session
+  )
+  shiny::insertUI(
+    shinychat_toolbar_selector,
+    where = "afterBegin",
+    ui = bslib::toolbar(
+      bslib::toolbar_input_button(
+        ns(ids$open),
+        label = "Share",
+        icon = share_icon(),
+        tooltip = "Share conversation"
+      )
+    ),
+    immediate = TRUE,
+    session = session
+  )
 }
 
 # Receipts belong to the conversation rather than its turns, so editing a

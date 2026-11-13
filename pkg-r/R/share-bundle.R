@@ -37,8 +37,15 @@ write_conversation_bundle <- function(
     paste0(dep$name, "-", dep$version, "/"),
     wire_messages_json(messages)
   )
-  page <- htmltools::tagQuery(page)$
-    find("shiny-chat-container")$
+  # shiny-chat-container is private to shinychat. Without it, the copy would
+  # publish with no messages, so the share fails instead.
+  container <- htmltools::tagQuery(page)$find("shiny-chat-container")
+  if (container$length() != 1) {
+    cli::cli_abort(
+      "Can't find shinychat's {.code shiny-chat-container} to write the conversation into."
+    )
+  }
+  page <- container$
     addAttrs(`data-initial-messages` = wire)$
     allTags()
   page <- htmltools::tagList(

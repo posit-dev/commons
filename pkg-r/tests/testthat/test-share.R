@@ -223,7 +223,10 @@ test_that("people search lists users and groups together", {
   expect_identical(vapply(found, `[[`, "", "type"), c("user", "user", "group"))
 })
 
+# shinychat_title() reads shinychat internals; skipped on CRAN so shinychat's
+# reverse dependency checks don't fail.
 test_that("a conversation is shared under the title shinychat gave it", {
+  skip_on_cran()
   session <- shiny::MockShinySession$new()
   record <- function(...) {
     key <- session$ns("chat.history-controller")
@@ -330,6 +333,31 @@ test_that("a failed integration check isn't remembered", {
 
   local_mocked_bindings(connect_visitor_integration = function(...) "publisher")
   expect_identical(connect_share_audience(), "publisher")
+})
+
+test_that("a viewer who can share gets the share script and a toolbar button", {
+  local_fake_connect()
+  s <- share_test_chat()
+  session <- ShareSession$new()
+
+  shiny::testServer(share_test_app(s), session = session, {
+    settle(session)
+
+    selectors <- vapply(session$inserts, `[[`, "", "selector")
+    expect_identical(selectors, c("body", shinychat_toolbar_selector))
+    expect_match(session$inserts[[1]]$html, "commons-share-config", fixed = TRUE)
+    expect_match(session$inserts[[2]]$html, session$ns("chat_share_open"), fixed = TRUE)
+  })
+})
+
+# The toolbar class is private to shinychat; this flags a release that drops it
+# in our CI. Skipped on CRAN so shinychat's reverse dependency checks don't fail.
+test_that("shinychat's page still has the toolbar the share button joins", {
+  skip_on_cran()
+  skip_if_not_installed("shinychat")
+  page <- shinychat::page_chat("Assistant", id = "chat")
+
+  expect_identical(htmltools::tagQuery(page)$find(shinychat_toolbar_selector)$length(), 1L)
 })
 
 test_that("a first share publishes a copy that stays once the viewer uses it", {

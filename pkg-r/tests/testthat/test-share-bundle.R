@@ -15,7 +15,11 @@ shared_agent <- function() {
   agent
 }
 
+# Writing a conversation's bundle relies on shinychat's private markup, so
+# those tests are skipped on CRAN, where they'd fail shinychat's reverse
+# dependency checks.
 test_that("a shared conversation shows what the user saw, without Shiny", {
+  skip_on_cran()
   agent <- shared_agent()
   dir <- withr::local_tempdir()
 
@@ -46,7 +50,17 @@ test_that("a shared conversation shows what the user saw, without Shiny", {
   expect_match(html, 'from a <a href="https://connect.example.com/app/"', fixed = TRUE)
 })
 
+test_that("a conversation isn't shared without shinychat's chat container", {
+  local_mocked_bindings(page_chat = function(...) htmltools::div(), .package = "shinychat")
+
+  expect_error(
+    write_conversation_bundle(shared_agent(), withr::local_tempdir()),
+    "shiny-chat-container"
+  )
+})
+
 test_that("a trusted-only agent's conversation is shared without documents", {
+  skip_on_cran()
   agent <- test_agent(
     semantic_layer = semantic_layer(count_measure_tool()),
     mode = "trusted only"
@@ -64,6 +78,7 @@ test_that("a trusted-only agent's conversation is shared without documents", {
 })
 
 test_that("a restored conversation's documents are shared before they're opened", {
+  skip_on_cran()
   agent <- test_agent()
   agent$set_turns(list(
     ellmer::UserTurn(list(ellmer::ContentText("Write it."))),

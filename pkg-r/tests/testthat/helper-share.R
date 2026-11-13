@@ -151,7 +151,7 @@ fake_connect_viewers <- function(connect, guid) {
 }
 
 # A MockShinySession that arrives with a Connect session token and keeps the
-# dialogs it is sent.
+# dialogs and inserted UI it is sent.
 ShareSession <- R6::R6Class(
   "ShareSession",
   inherit = shiny::MockShinySession,
@@ -162,12 +162,18 @@ ShareSession <- R6::R6Class(
   parent_env = new.env(parent = asNamespace("shiny")),
   public = list(
     modals = list(),
+    inserts = list(),
     initialize = function() {
       super$initialize()
       unlockBinding("sendModal", self)
       self$sendModal <- function(type, message) {
         html <- as.character(message$html %||% "")
         modals <<- c(modals, list(list(type = type, html = html)))
+        invisible()
+      }
+      unlockBinding("sendInsertUI", self)
+      self$sendInsertUI <- function(selector, multiple, where, content) {
+        inserts <<- c(inserts, list(list(selector = selector, html = content$html)))
         invisible()
       }
     }

@@ -88,7 +88,7 @@ Only include facts and source code that may be shared with both the application'
 
 ## Sharing results
 
-With `commons_share_button()` and a Connect "Visitor API Key" integration, a viewer can publish a copy of a conversation, a document, a plot, or a table as static content they own. A copy holds what the viewer saw, including the results of queries run with their credentials, and anyone the copy is shared with sees those results without needing access to the data behind them. The dialog offers only people who can access the app, but the viewer can widen a copy's access from the Connect dashboard, so treat that limit as a convenience rather than a data boundary. If viewers shouldn't hand results to people outside the warehouse's access policies, don't associate the integration; sharing is off without it.
+With a Connect "Visitor API Key" integration, a viewer can publish a copy of a conversation, a document, a plot, or a table as static content they own. A copy holds what the viewer saw, including the results of queries run with their credentials, and anyone the copy is shared with sees those results without needing access to the data behind them. The dialog offers only people who can access the app, but the viewer can widen a copy's access from the Connect dashboard, so treat that limit as a convenience rather than a data boundary. If viewers shouldn't hand results to people outside the warehouse's access policies, don't associate the integration; sharing is off without it.
 
 ## Logging trajectories
 
