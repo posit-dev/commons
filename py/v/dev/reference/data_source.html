@@ -259,7 +259,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
             <ul class="navbar-nav navbar-nav-scroll ms-auto">
   <li class="nav-item">
     <span class="nav-link">
-<div id="github-widget" data-owner="posit-dev" data-repo="commons" data-stars="75" data-forks="6"></div>
+<div id="github-widget" data-owner="posit-dev" data-repo="commons"></div>
     </span>
   </li>  
 </ul>
@@ -607,7 +607,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </div>
 <div class="doc-usage-source">
 <p>Usage</p>
-<p><a href="https://github.com/posit-dev/commons/blob/main/pkg-py/src/commons/_data_source.py#L400-L461" target="_blank" rel="noopener">Source</a></p>
+<p><a href="https://github.com/posit-dev/commons/blob/main/pkg-py/src/commons/_data_source.py#L443-L515" target="_blank" rel="noopener">Source</a></p>
 </div>
 <div class="doc-signature doc-Kind.FUNCTION">
 <div class="sourceCode" id="cb1"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="sig-name">data_source</span>(
@@ -622,6 +622,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <p>A thin dispatcher over the constructors, which are the documented way in.</p>
 <p><code>tables</code>, <code>exclude</code>, and <code>dictionary</code> are keyword-only options, so all three names are reserved in every form: a frame passed under one of them is rejected with a TypeError naming it, never silently consumed. <code>tables</code> selects tables of the engine and board forms, <code>exclude</code> drops relations from a warehouse catalog listing by glob, and <code>dictionary</code> attaches a data dictionary to any form. To use one as a frame name, call <a href="DataSource.from_frames.html#commons.DataSource.from_frames" class="gdls-link gdls-code">DataSource.from_frames()</a> directly.</p>
 <p>A dictionary’s governed definitions are compiled for the source’s dialect during construction, so construction raises if the dialect has no emitter (DuckDB, Snowflake, and Databricks have one), if a definition sits on a table the source does not expose, or if a metric mixes row and aggregate grain. On a warehouse the authored column spellings are bound to the names the catalog reported before anything is lowered, so it raises there only if a table declaring definitions matched no exposed relation, or if a definition names an authored column the selected relation does not have.</p>
+<p>A Snowflake selection also imports the warehouse’s semantic views, and a Databricks selection its metric views. Their public metrics become trusted calculations, which their dimensions can group and filter. A view named in <code>tables</code> is read and checked for access when the source is created, and raises if it cannot be used. A view a namespace selection reaches is listed when the source is created and read only when the agent first inspects or uses it. Naming relations exactly also imports, where it can, the views in the same schemas that read only those relations; their access is checked only when the agent uses one. Name a view in <code>tables</code> to be sure it is imported.</p>
 </div>
 
 
