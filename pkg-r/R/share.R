@@ -130,6 +130,7 @@ share_server <- function(id, client, chat, session) {
     share$people <- list()
     share$inherited <- receipt$inherited %||% list()
     share$access <- receipt$general %||% "restricted"
+    share$applied <- share$access
     share$touched <- FALSE
     share$closed <- FALSE
     share$abandoned <- FALSE
@@ -174,6 +175,7 @@ share_server <- function(id, client, chat, session) {
         receipts$remember(target, opened$content)
         share$inherited <- list()
         share$access <- "restricted"
+        share$applied <- "restricted"
         # The receipt's copy may be gone, so the dialog shows the new one.
         if (identical(state$current, share)) {
           shiny::updateSelectInput(
@@ -310,10 +312,20 @@ share_server <- function(id, client, chat, session) {
       return(invisible())
     }
     share$pending_access <- NULL
+    share$access <- access
+    # Changes run one at a time, so one made quickly after another sees the
+    # grants the first made.
+    ready <- promises::catch(
+      share$applying %||% promises::promise_resolve(NULL),
+      function(err) NULL
+    )
+    share$applying <- promises::then(ready, function(...) apply_access(share, access))
+    invisible(share$applying)
+  }
+
+  apply_access <- function(share, access) {
     visitor <- share$visitor
     guid <- share$content$guid
-    previous <- share$access
-    share$access <- access
     applied <- if (identical(access, "app")) {
       promises::then(connect_app_access(visitor), function(app) {
         show(share, app_access = app$access_type)
@@ -336,6 +348,7 @@ share_server <- function(id, client, chat, session) {
     promises::then(
       applied,
       function(...) {
+        share$applied <- access
         receipts$update(share$target, list(
           general = access,
           inherited = share$inherited
@@ -343,9 +356,12 @@ share_server <- function(id, client, chat, session) {
         save_history()
       },
       function(err) {
-        share$access <- previous
-        show(share, access = previous)
-        shiny::updateSelectInput(session, ids$access, selected = previous)
+        # A change queued after this one still runs, so only the latest is undone.
+        if (identical(share$access, access)) {
+          share$access <- share$applied
+          show(share, access = share$applied)
+          shiny::updateSelectInput(session, ids$access, selected = share$applied)
+        }
         fail(share, err, "Changing who can see the copy")
       }
     )
@@ -484,6 +500,7 @@ share_server <- function(id, client, chat, session) {
         share$people <- c(share$people, list(person))
         show(share, people = share$people)
         receipts$update(share$target, list(inherited = share$inherited))
+        save_history()
       },
       function(err) fail(share, err, "Adding a person")
     )

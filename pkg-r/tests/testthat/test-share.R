@@ -475,12 +475,32 @@ test_that("general access grants the app's people and takes back only those gran
     session$setInputs(chat_share_search = "bob")
     session$elapse(300)
     settle(session)
+    saves <- s$hooks$saves
     session$setInputs(chat_share_add = list(guid = "bob", nonce = 1))
     settle(session)
+    expect_gt(s$hooks$saves, saves)
 
     session$setInputs(chat_share_access = "restricted")
     settle(session)
     expect_identical(fake_connect_viewers(connect, "copy1"), "bob")
+    expect_identical(s$receipt()$general, "restricted")
+    expect_length(s$receipt()$inherited, 0)
+  })
+})
+
+test_that("a quick second access change waits for the first", {
+  connect <- local_fake_connect()
+  s <- share_test_chat()
+  session <- ShareSession$new()
+
+  shiny::testServer(share_test_app(s), session = session, {
+    settle(session)
+    open_output_share(session, s)
+
+    session$setInputs(chat_share_access = "app")
+    session$setInputs(chat_share_access = "restricted")
+    settle(session)
+    expect_length(connect$permissions$copy1, 0)
     expect_identical(s$receipt()$general, "restricted")
     expect_length(s$receipt()$inherited, 0)
   })
