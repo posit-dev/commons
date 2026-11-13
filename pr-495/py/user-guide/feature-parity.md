@@ -4,7 +4,7 @@ While both Python and R packages are first-class implementations of `commons`, t
 
 | R-only feature | What a Python agent does instead |
 |----|----|
-| `trajectory_read()` and `trajectory_review()`, for reading and annotating logged conversations | No equivalent yet |
+| `trajectory_read()`, for reading logged conversations | No equivalent yet |
 | The commons agent skill for coding agents | Ships with the R package only |
 
 This page will shrink (and eventually disappear) as the Python package matures.

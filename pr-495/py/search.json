@@ -59,7 +59,7 @@
     "href": "user-guide/feature-parity.html",
     "title": "Feature parity with the R package",
     "section": "",
-    "text": "While both Python and R packages are first-class implementations of commons, the R implementation was developed first, and the Python package does not yet implement everything the R package does. This page lists the gaps that remain as of the current version and what a Python agent does instead.\n\n\n\n\n\n\n\nR-only feature\nWhat a Python agent does instead\n\n\n\n\ntrajectory_read() and trajectory_review(), for reading and annotating logged conversations\nNo equivalent yet\n\n\nThe commons agent skill for coding agents\nShips with the R package only\n\n\n\nThis page will shrink (and eventually disappear) as the Python package matures.",
+    "text": "While both Python and R packages are first-class implementations of commons, the R implementation was developed first, and the Python package does not yet implement everything the R package does. This page lists the gaps that remain as of the current version and what a Python agent does instead.\n\n\n\n\n\n\n\nR-only feature\nWhat a Python agent does instead\n\n\n\n\ntrajectory_read(), for reading logged conversations\nNo equivalent yet\n\n\nThe commons agent skill for coding agents\nShips with the R package only\n\n\n\nThis page will shrink (and eventually disappear) as the Python package matures.",
     "crumbs": [
       "User Guide",
       "Feature parity with the R package"
@@ -356,7 +356,7 @@
     "href": "package-info.html",
     "title": "Package Info",
     "section": "",
-    "text": "Package\nVersion Constraint\nLast Published\nPyPI\n\n\n\n\nchatlas\n&gt;=0.22.0\n2026-09-04\n\n\n\nhtmltools\n&gt;=0.6\n2026-05-21\n\n\n\nopentelemetry-api\n&gt;=1.0\n2026-10-29\n\n\n\npydantic\n&gt;=2\n2026-11-05\n\n\n\nduckdb\n&gt;=1.0\n2026-10-21\n\n\n\nraghilda\n&gt;=0.2.1\n2026-09-02\n\n\n\nsqlalchemy\n&gt;=2.0\n2026-11-04\n\n\n\npyyaml\n&gt;=6\n2025-09-25\n\n\n\njinja2\n&gt;=3\n2025-03-05\n\n\n\npyarrow\n&gt;=17\n2026-11-03\n\n\n\nsqlglot\n&gt;=25\n2026-11-06\n\n\n\ngoogle-re2\n&gt;=1.1.20251105\n2025-11-05\n\n\n\nhttpx\n&gt;=0.27\n2024-12-06"
+    "text": "Package\nVersion Constraint\nLast Published\nPyPI\n\n\n\n\nchatlas\n&gt;=0.22.0\n2026-09-04\n\n\n\nhtmltools\n&gt;=0.6\n2026-05-21\n\n\n\nopentelemetry-api\n&gt;=1.0\n2026-10-29\n\n\n\npydantic\n&gt;=2\n2026-11-05\n\n\n\nduckdb\n&gt;=1.0\n2026-10-21\n\n\n\nraghilda\n&gt;=0.2.1\n2026-09-02\n\n\n\nsqlalchemy\n&gt;=2.0\n2026-11-04\n\n\n\npyyaml\n&gt;=6\n2025-09-25\n\n\n\njinja2\n&gt;=3\n2025-03-05\n\n\n\npyarrow\n&gt;=17\n2026-11-03\n\n\n\nsqlglot\n&gt;=25\n2026-11-10\n\n\n\ngoogle-re2\n&gt;=1.1.20251105\n2025-11-05\n\n\n\nhttpx\n&gt;=0.27\n2024-12-06"
   },
   {
     "objectID": "package-info.html#shiny",
@@ -720,6 +720,17 @@
     "title": "Introduction to commons",
     "section": "Semantic layer",
     "text": "Semantic layer\nThe most direct way to add a trusted calculation is a measure. A measure is a Python function decorated with @commons.measure. The decorator needs a description, from its description argument or from the docstring of the function. When measures exist, the agent searches for a measure that matches the question. If it finds one, it calls that measure, with arguments if the measure takes any.\nA measure can take two kinds of parameter in its signature. A parameter declared as Annotated[T, Field(description=...)] gets its value from the model, which reads the description to decide what value to pass. A parameter declared as commons.Injected[T] gets its value from commons. The model never sees this parameter: commons passes the connection of the data source that has the same name as the parameter. A parameter with no description and no Injected annotation will result in an error.\nAs an example, in this measure, commons passes biodiversity and the model passes site:\n@commons.measure(description=\"Species observed at one site.\")\ndef species_at_site(\n    biodiversity: commons.Injected[Any],  # commons passes the connection\n    site: Annotated[str, Field(description=\"Site name.\")],  # the model passes a value\n) -&gt; Any:\n    ...\nWhen a user asks “Which species were observed at Oak Bluff?”, the model reads the description of site and passes \"Oak Bluff\". commons passes the connection of the data source named biodiversity, and the measure runs with both.\ndata-dict.yaml files also add to the semantic layer through definitions.",
+    "crumbs": [
+      "User Guide",
+      "Introduction to commons"
+    ]
+  },
+  {
+    "objectID": "user-guide/get-started.html#warehouse-semantic-layers",
+    "href": "user-guide/get-started.html#warehouse-semantic-layers",
+    "title": "Introduction to commons",
+    "section": "Warehouse semantic layers",
+    "text": "Warehouse semantic layers\nIf you have trusted metrics in Snowflake semantic views, you can use those calculations directly with commons. It can also group or filter metrics by approved fields from the warehouse. Answers based on these warehouse-defined metrics have the Trusted provenance outcome and display the green check-shield provenance marker.\nA Snowflake data source imports the semantic views its tables selection reaches. A view that you name in tables is read and checked for access when you create the source. A view that a database or schema selection reaches is read only when the agent first uses it. When you name tables exactly, commons also imports the views over them, but only when the selection includes every table that a view reads.",
     "crumbs": [
       "User Guide",
       "Introduction to commons"
