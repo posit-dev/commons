@@ -1340,5 +1340,149 @@
         }
       }
     ]
+  },
+  "verified_queries": {
+    "description": "The exact trusted queries a view's `verified_queries` declare, read as calculations the agent can run unchanged. A query's description is its `question`, or its name when it has none. A query without a name or SQL, a question that is not text, a repeated name, SQL that is not one read-only SELECT or WITH, and a `{{placeholder}}` (verified queries take no arguments) each make the view unreadable. Errors are pinned as the phrases the message must contain; a case with no phrases pins only the refusal, because each language words that error its own way.",
+    "cases": [
+      {
+        "name": "a question describes its query, as Snowflake returns them",
+        "yaml": "verified_queries:\n  - name: TOTAL_ORDER_VALUE_BY_TILE\n    sql: \"SELECT \\\"tile_size\\\", SUM(\\\"order_total\\\") AS total FROM \\\"ANALYTICS\\\".\\\"PUBLIC\\\".\\\"orders\\\" GROUP BY \\\"tile_size\\\"\"\n    question: What is the total order value for each tile size?\n    use_as_onboarding_question: false\n",
+        "expected": {
+          "calculations": [
+            {
+              "name": "TOTAL_ORDER_VALUE_BY_TILE",
+              "description": "What is the total order value for each tile size?",
+              "sql": "SELECT \"tile_size\", SUM(\"order_total\") AS total FROM \"ANALYTICS\".\"PUBLIC\".\"orders\" GROUP BY \"tile_size\""
+            }
+          ]
+        }
+      },
+      {
+        "name": "a query without a question is described by its name",
+        "yaml": "verified_queries:\n  top_customers:\n    sql: WITH t AS (SELECT 1 AS n) SELECT n FROM t\n",
+        "expected": {
+          "calculations": [
+            {
+              "name": "top_customers",
+              "description": "top_customers",
+              "sql": "WITH t AS (SELECT 1 AS n) SELECT n FROM t"
+            }
+          ]
+        }
+      },
+      {
+        "name": "a backslash-escaped quote is Snowflake string syntax",
+        "yaml": "verified_queries:\n  - name: phrase\n    sql: SELECT 'it\\'s' AS phrase\n",
+        "expected": {
+          "calculations": [
+            {
+              "name": "phrase",
+              "description": "phrase",
+              "sql": "SELECT 'it\\'s' AS phrase"
+            }
+          ]
+        }
+      },
+      {
+        "name": "a query may use SEMANTIC_VIEW syntax the SQL parser does not know",
+        "yaml": "verified_queries:\n  - name: emea_revenue\n    sql: SELECT * FROM SEMANTIC_VIEW(\"ANALYTICS\".\"PUBLIC\".\"REVENUE_MODEL\" METRICS \"orders\".\"revenue\" VARIABLES \"REGION\" => 'EMEA')\n",
+        "expected": {
+          "calculations": [
+            {
+              "name": "emea_revenue",
+              "description": "emea_revenue",
+              "sql": "SELECT * FROM SEMANTIC_VIEW(\"ANALYTICS\".\"PUBLIC\".\"REVENUE_MODEL\" METRICS \"orders\".\"revenue\" VARIABLES \"REGION\" => 'EMEA')"
+            }
+          ]
+        }
+      },
+      {
+        "name": "a view without verified queries has none",
+        "yaml": "tables: []\n",
+        "expected": {
+          "calculations": []
+        }
+      },
+      {
+        "name": "a query needs a name",
+        "yaml": "verified_queries:\n  - sql: SELECT 1\n",
+        "expected": {
+          "error": "invalid",
+          "mentions": [
+            "invalid verified query"
+          ]
+        }
+      },
+      {
+        "name": "a query needs SQL",
+        "yaml": "verified_queries:\n  - name: empty\n    sql: \"\"\n",
+        "expected": {
+          "error": "invalid",
+          "mentions": [
+            "invalid verified query"
+          ]
+        }
+      },
+      {
+        "name": "a question must be text",
+        "yaml": "verified_queries:\n  - name: answer\n    question: 42\n    sql: SELECT 1\n",
+        "expected": {
+          "error": "invalid",
+          "mentions": []
+        }
+      },
+      {
+        "name": "query names must be unique",
+        "yaml": "verified_queries:\n  - name: twice\n    sql: SELECT 1\n  - name: twice\n    sql: SELECT 2\n",
+        "expected": {
+          "error": "invalid",
+          "mentions": [
+            "verified query names must be unique"
+          ]
+        }
+      },
+      {
+        "name": "a query must be one read-only SELECT",
+        "yaml": "verified_queries:\n  - name: drop\n    sql: SELECT 1; DROP TABLE orders\n",
+        "expected": {
+          "error": "invalid",
+          "mentions": [
+            "exactly one read-only SELECT"
+          ]
+        }
+      },
+      {
+        "name": "a query cannot hold a placeholder",
+        "yaml": "verified_queries:\n  - name: by_region\n    sql: SELECT * FROM orders WHERE region = {{region}}\n",
+        "expected": {
+          "error": "invalid",
+          "mentions": [
+            "placeholders",
+            "region"
+          ]
+        }
+      }
+    ]
+  },
+  "calculation_runs": {
+    "description": "The SQL `call_calculation` sends to the warehouse for a verified query: the query exactly as the view declares it. Every case lists one view, `REVENUE_MODEL` in ANALYTICS.PUBLIC with the case's `yaml`, beside the relation ORDERS, and calls `calculation` on a source over that listing, so the call reads the view first. `sent` is the last statement the warehouse receives.",
+    "cases": [
+      {
+        "name": "a query using SEMANTIC_VIEW syntax the SQL parser does not know runs as written",
+        "yaml": "tables:\n  - name: orders\n    base_table: {database: ANALYTICS, schema: PUBLIC, table: ORDERS}\n    metrics:\n      - name: revenue\nverified_queries:\n  - name: emea_revenue\n    sql: SELECT * FROM SEMANTIC_VIEW(\"ANALYTICS\".\"PUBLIC\".\"REVENUE_MODEL\" METRICS \"orders\".\"revenue\" VARIABLES \"REGION\" => 'EMEA')\n",
+        "calculation": "ANALYTICS.PUBLIC.REVENUE_MODEL::emea_revenue",
+        "expected": {
+          "sent": "SELECT * FROM SEMANTIC_VIEW(\"ANALYTICS\".\"PUBLIC\".\"REVENUE_MODEL\" METRICS \"orders\".\"revenue\" VARIABLES \"REGION\" => 'EMEA')"
+        }
+      },
+      {
+        "name": "a query that starts with WITH runs as written",
+        "yaml": "tables:\n  - name: orders\n    base_table: {database: ANALYTICS, schema: PUBLIC, table: ORDERS}\n    metrics:\n      - name: revenue\nverified_queries:\n  - name: order_count\n    sql: WITH o AS (SELECT * FROM ANALYTICS.PUBLIC.ORDERS) SELECT COUNT(*) AS n FROM o\n",
+        "calculation": "ANALYTICS.PUBLIC.REVENUE_MODEL::order_count",
+        "expected": {
+          "sent": "WITH o AS (SELECT * FROM ANALYTICS.PUBLIC.ORDERS) SELECT COUNT(*) AS n FROM o"
+        }
+      }
+    ]
   }
 }

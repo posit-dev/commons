@@ -50,6 +50,78 @@ class TypedParameter:
             _check_value(self.name, self.default, self.type)
 
 
+@dataclass(frozen=True)
+class TrustedCalculation:
+    """An exact query a warehouse model declares, run as written."""
+
+    name: str
+    description: str
+    sql: str
+    # The model that declares it and the source that model is on, once it is
+    # in a registry.
+    model: str | None = None
+    source: str | None = None
+
+    @property
+    def key(self) -> str:
+        return f"{self.model}::{self.name}" if self.model else self.name
+
+
+_PLACEHOLDER = re.compile(r"\{\{[^{}]+\}\}")
+
+
+def check_trusted_query(sql: str) -> None:
+    """Refuse SQL that is not one read-only SELECT or WITH query.
+
+    A structural check from the tokens, so it holds for warehouse SQL the
+    parser does not know. Reading tokens rather than text, it skips comments
+    and the contents of string literals, and it refuses SQL the tokenizer
+    cannot read. When the parser does read it, its verdict is final too, which
+    catches DML that a leading WITH would otherwise hide.
+    """
+    from sqlglot import tokenize
+    from sqlglot.tokens import TokenType
+
+    try:
+        tokens = tokenize(sql, read="snowflake")
+    except Exception:  # noqa: BLE001 - unreadable SQL is refused below
+        tokens = []
+    while tokens and tokens[-1].token_type == TokenType.SEMICOLON:
+        tokens.pop()
+    if (
+        not tokens
+        or tokens[0].token_type not in (TokenType.SELECT, TokenType.WITH)
+        or any(token.token_type == TokenType.SEMICOLON for token in tokens)
+    ):
+        raise ValueError(
+            "Trusted calculations must contain exactly one read-only SELECT query."
+        )
+    from ._sql_guard import UnparseableQuery, check_query
+
+    try:
+        check_query(sql, dialect="snowflake")
+    except UnparseableQuery:
+        pass
+    except ValueError as error:
+        raise ValueError(
+            "Trusted calculations must contain exactly one read-only SELECT query."
+        ) from error
+
+
+def new_trusted_calculation(
+    name: str, description: str, sql: str
+) -> TrustedCalculation:
+    """A calculation with no arguments, so its SQL may hold no placeholder."""
+    check_trusted_query(sql)
+    unknown = [token[2:-2] for token in _PLACEHOLDER.findall(sql)]
+    if unknown:
+        raise ValueError(
+            "Calculation placeholders must match its arguments exactly. "
+            f"Unknown placeholders: {_vals(unknown)}."
+        )
+    return TrustedCalculation(name=name, description=description, sql=sql)
+
+
 def _context(values: list[str]) -> list[str]:
     return list(dict.fromkeys(v for v in values if v))
 
@@ -69,6 +141,7 @@ class SemanticModel:
     dependencies: list[TableId] = field(default_factory=list)
     dependencies_complete: bool = True
     relationships: list[Any] = field(default_factory=list)
+    calculations: list[TrustedCalculation] = field(default_factory=list)
     first_touch: list[str] = field(default_factory=list)
     retrieval: list[str] = field(default_factory=list)
 
@@ -352,6 +425,7 @@ class SemanticRegistry:
         default_factory=dict
     )
     stubs: list[StubRow] = field(default_factory=list)
+    calculations: list[TrustedCalculation] = field(default_factory=list)
 
     def for_source(self, source: str) -> list[MemberRow]:
         return [row for row in self.members if row.source == source]
@@ -399,7 +473,46 @@ def semantic_registry(sources: Mapping[str, Any]) -> SemanticRegistry:
                     description=stub.description,
                 )
             )
+    registry.calculations = calculations_registry(sources)
     return registry
+
+
+def calculations_registry(sources: Mapping[str, Any]) -> list[TrustedCalculation]:
+    """Every source's verified queries, each keyed by the model declaring it."""
+    return [
+        replace(calculation, model=model_label, source=source_label)
+        for source_label, source in sources.items()
+        for model_label, model in source.semantic_models.items()
+        for calculation in model.calculations
+    ]
+
+
+def resolve_calculation(
+    calculations: list[TrustedCalculation], name: str, source: str | None = None
+) -> TrustedCalculation:
+    candidates = [
+        calculation
+        for calculation in calculations
+        if (source is None or calculation.source == source)
+        and name in (calculation.name, calculation.key)
+    ]
+    if len(candidates) == 1:
+        return candidates[0]
+    if candidates:
+        choices = list(dict.fromkeys(calculation.key for calculation in candidates))
+        raise ValueError(
+            f"Trusted calculation name {name!r} is ambiguous. Use a qualified name: "
+            f"{_vals(choices)}."
+        )
+    available = list(dict.fromkeys(calculation.key for calculation in calculations))
+    if available:
+        raise ValueError(
+            f"No trusted calculation is named {name!r}. "
+            f"Available calculations: {_vals(available)}."
+        )
+    raise ValueError(
+        f"No trusted calculation is named {name!r}. No trusted calculations are defined."
+    )
 
 
 def member_aliases(row: MemberRow) -> list[str]:
@@ -745,6 +858,12 @@ def description_text(described: SemanticDescription) -> str:
     parameters = parameters_pool_text(model.parameters)
     if parameters:
         parts.append(parameters)
+    if model.calculations:
+        parts.append("Verified queries (run with `call_calculation`):")
+        parts += [
+            f"- `{described.name}::{c.name}`: {c.description}"
+            for c in model.calculations
+        ]
     parts += list(dict.fromkeys([*model.first_touch, *model.retrieval]))
     return "\n\n".join(parts)
 
@@ -763,4 +882,18 @@ def semantic_first_touch(source: Any, table: str) -> list[str]:
             for text in model.first_touch
             if text
         )
+    )
+
+
+def calculation_pool_text(
+    calculation: TrustedCalculation, source_names: Sequence[str] = ()
+) -> str:
+    source = (
+        f"\nSource: `{calculation.source}`."
+        if source_names and calculation.source
+        else ""
+    )
+    return (
+        f"### {calculation.key} --- trusted query\n{calculation.description}\n"
+        f"Arguments: none.{source}\nRun with `call_calculation`."
     )

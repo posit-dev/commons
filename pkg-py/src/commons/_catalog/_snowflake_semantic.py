@@ -20,8 +20,10 @@ from .._semantic_models import (
     SemanticMember,
     SemanticModel,
     SemanticStub,
+    TrustedCalculation,
     UnsupportedSemanticParameter,
     members_context,
+    new_trusted_calculation,
     parameters_from_spec,
     spec_entries,
     where_conditions,
@@ -56,6 +58,7 @@ __all__ = [
     "semantic_views_from_show",
     "sql_type",
     "variables_clause",
+    "verified_calculations",
     "yaml_identifier",
 ]
 
@@ -157,6 +160,29 @@ def _members(
     return members
 
 
+def verified_calculations(entries: Any) -> list[TrustedCalculation]:
+    """The view's verified queries, which run exactly as written."""
+    calculations = []
+    for entry in spec_entries(entries):
+        name, sql = entry.get("name"), entry.get("sql")
+        question = entry.get("question", name)
+        if question is None:
+            question = name
+        if (
+            not isinstance(name, str)
+            or not name
+            or not isinstance(sql, str)
+            or not sql
+            or not isinstance(question, str)
+        ):
+            raise ValueError("Snowflake declares an invalid verified query.")
+        calculations.append(new_trusted_calculation(name, question, sql))
+    names = [calculation.name for calculation in calculations]
+    if len(set(names)) != len(names):
+        raise ValueError("Snowflake verified query names must be unique.")
+    return calculations
+
+
 def relationship_text(relationship: dict[str, Any]) -> str:
     name = _first(relationship, "name") or "unnamed"
     left = _first(relationship, "left_table", "from_table") or "unknown"
@@ -232,6 +258,7 @@ def model_from_spec(
         )
 
     relationships = spec_entries(spec.get("relationships"))
+    calculations = verified_calculations(spec.get("verified_queries"))
     found, complete = dependencies(identity or view_id, spec)
     context = semantic_context(spec, dimensions, facts, filters, relationships)
     name = spec.get("name")
@@ -250,6 +277,7 @@ def model_from_spec(
         dependencies=found,
         dependencies_complete=complete,
         relationships=relationships,
+        calculations=calculations,
         first_touch=context,
         retrieval=list(context),
     )

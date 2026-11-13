@@ -235,3 +235,37 @@ def test_hydration(case: dict[str, Any]) -> None:
             run(step)
     assert backend.yaml_reads == case["expected"]["reads"]
     assert list(source.semantic_models) == case["expected"]["models"]
+
+
+@pytest.mark.parametrize("case", cases("verified_queries"), ids=lambda c: c["name"])
+def test_verified_queries(case: dict[str, Any]) -> None:
+    from commons._catalog._snowflake_semantic import verified_calculations
+
+    from ._semantic_fixture import assert_fixture_error
+
+    entries = (yaml.safe_load(case["yaml"]) or {}).get("verified_queries")
+    if "error" in case["expected"]:
+        with pytest.raises(ValueError) as raised:
+            verified_calculations(entries)
+        assert_fixture_error(raised.value, case["expected"])
+        return
+    actual = [
+        {"name": c.name, "description": c.description, "sql": c.sql}
+        for c in verified_calculations(entries)
+    ]
+    assert actual == case["expected"]["calculations"]
+
+
+@pytest.mark.parametrize("case", cases("calculation_runs"), ids=lambda c: c["name"])
+def test_calculation_runs(case: dict[str, Any]) -> None:
+    from commons import DataSource
+    from commons._pool import call_calculation
+
+    from ._warehouse import FakeWarehouse
+
+    backend = FakeWarehouse(
+        relations=["ORDERS"], semantic_views={"REVENUE_MODEL": case["yaml"]}
+    )
+    source = DataSource._from_warehouse(backend, None, None, None)
+    call_calculation({"warehouse": source}, "warehouse", None, case["calculation"])
+    assert backend.queries[-1] == case["expected"]["sent"]

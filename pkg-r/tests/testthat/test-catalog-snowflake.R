@@ -877,3 +877,64 @@ test_that("listed Snowflake semantic views are read as the shared fixture says",
     )
   }
 })
+
+test_that("Snowflake verified queries read as the shared fixture says", {
+  cases <- snowflake_semantic_cases("verified_queries")
+  for (case in cases) {
+    result <- tryCatch(
+      snowflake_verified_calculations(yaml::yaml.load(case$yaml)$verified_queries),
+      error = function(err) err
+    )
+    if (!is.null(case$expected$error)) {
+      expect_fixture_error(result, case$expected, info = case$name)
+      next
+    }
+    actual <- unname(lapply(result, function(calculation) {
+      list(
+        name = calculation$name,
+        description = calculation$description,
+        sql = calculation$sql
+      )
+    }))
+    expect_equal(actual, case$expected$calculations, info = case$name)
+  }
+})
+
+test_that("verified queries run as the shared fixture says", {
+  read_view <- snowflake_read_semantic_model
+  for (case in snowflake_semantic_cases("calculation_runs")) {
+    warehouse <- list(
+      relations = list("ORDERS"),
+      semantic_views = list(REVENUE_MODEL = case$yaml)
+    )
+    source <- test_source()
+    state <- data_source_state(source)
+    reply <- fixture_snowflake_reply(warehouse)
+    sent <- NULL
+    # The catalog is read over DBI::ANSI(); the calculation runs on the
+    # source's own connection.
+    local_mocked_bindings(
+      dbGetQuery = function(con, sql, ...) {
+        if (!identical(con, state$con)) {
+          return(reply(con, sql, ...))
+        }
+        sent <<- sql
+        data.frame(n = 1)
+      },
+      .package = "DBI"
+    )
+    local_mocked_bindings(
+      snowflake_read_semantic_model = function(view, con, call) {
+        read_view(view, DBI::ANSI(), call = call)
+      }
+    )
+    registry <- snowflake_table_registry(DBI::ANSI())
+    state$semantic_stubs <- registry$semantic_stubs
+    call_calculation_impl(
+      list(warehouse = source),
+      new_handle_store(),
+      case$calculation
+    )
+    expect_identical(sent, case$expected$sent, info = case$name)
+  }
+})

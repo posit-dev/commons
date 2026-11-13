@@ -25,9 +25,12 @@ from ._rows import rows_to_markdown
 from ._semantic_models import (
     MemberRow,
     SemanticRegistry,
+    calculation_pool_text,
+    calculations_registry,
     hydrate,
     member_pool_text,
     metric_origin,
+    resolve_calculation,
     resolve_filters,
     resolve_members,
     semantic_registry,
@@ -108,7 +111,8 @@ def search_pool_text(
     entries = list(measures.values())
     members = semantic.members if semantic is not None else []
     stubs = semantic.stubs if semantic is not None else []
-    if not entries and not records and not members and not stubs:
+    calculations = semantic.calculations if semantic is not None else []
+    if not entries and not records and not members and not stubs and not calculations:
         return "The semantic layer is empty."
 
     catalog = [f"{record.name} {record.description}" for record in entries]
@@ -147,6 +151,10 @@ def search_pool_text(
         )
         for row in stubs
     ]
+    catalog += [
+        f"{calculation.key} {calculation.name} {calculation.description} "
+        for calculation in calculations
+    ]
 
     hits = lexical_rank(query, catalog)
     if not hits:
@@ -176,7 +184,13 @@ def search_pool_text(
                 )
             )
             continue
-        blocks.append(stub_pool_text(stubs[hit - len(members)], source_names))
+        hit -= len(members)
+        if hit < len(stubs):
+            blocks.append(stub_pool_text(stubs[hit], source_names))
+            continue
+        blocks.append(
+            calculation_pool_text(calculations[hit - len(stubs)], source_names)
+        )
     return "\n\n".join(blocks)
 
 
@@ -370,6 +384,35 @@ def call_metrics(
             rows,
             from_query=True,
         ),
+    )
+
+
+def call_calculation(
+    sources: Mapping[str, DataSource],
+    label: str,
+    handles: HandleStore | None,
+    name: str,
+    arguments: Mapping[str, Any] | None = None,
+) -> ContentToolResult:
+    """Run a verified query exactly as the warehouse model declares it.
+
+    The query runs on the source `label` names, but is looked up among every
+    source's, so a name on another source is listed when it is not found.
+    """
+    source = sources[label]
+    hydrate(source, [name])
+    calculation = resolve_calculation(calculations_registry(sources), name, label)
+    # Verified queries take no arguments, so any given is unexpected.
+    values = validate_arguments({}, dict(arguments or {}))
+    rows = source._query_trusted(calculation.sql)
+    advert = handles.register_rows(rows) if handles is not None else None
+    body = "\n\n".join(part for part in (rows_to_markdown(rows), advert) if part)
+    return tool_result(
+        body,
+        tag=Tag.A,
+        title=TRUSTED_CALL.settled,
+        markdown=f"```sql\n{calculation.sql}\n```\n\n{rows_to_markdown(rows)}",
+        html=measure_display_html(values, rows, from_query=True),
     )
 
 

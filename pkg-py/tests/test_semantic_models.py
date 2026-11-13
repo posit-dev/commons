@@ -106,3 +106,36 @@ def test_where_entry_must_be_an_object():
 
     with pytest.raises(TypeError, match="as an object"):
         where_conditions(["invalid"], [], str, str)
+
+
+def test_a_verified_query_hiding_dml_after_with_is_refused():
+    # Stricter than the token check the shared fixture pins: the parse finds
+    # the DELETE that a leading WITH would otherwise hide.
+    from commons._semantic_models import new_trusted_calculation
+
+    with pytest.raises(ValueError, match="exactly one read-only SELECT"):
+        new_trusted_calculation(
+            "sneaky", "Sneaky.", "WITH t AS (SELECT 1) DELETE FROM orders"
+        )
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "-- Revenue by region\nSELECT 1",
+        "SELECT ';' AS separator",
+    ],
+)
+def test_a_verified_query_is_read_by_its_tokens(sql):
+    # The token check skips comments and string literals, which a check of the
+    # text would read as a leading word or a second statement.
+    from commons._semantic_models import check_trusted_query
+
+    check_trusted_query(sql)
+
+
+def test_a_verified_query_the_tokenizer_cannot_read_is_refused():
+    from commons._semantic_models import check_trusted_query
+
+    with pytest.raises(ValueError, match="exactly one read-only SELECT"):
+        check_trusted_query("SELECT 'unterminated")

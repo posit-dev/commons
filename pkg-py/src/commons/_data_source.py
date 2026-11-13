@@ -329,6 +329,21 @@ class DataSource:
             return self.backend.query(sql, params)
         return self.backend.query(sql)
 
+    def _query_trusted(self, sql: str) -> list[dict[str, Any]]:
+        """Run a verified query a warehouse model declares, as written.
+
+        The trusted-query check guards it instead of the read-only parse in
+        `query`. That check runs the same parse, but when the parser cannot
+        read the query (Snowflake's `SEMANTIC_VIEW` clause), it relies on its
+        structural check rather than refusing. The session is still checked.
+        """
+        from ._catalog import check_session
+        from ._semantic_models import check_trusted_query
+
+        check_session(self.backend, self.session)
+        check_trusted_query(sql)
+        return self.backend.query(sql)
+
     def _query_loading_pins(self, sql: str) -> list[dict[str, Any]]:
         # Let DuckDB resolve the query's table references and drive loading off
         # the tables it reports missing: run it, load the pending tables the

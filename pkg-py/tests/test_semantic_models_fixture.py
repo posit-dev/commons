@@ -193,3 +193,28 @@ def test_first_touch(case: dict[str, Any]) -> None:
         for model in section["models"]
     }
     assert semantic_first_touch(source, case["table"]) == case["expected"]
+
+
+def test_calculation_keys() -> None:
+    from commons._semantic_models import calculations_registry
+
+    source = fixture_source(SPEC["models"]["values"])
+    keys = [c.key for c in calculations_registry({"warehouse": source})]
+    assert keys == SPEC["calculations"]["keys"]
+
+
+@pytest.mark.parametrize(
+    "case", cases("calculations"), ids=lambda c: f"{c['source']}-{c['name']}"
+)
+def test_calculation_resolution(case: dict[str, Any]) -> None:
+    from commons._semantic_models import calculations_registry, resolve_calculation
+
+    source = fixture_source(SPEC["models"]["values"])
+    calculations = calculations_registry({"warehouse": source})
+    if "error" in case["expected"]:
+        with pytest.raises(ValueError) as raised:
+            resolve_calculation(calculations, case["name"], case["source"])
+        assert_fixture_error(raised.value, case["expected"])
+        return
+    found = resolve_calculation(calculations, case["name"], case["source"])
+    assert found.key == case["expected"]["key"]

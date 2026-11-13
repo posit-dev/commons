@@ -58,7 +58,17 @@ fixture_semantic_models <- function(specs) {
       spec$name,
       backend = "snowflake_semantic_view",
       dimensions = members(spec$dimensions, "dimension"),
-      metrics = members(spec$metrics, "metric")
+      metrics = members(spec$metrics, "metric"),
+      calculations = stats::setNames(
+        lapply(spec$calculations, function(calculation) {
+          new_trusted_calculation(
+            calculation$name,
+            calculation$description,
+            "SELECT 1"
+          )
+        }),
+        vapply(spec$calculations, `[[`, character(1), "name")
+      )
     )
   })
   stats::setNames(models, vapply(specs, `[[`, character(1), "name"))
@@ -113,13 +123,14 @@ fixture_tools <- function(spec, shape_name) {
   state <- data_source_state(sources[[1]])
   state$semantic_models <- fixture_semantic_models(shape$semantic_models)
   state$semantic_stubs <- fixture_semantic_stubs(shape$semantic_stubs)
+  state$calculations <- semantic_model_calculations(state$semantic_models)
 
   private <- list(
     sources = sources,
     registry = registry,
     definitions = list(defs = defs),
     semantic_models = semantic_models_registry(sources),
-    calculations = list(),
+    calculations = calculations_registry(sources),
     context_layer = NULL,
     handles = NULL,
     first_touch = NULL,
