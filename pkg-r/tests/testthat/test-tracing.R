@@ -573,6 +573,7 @@ test_that("commons_span_set_attribute no-ops when span is NULL", {
 
 test_that("conversation turn spans are recorded", {
   skip_if_not_installed("otelsdk")
+  contract <- shared_fixture("traces")$conversation_turn
 
   recorded <- otelsdk::with_otel_record({
     turn <- function() {
@@ -584,21 +585,29 @@ test_that("conversation turn spans are recorded", {
 
   spans <- recorded$traces
   expect_length(spans, 1)
-  expect_equal(spans[[1]]$name, "commons_conversation_turn")
-  expect_null(spans[[1]]$attributes[["commons.connect.user"]])
+  expect_equal(spans[[1]]$name, contract$span)
+  expect_null(spans[[1]]$attributes[[contract$user_attribute]])
 })
 
-test_that("trajectory users come only from authenticated session identity", {
-  expect_identical(trajectory_user(NULL), NA_character_)
-  for (user in list(NULL, "", NA_character_, c("alice", "bob"), 1)) {
-    expect_identical(trajectory_user(list(user = user)), NA_character_)
+test_that("trajectory users follow the shared user cases", {
+  cases <- shared_fixture("traces")$conversation_turn$user_cases
+  for (case in cases) {
+    session <- if (!identical(case$session, FALSE)) {
+      list(user = unlist(case$session_user))
+    }
+    expected <- case$recorded %||% NA_character_
+    expect_identical(trajectory_user(session), expected, label = case$name)
   }
-  expect_identical(trajectory_user(list(user = "alice")), "alice")
+})
+
+test_that("trajectory users reject a missing value", {
+  expect_identical(trajectory_user(list(user = NA_character_)), NA_character_)
 })
 
 test_that("conversation turn spans capture the active session user", {
   skip_if_not_installed("otelsdk")
   skip_if_not_installed("shiny")
+  attribute <- shared_fixture("traces")$conversation_turn$user_attribute
   alice <- shiny::MockShinySession$new()
   bob <- shiny::MockShinySession$new()
   withr::defer(alice$close())
@@ -618,12 +627,12 @@ test_that("conversation turn spans capture the active session user", {
 
   expect_length(recorded$traces, 3)
   expect_identical(
-    recorded$traces[[1]]$attributes[["commons.connect.user"]],
+    recorded$traces[[1]]$attributes[[attribute]],
     "alice"
   )
   expect_identical(
-    recorded$traces[[2]]$attributes[["commons.connect.user"]],
+    recorded$traces[[2]]$attributes[[attribute]],
     "bob"
   )
-  expect_null(recorded$traces[[3]]$attributes[["commons.connect.user"]])
+  expect_null(recorded$traces[[3]]$attributes[[attribute]])
 })
