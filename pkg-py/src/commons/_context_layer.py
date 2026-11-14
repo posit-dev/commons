@@ -18,6 +18,8 @@ from raghilda.chunker import MarkdownChunker
 from raghilda.document import MarkdownDocument
 from raghilda.store import DuckDBStore
 
+from ._tracing import commons_span
+
 if TYPE_CHECKING:
     from ._data_dictionary import DataDictionary
     from ._data_source import DataSource
@@ -64,24 +66,30 @@ class ContextLayer:
     def _store(self) -> DuckDBStore:
         with self._store_lock:
             if self._store_cache is None:
-                # TODO: emit the commons_context_store_build span the R
-                # store build emits, once pkg-py has its tracing module.
-                store = DuckDBStore.create(location=":memory:", embed=None)
-                chunker = MarkdownChunker()
-                # ingest() requires each document's origin to be distinct
-                # and non-empty, so each gets a distinct synthetic origin.
-                store.ingest(
-                    [
-                        MarkdownDocument(
-                            content=doc, origin=f"commons-context-{i}"
-                        )
-                        for i, doc in enumerate(self._docs)
-                    ],
-                    prepare=chunker.chunk,
-                )
-                store.build_index(type="bm25")
+                with commons_span(
+                    "commons_context_store_build",
+                    {
+                        "commons.context.n_docs": len(self._docs),
+                        "commons.context.persistent": False,
+                    },
+                ):
+                    store = DuckDBStore.create(location=":memory:", embed=None)
+                    chunker = MarkdownChunker()
+                    # ingest() requires each document's origin to be distinct
+                    # and non-empty, so each gets a distinct synthetic origin.
+                    store.ingest(
+                        [
+                            MarkdownDocument(content=doc, origin=f"commons-context-{i}")
+                            for i, doc in enumerate(self._docs)
+                        ],
+                        prepare=chunker.chunk,
+                    )
+                    store.build_index(type="bm25")
                 self._store_cache = store
         return self._store_cache
+
+    def _is_built(self) -> bool:
+        return self._store_cache is not None
 
     def prewarm(self) -> None:
         """Build the index now so the first search does not pay for it.
