@@ -21,16 +21,17 @@ GET_STARTED = Path(__file__).parents[1] / "docs" / "01-get-started.qmd"
 _IDS = ("traceId", "spanId", "parentSpanId")
 _TIMESTAMPS = ("startTimeUnixNano", "endTimeUnixNano")
 _CONVERSATION = "gen_ai.conversation.id"
-# The system prompt states the day it was written.
-_DATE = re.compile(r"Today's date is \d{4}-\d{2}-\d{2}\.")
+# The system prompt and tool descriptions, which change on their own schedule.
+_PROSE = ("gen_ai.system_instructions", "gen_ai.tool.description")
 
 
 def normalized(path: Path) -> list[dict[str, Any]]:
     """The spans in file order, with what varies between runs replaced.
 
-    Ids and conversation ids become the order each first appears, the
-    prompt's date becomes a placeholder, and timestamps, resource attributes,
-    and the scope version are dropped.
+    Ids and conversation ids become the order each first appears, the system
+    instructions and tool descriptions become a placeholder, and timestamps,
+    resource attributes, and the scope version are dropped. Span names,
+    attribute keys, and message content are compared as written.
     """
     ordinals: dict[str, str] = {}
 
@@ -55,10 +56,8 @@ def normalized(path: Path) -> list[dict[str, Any]]:
                             continue
                         if attribute["key"] == _CONVERSATION:
                             value["stringValue"] = ordinal(value["stringValue"])
-                        else:
-                            value["stringValue"] = _DATE.sub(
-                                "Today's date is <date>.", value["stringValue"]
-                            )
+                        elif attribute["key"] in _PROSE:
+                            value["stringValue"] = "<prose>"
                     spans.append({"scope": scope, **span})
     return spans
 
