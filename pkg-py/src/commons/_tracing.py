@@ -14,12 +14,13 @@ Content Observability. ``pkg-r/R/tracing.R`` holds the R counterparts.
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import sys
 import warnings
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager, contextmanager, nullcontext
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from opentelemetry import trace
 from opentelemetry.trace import Span
@@ -39,14 +40,21 @@ from ._connect import (
     version_is_older,
 )
 
+if TYPE_CHECKING:
+    from ._citations import CitationDecision
+
 __all__ = [
+    "CANDIDATES_ATTRIBUTE",
     "CAPTURE_VAR",
+    "PROVENANCE_SPAN",
+    "TAG_ATTRIBUTE",
     "TRACER_NAME",
     "TURN_SPAN",
     "USER_ATTRIBUTE",
     "Span",
     "as_current",
     "check_trajectory_arguments",
+    "citation_candidates_json",
     "commons_span",
     "content_capture_enabled",
     "enable_content_observability",
@@ -67,6 +75,11 @@ TRACER_NAME = "co.posit.python-package.commons"
 # The span around one turn of a logging agent, and the session user it records.
 TURN_SPAN = "commons_conversation_turn"
 USER_ATTRIBUTE = "commons.connect.user"
+
+# The span that records an answer's provenance tag and citation decisions.
+PROVENANCE_SPAN = "commons_provenance"
+TAG_ATTRIBUTE = "commons.provenance.tag"
+CANDIDATES_ATTRIBUTE = "commons.citation.candidates"
 
 # Set before the first request, so the API calls are made once per process.
 _OBSERVABILITY_ATTEMPTED = False
@@ -99,6 +112,30 @@ def start_turn_span(user: str | None) -> Span:
     """
     return _TRACER.start_span(
         TURN_SPAN, attributes=None if user is None else {USER_ATTRIBUTE: user}
+    )
+
+
+def citation_candidates_json(decisions: Sequence[CitationDecision]) -> str:
+    """The decisions as the JSON array the candidates attribute holds.
+
+    A decision's ``label`` and ``kind`` are left out when absent. ``quote``
+    is always present and is ``null`` for a malformed body.
+    """
+    return json.dumps(
+        [
+            {
+                key: value
+                for key, value in (
+                    ("quote", decision.quote),
+                    ("status", decision.status),
+                    ("label", decision.label),
+                    ("kind", decision.kind),
+                )
+                if key in ("quote", "status") or value is not None
+            }
+            for decision in decisions
+        ],
+        separators=(",", ":"),
     )
 
 
