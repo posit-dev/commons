@@ -41,14 +41,38 @@ def test_the_names_match_the_shared_contract() -> None:
     assert USER_ATTRIBUTE == TURN["user_attribute"]
 
 
+def test_the_shared_user_cases_are_present() -> None:
+    assert TURN["user_cases"]
+
+
+def session_for(case: dict[str, Any]) -> Any:
+    if case.get("session") is False:
+        return None
+    if not case.get("module"):
+        return SimpleNamespace(user=case["session_user"])
+    pytest.importorskip("shiny")
+    from ._session import IdleSession
+
+    root = IdleSession()
+    root.user = case["session_user"]
+    return root.make_scope("module")
+
+
 @pytest.mark.parametrize("case", TURN["user_cases"], ids=lambda c: c["name"])
 def test_the_user_comes_only_from_an_authenticated_session(case: Any) -> None:
-    session = (
-        None
-        if case.get("session") is False
-        else SimpleNamespace(user=case["session_user"])
-    )
-    assert trajectory_user(session) == case["recorded"]
+    assert trajectory_user(session_for(case)) == case["recorded"]
+
+
+def test_a_module_scope_of_the_current_session_has_its_user() -> None:
+    pytest.importorskip("shiny")
+    from shiny.session import session_context
+
+    from ._session import IdleSession
+
+    root = IdleSession()
+    root.user = "alice"
+    with session_context(root.make_scope("module")):
+        assert trajectory_user() == "alice"
 
 
 def test_outside_a_session_there_is_no_user() -> None:
@@ -243,6 +267,7 @@ async def test_a_provider_error_partway_still_ends_the_turn_span(
 ) -> None:
     client = Chat(provider=DroppingProvider([text("First. ", "Second.")]))
     agent = Commons(client, source, log=True)
+    assert agent._tracing
     with pytest.raises(ProviderDown):
         await collect(agent, "one")
     assert len(logging_live(TURN["span"])) == 1

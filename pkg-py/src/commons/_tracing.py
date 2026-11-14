@@ -120,8 +120,9 @@ _CURRENT_SESSION = object()
 def trajectory_user(session: object | None = _CURRENT_SESSION) -> str | None:
     """The authenticated user of ``session``, by default the current Shiny one.
 
-    Only a non-empty string counts. Shiny is consulted only when something
-    has imported it already, so an agent without the ``shiny`` extra imports
+    Only a non-empty string counts. A module's scope reports the user of the
+    session it belongs to. Shiny is consulted only when something has
+    imported it already, so an agent without the ``shiny`` extra imports
     nothing.
     """
     if session is _CURRENT_SESSION:
@@ -130,6 +131,9 @@ def trajectory_user(session: object | None = _CURRENT_SESSION) -> str | None:
             from shiny.session import get_current_session
 
             session = get_current_session()
+    root_scope = getattr(session, "root_scope", None)
+    if callable(root_scope):
+        session = root_scope()
     user = getattr(session, "user", None)
     return user if isinstance(user, str) and user else None
 

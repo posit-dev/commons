@@ -591,8 +591,15 @@ test_that("conversation turn spans are recorded", {
 
 test_that("trajectory users follow the shared user cases", {
   cases <- shared_fixture("traces")$conversation_turn$user_cases
+  expect_gt(length(cases), 0)
   for (case in cases) {
-    session <- if (!identical(case$session, FALSE)) {
+    session <- if (isTRUE(case$module)) {
+      skip_if_not_installed("shiny")
+      root <- shiny::MockShinySession$new()
+      withr::defer(root$close())
+      root$user <- case$session_user
+      root$makeScope("module")
+    } else if (!identical(case$session, FALSE)) {
       list(user = unlist(case$session_user))
     }
     expected <- case$recorded %||% NA_character_

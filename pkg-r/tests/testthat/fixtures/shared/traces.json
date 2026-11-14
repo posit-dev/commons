@@ -146,7 +146,7 @@
     ]
   },
   "conversation_turn": {
-    "description": "The span each package opens around one turn when trajectory logging is live. The turn's chat spans descend from it. It records the authenticated session user when there is one, set when the span starts. `session_user` is what the session reports; `recorded` null means the attribute is absent.",
+    "description": "The span each package opens around one turn when trajectory logging is live. The turn's chat spans descend from it. It records the authenticated session user when there is one, set when the span starts. `session_user` is what the session reports; `module` true means the turn runs in a Shiny module's scope of that session, which reports the same user. `recorded` null means the attribute is absent.",
     "span": "commons_conversation_turn",
     "user_attribute": "commons.connect.user",
     "conversation_attribute": "gen_ai.conversation.id",
@@ -156,7 +156,8 @@
       { "name": "an empty user", "session_user": "", "recorded": null },
       { "name": "a user that is not a string", "session_user": 1, "recorded": null },
       { "name": "several users", "session_user": ["alice", "bob"], "recorded": null },
-      { "name": "an authenticated user", "session_user": "alice", "recorded": "alice" }
+      { "name": "an authenticated user", "session_user": "alice", "recorded": "alice" },
+      { "name": "a module session", "session_user": "alice", "module": true, "recorded": "alice" }
     ]
   }
 }
