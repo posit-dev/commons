@@ -109,18 +109,20 @@ class Commons(Chat[Any, Any]):
     security boundary.
 
     `log` requests trajectory capture with OpenTelemetry (default `False`).
-    When `True`, the agent checks the tracing setup and warns with the steps
-    to complete it when the setup is incomplete. The feature requires Posit
-    Connect >= 2026.09.0, with `OpenTelemetry.Enabled` and
-    `OpenTelemetry.AllowContentInstrumentation` set to `true` by a server
-    administrator, and the `tracing` extra (`pip install 'commons[tracing]'`).
-    Logging also records the authenticated Shiny session user, when Connect
-    supplies one, for attribution. `share_with` is a sequence of Connect
-    usernames granted access to this content's trajectories when running on
-    Posit Connect. Reading traces needs editor-level access, so the named
-    users are added as collaborators on the content, which is a wider grant
-    than trace access. They need an account that can publish. `share_with`
-    applies only when `log=True`.
+    It needs the `tracing` extra (`pip install 'commons[tracing]'`), and warns
+    without it. On Posit Connect, the agent warns when the server cannot
+    record trajectories, and turns on the content's Content Observability
+    setting when the process is not yet traced. Connect must be >= 2026.09.0,
+    with `OpenTelemetry.Enabled` and `OpenTelemetry.AllowContentInstrumentation`
+    set to `true` by a server administrator. Elsewhere, the agent records only
+    when a tracer provider is already installed. Logging also records the
+    authenticated Shiny session user, when Connect supplies one, for
+    attribution. `share_with` is a sequence of Connect usernames granted
+    access to this content's trajectories once logging is live. Reading
+    traces needs editor-level access, so the named users are added as
+    collaborators on the content, which is a wider grant than trace access.
+    They need an account that can publish. `share_with` applies only when
+    `log=True`.
 
     Construction raises a TypeError if `client` is not a `chatlas.Chat`, if
     `log` is not a bool, if `share_with` is not a sequence of strings, if

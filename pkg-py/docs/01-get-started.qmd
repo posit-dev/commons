@@ -330,7 +330,6 @@ Pass `log=True` to `commons.Commons()` to record each conversation with OpenTele
 commons configures no exporter. Where the spans go is your OpenTelemetry setup. To write them to local files, install a tracer provider with a file exporter before you build the agent:
 
 ```python
-import os
 from pathlib import Path
 
 from opentelemetry import trace
@@ -340,15 +339,13 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
 trace_file = Path("traces") / "trace-1.jsonl"
 trace_file.parent.mkdir(exist_ok=True)
-# Lets a reader in this process find the trace files.
-os.environ["OTEL_EXPORTER_OTLP_TRACES_FILE"] = str(trace_file)
 
 provider = TracerProvider()
 provider.add_span_processor(BatchSpanProcessor(FileSpanExporter(path=str(trace_file))))
 trace.set_tracer_provider(provider)
 ```
 
-On Posit Connect (version 2026.09.0 or later) the server exports the spans itself, so this recipe is not needed there. An administrator must set `OpenTelemetry.Enabled` and `OpenTelemetry.AllowContentInstrumentation` to `true`. When the agent runs on Connect in a process with no active tracer provider, it turns on the content's Content Observability setting itself and warns that logging begins once the content restarts; otherwise, use the content's Settings > Monitoring > Traces panel. `share_with=["ada"]` adds the named Connect users as collaborators on the content, so that they can read its traces. This is a wider grant than trace access, and the users need an account that can publish.
+On Posit Connect (version 2026.09.0 or later) the server exports the spans itself, so this recipe is not needed there. An administrator must set `OpenTelemetry.Enabled` and `OpenTelemetry.AllowContentInstrumentation` to `true`. When the agent runs on Connect in a process with no active tracer provider, it turns on the content's Content Observability setting itself and warns that logging begins once the content restarts; otherwise, use the content's Settings > Monitoring > Traces panel. Once logging is live, `share_with=["ada"]` adds the named Connect users as collaborators on the content, so that they can read its traces. This is a wider grant than trace access, and the users need an account that can publish.
 
 The R package's `trajectory_read()` reads the resulting trace files and Connect's trace store. From R, pass it the directory, as in `trajectory_read("traces")`.
 

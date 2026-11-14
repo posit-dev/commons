@@ -6,7 +6,9 @@ argument does not gate them. Until an SDK provider is configured, the
 OpenTelemetry API is inert: a span does not record and costs almost
 nothing. This makes the API safe as a hard dependency, so commons
 requires it and leaves the SDK and the exporters to the ``tracing``
-extra. ``pkg-r/R/tracing.R`` holds the R counterparts.
+extra. Trajectory logging setup checks, when an agent is built with
+``log=True``, whether conversation spans can record, and on Connect turns on
+Content Observability. ``pkg-r/R/tracing.R`` holds the R counterparts.
 """
 
 from __future__ import annotations
@@ -94,12 +96,14 @@ def enable_trajectory_tracing(
     """Check the tracing setup, and say whether to stamp conversation spans.
 
     ``True`` only when ``log`` is set, the SDK is installed, a tracer
-    provider is configured, and message content capture is on. Each missing
-    step warns, or on Connect turns on Content Observability, so the caller
-    learns what to complete. ``share_with`` grants those Connect users access
-    once logging is live. commons configures no exporter: where the spans go
-    is the caller's OpenTelemetry setup. Capture is checked last, so a process
-    with no tracing keeps its environment unchanged.
+    provider is configured, and message content capture is on. A missing SDK
+    warns. On Connect, an unsupported server warns, and a missing provider
+    turns on Content Observability and warns. A missing provider off Connect,
+    or a capture opt-out, returns ``False`` silently. ``share_with`` grants
+    those Connect users access once logging is live. commons configures no
+    exporter: where the spans go is the caller's OpenTelemetry setup. Capture
+    is checked last, so a process with no tracing keeps its environment
+    unchanged.
     """
     check_trajectory_arguments(log, share_with)
 
