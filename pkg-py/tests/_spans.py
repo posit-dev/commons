@@ -36,9 +36,13 @@ def exporter() -> InMemorySpanExporter:
         )
 
         recording = InMemorySpanExporter()
-        provider = TracerProvider()
+        # A provider installed earlier in the process cannot be replaced, so
+        # the exporter attaches to it.
+        provider = trace.get_tracer_provider()
+        if not isinstance(provider, TracerProvider):
+            provider = TracerProvider()
+            trace.set_tracer_provider(provider)
         provider.add_span_processor(SimpleSpanProcessor(recording))
-        trace.set_tracer_provider(provider)
         _EXPORTER = recording
     return _EXPORTER
 
