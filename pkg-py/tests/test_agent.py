@@ -13,6 +13,7 @@ from commons import Injected, context_layer, data_source, measure, semantic_laye
 from commons._agent import Commons
 from commons._citations import CorpusEntry
 from commons._reminders import RESTORED_CONVERSATION_REMINDER, ContentTurnReminder
+from commons._tracing import CAPTURE_VAR
 
 from ._provider import ScriptedProvider, scripted_chat, text
 
@@ -657,3 +658,47 @@ def test_a_chat_starts_a_new_citation_request(source: Any) -> None:
     agent.chat("How many orders?", echo="none")
 
     assert not agent._citation_request.requested
+
+
+# ---- trajectory logging ---------------------------------------------------
+
+
+def test_an_agent_does_not_log_by_default(client: Chat, source: Any) -> None:
+    assert Commons(client, source)._tracing is False
+
+
+def test_log_must_be_a_bool_at_construction(client: Chat, source: Any) -> None:
+    with pytest.raises(TypeError, match="log must be True or False"):
+        Commons(client, source, log="yes")  # type: ignore[arg-type]
+
+
+def test_a_bad_share_with_fails_before_the_sandbox_is_built(
+    client: Chat, source: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def no_worker(*args: Any, **kwargs: Any) -> None:
+        raise AssertionError("the sandbox was built")
+
+    monkeypatch.setattr("commons._agent.Worker", no_worker)
+    with pytest.raises(TypeError, match="sequence of Posit Connect usernames"):
+        Commons(client, source, log=True, share_with="ada")  # type: ignore[arg-type]
+
+
+def test_an_agent_logs_when_tracing_is_set_up(
+    client: Chat, source: Any, spans: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pytest.importorskip("opentelemetry.sdk")
+    monkeypatch.setenv(CAPTURE_VAR, "true")
+    assert Commons(client, source, log=True)._tracing is True
+
+
+def test_a_connect_outage_does_not_stop_construction(
+    client: Chat, source: Any, spans: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pytest.importorskip("opentelemetry.sdk")
+    monkeypatch.setenv("CONNECT_CONTENT_GUID", "content-guid")
+    monkeypatch.setenv("CONNECT_SERVER", "http://127.0.0.1:9")
+    monkeypatch.setenv("CONNECT_API_KEY", "the-api-key")
+    monkeypatch.setenv(CAPTURE_VAR, "true")
+    with pytest.warns(UserWarning):
+        agent = Commons(client, source, log=True, share_with=["ada"])
+    assert isinstance(agent, Commons)

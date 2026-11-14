@@ -48,7 +48,11 @@ from ._reminders import append_restored_conversation_reminder, append_turn_remin
 from ._run_python import run_python_description, run_python_tools
 from ._semantic_models import semantic_registry
 from ._tools import FirstTouch, ToolContext, build_commons_tools
-from ._tracing import commons_span
+from ._tracing import (
+    check_trajectory_arguments,
+    commons_span,
+    enable_trajectory_tracing,
+)
 
 __all__ = ["Commons"]
 
@@ -104,7 +108,22 @@ class Commons(Chat[Any, Any]):
     limited checks instead. Warning! These checks are not intended to be a
     security boundary.
 
+    `log` requests trajectory capture with OpenTelemetry (default `False`).
+    When `True`, the agent checks the tracing setup and warns with the steps
+    to complete it when the setup is incomplete. The feature requires Posit
+    Connect >= 2026.09.0, with `OpenTelemetry.Enabled` and
+    `OpenTelemetry.AllowContentInstrumentation` set to `true` by a server
+    administrator, and the `tracing` extra (`pip install 'commons[tracing]'`).
+    Logging also records the authenticated Shiny session user, when Connect
+    supplies one, for attribution. `share_with` is a sequence of Connect
+    usernames granted access to this content's trajectories when running on
+    Posit Connect. Reading traces needs editor-level access, so the named
+    users are added as collaborators on the content, which is a wider grant
+    than trace access. They need an account that can publish. `share_with`
+    applies only when `log=True`.
+
     Construction raises a TypeError if `client` is not a `chatlas.Chat`, if
+    `log` is not a bool, if `share_with` is not a sequence of strings, if
     an entry of `data_sources` is not a `DataSource`, or if a layer is not
     the layer its argument claims; a ValueError if `data_sources` names no
     source, a measure asks for an injection no named source can fill, or
@@ -122,6 +141,8 @@ class Commons(Chat[Any, Any]):
         *,
         instructions: str | None = None,
         network: Literal["none", "full"] = "none",
+        log: bool = False,
+        share_with: Sequence[str] | None = None,
     ) -> None:
         if not isinstance(client, Chat):
             raise TypeError(
@@ -147,8 +168,10 @@ class Commons(Chat[Any, Any]):
                 f"{type(semantic_layer).__name__}."
             )
         check_instructions(instructions)
+        check_trajectory_arguments(log, share_with)
         definitions = build_registry(sources)
         semantic = semantic_registry(sources)
+        tracing = enable_trajectory_tracing(log=log, share_with=share_with)
         with commons_span(
             "commons_agent_create",
             {
@@ -176,6 +199,7 @@ class Commons(Chat[Any, Any]):
             self.conversation_id = client.conversation_id
             _carry_model_params(self, client)
 
+            self._tracing = tracing
             self._sources = sources
             self._context_layer = augment_context_layer(context_layer, sources.values())
             self._definitions = definitions
