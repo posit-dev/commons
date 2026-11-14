@@ -8,7 +8,10 @@ nothing. This makes the API safe as a hard dependency, so commons
 requires it and leaves the SDK and the exporters to the ``tracing``
 extra. Trajectory logging setup checks, when an agent is built with
 ``log=True``, whether conversation spans can record, and on Connect turns on
-Content Observability. ``pkg-r/R/tracing.R`` holds the R counterparts.
+Content Observability. Once logging is live, each turn opens a turn span
+that the chatlas spans nest under, and each answer records a provenance span
+with its provenance tag and citation decisions. ``pkg-r/R/tracing.R`` holds
+the R counterparts.
 """
 
 from __future__ import annotations
