@@ -74,7 +74,7 @@ def test_the_agent_still_writes_the_committed_trace(tmp_path: Path) -> None:
     assert normalized(tmp_path / TRACE_FILE) == committed, (
         "The agent no longer writes the committed trace. If the change is intended, "
         "regenerate it from the repository root: "
-        "rm tests/shared/traces/python/trace-1.jsonl && cd pkg-py && "
+        "rm -f tests/shared/traces/python/trace-1.jsonl && cd pkg-py && "
         "uv run --extra tracing python -m tests._trace_fixture "
         "../tests/shared/traces/python && cd .. && scripts/sync-shared.sh, "
         "then run the R suite."
