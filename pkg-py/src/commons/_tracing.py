@@ -53,14 +53,7 @@ def commons_span(
     values that the work produces, such as a row count, on the yielded
     span.
     """
-    # A failure's message can carry query text and literals, so the span
-    # records neither the exception nor its description, as in R.
-    with _TRACER.start_as_current_span(
-        name,
-        attributes=attributes,
-        record_exception=False,
-        set_status_on_exception=False,
-    ) as span:
+    with _TRACER.start_as_current_span(name, attributes=attributes) as span:
         yield span
 
 

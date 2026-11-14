@@ -12,7 +12,6 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 import pytest
-from opentelemetry.trace import StatusCode
 
 # The SDK ships in the `tracing` extra. CI installs every extra, so these run
 # there; a plain dev environment skips them rather than failing to import.
@@ -121,7 +120,7 @@ def test_a_nested_span_parents_to_the_enclosing_one(
     assert child.parent.span_id == parent.context.span_id
 
 
-def test_the_span_ends_without_recording_the_error_when_the_body_raises(
+def test_the_span_ends_and_records_the_error_when_the_body_raises(
     spans: Callable[..., list[ReadableSpan]],
 ) -> None:
     with (
@@ -132,10 +131,8 @@ def test_the_span_ends_without_recording_the_error_when_the_body_raises(
 
     (span,) = spans()
     assert span.end_time is not None
-    # The message can carry query text, so it never reaches the trace.
-    assert span.status.status_code is StatusCode.UNSET
-    assert span.status.description is None
-    assert span.events == ()
+    assert span.status.is_ok is False
+    assert [event.name for event in span.events] == ["exception"]
 
 
 def test_the_shared_capture_fixture_has_cases() -> None:
