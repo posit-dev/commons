@@ -28,6 +28,7 @@ __all__ = [
     "parse_connect_version",
     "server_settings",
     "share_trajectory_access",
+    "version_is_older",
 ]
 
 # The first Connect release that records trajectories.
@@ -167,6 +168,13 @@ def parse_connect_version(text: object) -> tuple[int, ...] | None:
     if match is None:
         return None
     return tuple(int(part) for part in match.group(1).split("."))
+
+
+def version_is_older(version: tuple[int, ...], minimum: tuple[int, ...]) -> bool:
+    """Is `version` older than `minimum`? A missing part counts as zero."""
+    width = max(len(version), len(minimum))
+    padded = [(*parts, *([0] * (width - len(parts)))) for parts in (version, minimum)]
+    return padded[0] < padded[1]
 
 
 def server_settings(client: ConnectClient) -> dict[str, Any]:

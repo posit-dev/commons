@@ -210,6 +210,7 @@
         { "name": "an old server that also disallows instrumentation", "settings": { "version": "2026.08.1", "allow_content_instrumentation": false }, "warns": "version" },
         { "name": "the minimum version", "settings": { "version": "2026.09.0" }, "warns": null },
         { "name": "the minimum version with instrumentation allowed", "settings": { "version": "2026.09.0", "allow_content_instrumentation": true }, "warns": null },
+        { "name": "a two-part minimum version", "settings": { "version": "2026.09" }, "warns": null },
         { "name": "a development build", "settings": { "version": "v2026.10.0-dev+12-gabc123" }, "warns": null },
         { "name": "instrumentation disallowed", "settings": { "version": "2026.09.0", "allow_content_instrumentation": false }, "warns": "disabled" },
         { "name": "no version, instrumentation disallowed", "settings": { "allow_content_instrumentation": false }, "warns": "disabled" },

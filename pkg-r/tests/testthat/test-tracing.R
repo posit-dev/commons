@@ -39,7 +39,7 @@ local_connect_settings <- function(settings, env = parent.frame()) {
   )
   httr2::local_mocked_responses(
     function(req) {
-      expect_equal(httr2::url_parse(req$url)$path, "/__api__/server_settings")
+      expect_equal(req$url, "https://connect.example.com/__api__/server_settings")
       if (is.null(settings)) {
         return(httr2::new_response(
           "GET",
@@ -65,7 +65,13 @@ local_connect_settings <- function(settings, env = parent.frame()) {
 
 test_that("the Connect tracing warning follows the shared cases", {
   skip_on_cran()
-  spec <- shared_fixture("connect")$observability$server_settings
+  observability <- shared_fixture("connect")$observability
+  spec <- observability$server_settings
+  expect_gt(length(spec$cases), 0)
+  expect_equal(
+    parse_connect_version(observability$minimum_version),
+    numeric_version("2026.09.0")
+  )
   patterns <- c(
     version = "requires Connect >= 2026.09.0",
     disabled = "disabled by this Posit Connect server"
@@ -143,6 +149,56 @@ test_that("log = TRUE points at Content Observability on Connect", {
   expect_false(.res)
 })
 
+# The requests themselves are shared with pkg-py; see tests/shared/connect.json.
+test_that("the observability requests match the shared fixture", {
+  spec <- shared_fixture("connect")$observability
+  client <- list(server = "https://connect.example.com", api_key = "k")
+  seen <- list()
+  httr2::local_mocked_responses(function(req) {
+    seen[[length(seen) + 1]] <<- req
+    httr2::new_response(
+      "GET",
+      req$url,
+      200L,
+      list(`Content-Type` = "application/json"),
+      charToRaw("{}"),
+      request = req
+    )
+  })
+  endpoint <- function(parts) {
+    vapply(parts, sub, character(1), pattern = "{guid}", replacement = "g",
+           fixed = TRUE)
+  }
+
+  connect_server_settings(client)
+  expect_equal(
+    seen[[1]]$url,
+    sub("{server}", client$server, spec$server_settings$url, fixed = TRUE)
+  )
+  expect_equal(seen[[1]]$method %||% "GET", spec$server_settings$method)
+
+  connect_content(client, "g")
+  expect_equal(
+    seen[[2]]$url,
+    paste(
+      c(paste0(client$server, "/__api__/v1"), endpoint(spec$enable$read$endpoint)),
+      collapse = "/"
+    )
+  )
+  expect_equal(seen[[2]]$method %||% "GET", spec$enable$read$method)
+
+  connect_enable_otel(client, "g")
+  expect_equal(
+    seen[[3]]$url,
+    paste(
+      c(paste0(client$server, "/__api__/v1"), endpoint(spec$enable$write$endpoint)),
+      collapse = "/"
+    )
+  )
+  expect_equal(seen[[3]]$method, spec$enable$write$method)
+  expect_equal(seen[[3]]$body$data, spec$enable$write$body)
+})
+
 test_that("content observability enablement follows the shared cases", {
   withr::local_envvar(CONNECT_CONTENT_GUID = "guid")
   patterns <- c(
@@ -151,7 +207,10 @@ test_that("content observability enablement follows the shared cases", {
     failed = "OpenTelemetry tracing is not active"
   )
 
-  for (case in shared_fixture("connect")$observability$enable$cases) {
+  cases <- shared_fixture("connect")$observability$enable$cases
+  expect_gt(length(cases), 0)
+
+  for (case in cases) {
     clear_observability_attempted()
     state <- new.env()
     state$patched <- 0

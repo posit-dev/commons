@@ -30,6 +30,7 @@ from ._connect import (
     is_connect_runtime,
     parse_connect_version,
     server_settings,
+    version_is_older,
 )
 
 __all__ = [
@@ -138,7 +139,7 @@ def warn_if_connect_tracing_unsupported(*, client: ConnectClient | None = None) 
         return
 
     version = parse_connect_version(settings.get("version"))
-    if version is not None and version < MINIMUM_TRACING_VERSION:
+    if version is not None and version_is_older(version, MINIMUM_TRACING_VERSION):
         warnings.warn(
             f"This server is running Connect {settings['version']}, but "
             "trajectory logging requires Connect >= 2026.09.0. "

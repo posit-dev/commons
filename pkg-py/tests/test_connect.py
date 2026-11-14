@@ -26,6 +26,7 @@ from commons._connect import (
     is_connect_runtime,
     parse_connect_version,
     server_settings,
+    version_is_older,
 )
 
 from ._shared import load_shared_fixture
@@ -76,6 +77,12 @@ def test_the_shared_fixture_carries_the_cases_it_promises() -> None:
     assert {case["expected"] for case in DETECTION} == {True, False}
     assert len(NORMALIZATION) >= 2
     assert len(API_REQUEST["cases"]) >= 1
+    assert {case["warns"] for case in SETTINGS_CASES} == {"version", "disabled", None}
+    assert {case["outcome"] for case in OBSERVABILITY["enable"]["cases"]} == {
+        "toggled",
+        "already_on",
+        "failed",
+    }
 
 
 @pytest.mark.parametrize("case", DETECTION, ids=lambda case: case["name"])
@@ -340,7 +347,7 @@ def test_the_version_comparison_matches_the_shared_cases(
 ) -> None:
     version = parse_connect_version(case["settings"].get("version"))
 
-    too_old = version is not None and version < MINIMUM_TRACING_VERSION
+    too_old = version is not None and version_is_older(version, MINIMUM_TRACING_VERSION)
 
     assert too_old is (case["warns"] == "version")
 
