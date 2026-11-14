@@ -8,21 +8,14 @@ from __future__ import annotations
 
 import os
 import warnings
-from collections.abc import Iterator
-from typing import Any
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
 # The SDK ships in the `tracing` extra. CI installs every extra, so these run
 # there; a plain dev environment skips them rather than failing to import.
 pytest.importorskip("opentelemetry.sdk")
-
-from opentelemetry import trace
-from opentelemetry.sdk.trace import ReadableSpan, TracerProvider
-from opentelemetry.sdk.trace.export import SimpleSpanProcessor
-from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
-    InMemorySpanExporter,
-)
 
 from commons._tracing import (
     CAPTURE_VAR,
@@ -33,34 +26,20 @@ from commons._tracing import (
     tracing_configured,
 )
 
+from . import _spans
 from ._fresh_interpreter import run_in_fresh_interpreter
 from ._shared import load_shared_fixture
 
+if TYPE_CHECKING:
+    from opentelemetry.sdk.trace import ReadableSpan
+
 CONTENT_CAPTURE = load_shared_fixture("traces")["content_capture"]
-
-# The global tracer provider can only be set once per process, so one provider
-# serves the whole module and each test clears the exporter instead.
-_EXPORTER = InMemorySpanExporter()
-
-
-@pytest.fixture(scope="module", autouse=True)
-def _tracing_provider() -> Iterator[None]:
-    provider = TracerProvider()
-    provider.add_span_processor(SimpleSpanProcessor(_EXPORTER))
-    trace.set_tracer_provider(provider)
-    yield
-    provider.shutdown()
 
 
 @pytest.fixture(autouse=True)
-def _clear_exporter() -> Iterator[None]:
-    _EXPORTER.clear()
-    yield
-    _EXPORTER.clear()
-
-
-def exported() -> tuple[ReadableSpan, ...]:
-    return _EXPORTER.get_finished_spans()
+def _provider() -> None:
+    # The logging tests need a configured provider, whether or not they read spans.
+    _spans.exporter()
 
 
 def unset_capture(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -70,27 +49,33 @@ def unset_capture(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv(CAPTURE_VAR)
 
 
-def test_span_is_recorded_with_its_name() -> None:
+def test_span_is_recorded_with_its_name(
+    spans: Callable[..., list[ReadableSpan]],
+) -> None:
     with commons_span("commons_data_source_create"):
         pass
 
-    (span,) = exported()
+    (span,) = spans()
     assert span.name == "commons_data_source_create"
 
 
-def test_span_carries_the_commons_tracer_name() -> None:
+def test_span_carries_the_commons_tracer_name(
+    spans: Callable[..., list[ReadableSpan]],
+) -> None:
     # The scope name identifies commons as the emitter in a shared trace
     # store, alongside chatlas' own spans.
     with commons_span("commons_agent_create"):
         pass
 
-    (span,) = exported()
+    (span,) = spans()
     assert span.instrumentation_scope is not None
     assert span.instrumentation_scope.name == TRACER_NAME
     assert TRACER_NAME == "co.posit.python-package.commons"
 
 
-def test_attributes_given_at_the_start_are_recorded() -> None:
+def test_attributes_given_at_the_start_are_recorded(
+    spans: Callable[..., list[ReadableSpan]],
+) -> None:
     # Attributes are best set at creation: samplers only see those, and
     # Connect snapshots them when the span opens.
     with commons_span(
@@ -98,23 +83,27 @@ def test_attributes_given_at_the_start_are_recorded() -> None:
     ):
         pass
 
-    (span,) = exported()
+    (span,) = spans()
     assert span.attributes is not None
     assert span.attributes["commons.data_source.kind"] == "duckdb"
 
 
-def test_attributes_set_during_the_span_are_recorded() -> None:
+def test_attributes_set_during_the_span_are_recorded(
+    spans: Callable[..., list[ReadableSpan]],
+) -> None:
     # Some values, a row count for instance, are only known once the work the
     # span covers has started.
     with commons_span("commons_data_source_list_tables") as span:
         span.set_attribute("commons.data_source.n_tables", 3)
 
-    (recorded,) = exported()
+    (recorded,) = spans()
     assert recorded.attributes is not None
     assert recorded.attributes["commons.data_source.n_tables"] == 3
 
 
-def test_a_nested_span_parents_to_the_enclosing_one() -> None:
+def test_a_nested_span_parents_to_the_enclosing_one(
+    spans: Callable[..., list[ReadableSpan]],
+) -> None:
     # The span is made current, not merely started: turn grouping depends on
     # spans opened inside it becoming its children.
     with (
@@ -123,7 +112,7 @@ def test_a_nested_span_parents_to_the_enclosing_one() -> None:
     ):
         pass
 
-    child, parent = exported()
+    child, parent = spans()
     assert child.name == "commons_context_store_build"
     assert parent.name == "commons_context_prewarm"
     assert child.parent is not None
@@ -131,14 +120,16 @@ def test_a_nested_span_parents_to_the_enclosing_one() -> None:
     assert child.parent.span_id == parent.context.span_id
 
 
-def test_the_span_ends_and_records_the_error_when_the_body_raises() -> None:
+def test_the_span_ends_and_records_the_error_when_the_body_raises(
+    spans: Callable[..., list[ReadableSpan]],
+) -> None:
     with (
         pytest.raises(ValueError, match="no such table"),
         commons_span("commons_data_source_list_tables"),
     ):
         raise ValueError("no such table")
 
-    (span,) = exported()
+    (span,) = spans()
     assert span.end_time is not None
     assert span.status.is_ok is False
     assert [event.name for event in span.events] == ["exception"]
@@ -169,7 +160,7 @@ def test_content_capture_matches_the_shared_cases(
 
 
 def test_tracing_is_reported_as_configured_once_a_provider_is_installed() -> None:
-    # The module fixture installed one, so this is the configured case.
+    # The autouse fixture installed one, so this is the configured case.
     assert tracing_configured() is True
 
 
