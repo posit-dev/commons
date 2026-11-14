@@ -18,7 +18,7 @@ import os
 import sys
 import warnings
 from collections.abc import Iterator, Mapping, Sequence
-from contextlib import contextmanager, nullcontext
+from contextlib import AbstractContextManager, contextmanager, nullcontext
 from typing import Any
 
 from opentelemetry import trace
@@ -45,6 +45,7 @@ __all__ = [
     "TURN_SPAN",
     "USER_ATTRIBUTE",
     "Span",
+    "as_current",
     "check_trajectory_arguments",
     "commons_span",
     "content_capture_enabled",
@@ -98,6 +99,18 @@ def start_turn_span(user: str | None) -> Span:
     """
     return _TRACER.start_span(
         TURN_SPAN, attributes=None if user is None else {USER_ATTRIBUTE: user}
+    )
+
+
+def as_current(span: Span | None) -> AbstractContextManager[Any]:
+    """Make ``span`` current for the block, leaving it open and its status alone.
+
+    Does nothing when there is no span.
+    """
+    if span is None:
+        return nullcontext()
+    return trace.use_span(
+        span, end_on_exit=False, record_exception=False, set_status_on_exception=False
     )
 
 

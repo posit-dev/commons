@@ -50,9 +50,12 @@ from ._run_python import run_python_description, run_python_tools
 from ._semantic_models import semantic_registry
 from ._tools import FirstTouch, ToolContext, build_commons_tools
 from ._tracing import (
+    as_current,
     check_trajectory_arguments,
     commons_span,
     enable_trajectory_tracing,
+    start_turn_span,
+    trajectory_user,
 )
 
 __all__ = ["Commons"]
@@ -301,11 +304,15 @@ class Commons(Chat[Any, Any]):
         swap = any(tool.name == EXECUTION_TOOL for tool in self.get_tools())
         if swap:
             self.register_tool(self._run_python_sync, force=True)
+        turn = start_turn_span(trajectory_user()) if self._tracing else None
         try:
-            response = super().chat(
-                *inputs, echo=echo, stream=stream, kwargs=kwargs
-            )
+            with as_current(turn):
+                response = super().chat(
+                    *inputs, echo=echo, stream=stream, kwargs=kwargs
+                )
         finally:
+            if turn is not None:
+                turn.end()
             if swap:
                 self.register_tool(self._run_python, force=True)
         self._consume_restore_reminder(was_pending)
@@ -351,7 +358,9 @@ class Commons(Chat[Any, Any]):
             kwargs=kwargs,
             controller=controller,
         )
-        return self._projected(raw, from_index, was_pending, controller)
+        # Read now: the stream is pulled outside the session that asked.
+        user = trajectory_user() if self._tracing else None
+        return self._projected(raw, from_index, was_pending, controller, user)
 
     # Citations are always projected, so reserved model markup cannot reach
     # the browser whatever the display layer does with the stream.
@@ -361,45 +370,60 @@ class Commons(Chat[Any, Any]):
         from_index: int,
         was_pending: bool,
         controller: StreamController | None = None,
+        user: str | None = None,
     ) -> AsyncGenerator[str | Content, None]:
-        scanner = CitationScanner(self._corpus)
-        # chatlas checks the controller only between chunks, so a running
-        # run_python call would otherwise finish before a stop takes effect.
-        watch = (
-            asyncio.ensure_future(self._stop_python_when(controller))
-            if controller is not None
-            else None
-        )
+        # chatlas starts its spans on the first pull of `raw`, under whatever
+        # is current then. The turn span is current only while `raw` is
+        # pulled: this generator's body runs in whichever context pulls it,
+        # so a span attached across a `yield` could be detached in another.
+        turn = start_turn_span(user) if self._tracing else None
         try:
-            async for chunk in raw:
-                # A provider's structured content passes through untouched;
-                # only the model's own text can carry the reserved dialect.
-                if not isinstance(chunk, str):
-                    yield chunk
-                    continue
-                projected = scanner.feed(chunk)
-                if projected:
-                    yield projected
+            scanner = CitationScanner(self._corpus)
+            # chatlas checks the controller only between chunks, so a running
+            # run_python call would otherwise finish before a stop takes effect.
+            watch = (
+                asyncio.ensure_future(self._stop_python_when(controller))
+                if controller is not None
+                else None
+            )
+            try:
+                while True:
+                    with as_current(turn):
+                        try:
+                            chunk = await anext(raw)
+                        except StopAsyncIteration:
+                            break
+                    # A provider's structured content passes through untouched;
+                    # only the model's own text can carry the reserved dialect.
+                    if not isinstance(chunk, str):
+                        yield chunk
+                        continue
+                    projected = scanner.feed(chunk)
+                    if projected:
+                        yield projected
+            finally:
+                if watch is not None:
+                    watch.cancel()
+                # A consumer that walks away early without cancelling still
+                # closes the provider's stream.
+                await raw.aclose()
+
+            self._consume_restore_reminder(was_pending)
+
+            tail = scanner.finish()
+            if tail:
+                yield tail
+
+            tag = derive_provenance_tag(
+                collect_appended_tags(self.get_turns(), from_index),
+                scanner.any_verified,
+            )
+            aside = provenance_aside(tag)
+            if aside:
+                yield aside
         finally:
-            if watch is not None:
-                watch.cancel()
-            # A consumer that walks away early without cancelling still
-            # closes the provider's stream.
-            await raw.aclose()
-
-        self._consume_restore_reminder(was_pending)
-
-        tail = scanner.finish()
-        if tail:
-            yield tail
-
-        tag = derive_provenance_tag(
-            collect_appended_tags(self.get_turns(), from_index),
-            scanner.any_verified,
-        )
-        aside = provenance_aside(tag)
-        if aside:
-            yield aside
+            if turn is not None:
+                turn.end()
 
     async def _stop_python_when(self, controller: StreamController) -> None:
         """Stop the Python session's calls once ``controller`` is cancelled."""
