@@ -1118,6 +1118,20 @@ test_that("trajectory_read reads OTLP files from a directory", {
   expect_s3_class(trajectories[[1]]$last_active, "POSIXct")
 })
 
+test_that("local trace files are named as the shared fixture pins", {
+  withr::local_envvar(OTEL_EXPORTER_OTLP_TRACES_FILE = NA)
+  cases <- shared_fixture("traces")$file_naming$cases
+  expect_gt(length(cases), 0)
+
+  for (case in cases) {
+    expect_identical(
+      grepl(local_traces_pattern(), case$file),
+      case$read,
+      info = case$file
+    )
+  }
+})
+
 test_that("local trace files can follow a custom exporter template", {
   path <- withr::local_tempdir()
   withr::local_envvar(
