@@ -6,6 +6,7 @@ not the names commons records.
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import warnings
 from collections.abc import Callable
@@ -32,6 +33,7 @@ from commons._tracing import (
 )
 
 from . import _spans
+from ._connect_double import connect_double
 from ._fresh_interpreter import run_in_fresh_interpreter
 from ._shared import load_shared_fixture
 
@@ -389,3 +391,128 @@ def test_enablement_without_credentials_warns_instead_of_raising(
         enable_content_observability()
 
     assert [warning_kind(warning) for warning in caught] == ["failed"]
+
+
+@pytest.fixture
+def connect_requests(monkeypatch: pytest.MonkeyPatch) -> list[httpx.Request]:
+    """Route `ConnectClient.from_env()` to a Connect double; yield what it saw."""
+    seen: list[httpx.Request] = []
+    monkeypatch.setattr(
+        ConnectClient,
+        "from_env",
+        classmethod(lambda cls, **_: connect_double(seen=seen)[0]),
+    )
+    return seen
+
+
+def test_log_must_be_a_bool() -> None:
+    with pytest.raises(TypeError, match="log must be True or False"):
+        enable_trajectory_tracing(log="yes")  # type: ignore[arg-type]
+
+
+def test_a_bare_string_is_not_a_list_of_usernames() -> None:
+    with pytest.raises(TypeError, match="sequence of Posit Connect usernames"):
+        enable_trajectory_tracing(log=True, share_with="ada")
+
+
+def test_share_with_without_log_warns_and_grants_nobody(
+    on_connect: None, connect_requests: list[httpx.Request]
+) -> None:
+    with pytest.warns(UserWarning, match=r"only applies when log=True"):
+        assert enable_trajectory_tracing(log=False, share_with=["ada"]) is False
+    assert connect_requests == []
+
+
+def test_grants_wait_until_tracing_is_live(
+    monkeypatch: pytest.MonkeyPatch,
+    on_connect: None,
+    connect_requests: list[httpx.Request],
+) -> None:
+    monkeypatch.setenv(CAPTURE_VAR, "false")
+    assert enable_trajectory_tracing(log=True, share_with=["ada"]) is False
+    assert not any("permissions" in str(r.url) for r in connect_requests)
+
+
+def test_live_logging_grants_access_to_the_named_users(
+    monkeypatch: pytest.MonkeyPatch,
+    on_connect: None,
+    connect_requests: list[httpx.Request],
+) -> None:
+    unset_capture(monkeypatch)
+    assert enable_trajectory_tracing(log=True, share_with=["ada"]) is True
+    assert any(
+        r.method == "POST" and r.url.path.endswith("/permissions")
+        for r in connect_requests
+    )
+
+
+def test_an_unsupported_connect_is_checked_before_anything_else(
+    monkeypatch: pytest.MonkeyPatch,
+    on_connect: None,
+    connect_requests: list[httpx.Request],
+) -> None:
+    unset_capture(monkeypatch)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        enable_trajectory_tracing(log=True)
+    assert [r.url.path for r in connect_requests] == ["/__api__/server_settings"]
+
+
+def test_logging_without_the_sdk_warns_with_the_install_step(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    real = importlib.util.find_spec
+    monkeypatch.setattr(
+        importlib.util,
+        "find_spec",
+        lambda name, *a: None if name == "opentelemetry.sdk" else real(name, *a),
+    )
+    with pytest.warns(UserWarning, match=r"pip install 'commons\[tracing\]'"):
+        assert enable_trajectory_tracing(log=True) is False
+
+
+def test_logging_is_live_with_a_provider_and_capture(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    unset_capture(monkeypatch)
+    assert enable_trajectory_tracing(log=True) is True
+    assert os.environ[CAPTURE_VAR] == "true"
+
+
+def test_logging_with_an_installed_sdk_and_no_provider_is_silent_off_connect() -> None:
+    output = run_in_fresh_interpreter(
+        """
+        import os
+        import warnings
+
+        from commons._tracing import CAPTURE_VAR, enable_trajectory_tracing
+
+        os.environ.pop(CAPTURE_VAR, None)
+        warnings.simplefilter("error")
+        print(enable_trajectory_tracing(log=True))
+        print(CAPTURE_VAR in os.environ)
+        """
+    )
+    assert output.split() == ["False", "False"]
+
+
+def test_logging_with_the_sdk_disabled_is_silent_and_leaves_capture_alone() -> None:
+    output = run_in_fresh_interpreter(
+        """
+        import os
+        import warnings
+
+        from opentelemetry import trace
+        from opentelemetry.sdk.trace import TracerProvider
+
+        from commons._tracing import CAPTURE_VAR, enable_trajectory_tracing
+
+        os.environ.pop(CAPTURE_VAR, None)
+        trace.set_tracer_provider(TracerProvider())
+        warnings.simplefilter("error")
+        print(enable_trajectory_tracing(log=True))
+        print(CAPTURE_VAR in os.environ)
+        """,
+        OTEL_SDK_DISABLED="true",
+    )
+    assert output.split() == ["False", "False"]

@@ -17,6 +17,7 @@ import pytest
 
 from commons._connect import ConnectClient, share_trajectory_access
 
+from ._connect_double import connect_double, grants
 from ._shared import load_shared_fixture
 
 SPEC = load_shared_fixture("connect")
@@ -24,7 +25,6 @@ GRANT: dict[str, Any] = SPEC["collaborator_grant"]
 SHARING: list[dict[str, Any]] = SPEC["sharing"]["cases"]
 SHARING_AGAIN: list[dict[str, Any]] = SPEC["sharing_again"]["cases"]
 GUID = "01234567-89ab-cdef-0123-456789abcdef"
-DIRECTORY = {"ada": "guid-ada", "grace": "guid-grace"}
 
 
 @pytest.fixture(autouse=True)
@@ -39,67 +39,6 @@ def _forget_grants() -> None:
     from commons import _connect
 
     _connect._GRANTED.clear()
-
-
-def connect_double(
-    *,
-    users: dict[str, str] | None = None,
-    permitted: Any = None,
-    refused: list[str] | None = None,
-    fail: str | None = None,
-) -> tuple[ConnectClient, list[httpx.Request]]:
-    """A Connect server with the given users and existing permissions.
-
-    A grant for a principal in `refused` gets the 400 Connect gives the
-    content's owner.
-    """
-    users = DIRECTORY if users is None else users
-    permitted = [] if permitted is None else permitted
-    refused = [] if refused is None else refused
-    seen: list[httpx.Request] = []
-    page_size = 500
-
-    def route(request: httpx.Request) -> httpx.Response:
-        seen.append(request)
-        path = request.url.path
-        if fail is not None and fail in path:
-            return httpx.Response(500, json={"error": "boom"})
-        if path.endswith("/permissions") and request.method == "GET":
-            return httpx.Response(200, json=permitted)
-        if path.endswith("/permissions"):
-            if json.loads(request.read())["principal_guid"] in refused:
-                return httpx.Response(400, json={"code": 74})
-            return httpx.Response(200, json={})
-        if path.endswith("/users"):
-            prefix = request.url.params["prefix"].lower()
-            page = int(request.url.params["page_number"])
-            # Insertion order, not sorted: Connect promises no ordering for a
-            # prefix search, and sorting would put an exact match ahead of the
-            # longer names it prefixes, so paging could never be exercised.
-            matches = [name for name in users if name.startswith(prefix)]
-            # Connect pages a prefix search; a short page is the last one.
-            start = (page - 1) * page_size
-            window = matches[start : start + page_size]
-            return httpx.Response(
-                200,
-                json={
-                    "results": [
-                        {"username": name, "guid": users[name]} for name in window
-                    ]
-                },
-            )
-        raise AssertionError(f"unexpected request to {path}")
-
-    http = httpx.Client(transport=httpx.MockTransport(route))
-    return ConnectClient("https://connect.example.com", "the-api-key", http=http), seen
-
-
-def grants(seen: list[httpx.Request]) -> list[dict[str, Any]]:
-    return [
-        json.loads(request.read())
-        for request in seen
-        if request.method == "POST" and request.url.path.endswith("/permissions")
-    ]
 
 
 def test_the_shared_fixture_covers_a_grant_and_a_skip() -> None:

@@ -11,9 +11,10 @@ extra. ``pkg-r/R/tracing.R`` holds the R counterparts.
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import warnings
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager, nullcontext
 from typing import Any
 
@@ -24,12 +25,14 @@ from ._connect import (
     MINIMUM_TRACING_VERSION,
     ConnectClient,
     ConnectError,
+    check_usernames,
     connect_content_guid,
     content,
     enable_otel,
     is_connect_runtime,
     parse_connect_version,
     server_settings,
+    share_trajectory_access,
     version_is_older,
 )
 
@@ -37,6 +40,7 @@ __all__ = [
     "CAPTURE_VAR",
     "TRACER_NAME",
     "Span",
+    "check_trajectory_arguments",
     "commons_span",
     "content_capture_enabled",
     "enable_content_observability",
@@ -76,19 +80,57 @@ def commons_span(
         yield span
 
 
-def enable_trajectory_tracing(*, log: bool) -> bool:
-    """Say whether to stamp conversation spans for trajectory logging.
+def check_trajectory_arguments(log: object, share_with: Sequence[str] | None) -> None:
+    """Raise a TypeError unless `log` is a bool and `share_with` a username sequence."""
+    if not isinstance(log, bool):
+        raise TypeError("log must be True or False.")
+    if share_with is not None:
+        check_usernames(share_with)
 
-    ``True`` only when ``log`` is set, a tracer provider is configured, and
-    message content capture is on. commons configures no exporter: where
-    the spans go is the caller's OpenTelemetry setup. Capture is checked
-    last, so a process with no tracing keeps its environment unchanged.
+
+def enable_trajectory_tracing(
+    *, log: bool, share_with: Sequence[str] | None = None
+) -> bool:
+    """Check the tracing setup, and say whether to stamp conversation spans.
+
+    ``True`` only when ``log`` is set, the SDK is installed, a tracer
+    provider is configured, and message content capture is on. Each missing
+    step warns, or on Connect turns on Content Observability, so the caller
+    learns what to complete. ``share_with`` grants those Connect users access
+    once logging is live. commons configures no exporter: where the spans go
+    is the caller's OpenTelemetry setup. Capture is checked last, so a process
+    with no tracing keeps its environment unchanged.
     """
+    check_trajectory_arguments(log, share_with)
+
     if not log:
+        if share_with is not None:
+            warnings.warn(
+                "share_with only applies when log=True. Ignoring it.",
+                stacklevel=2,
+            )
         return False
+
+    warn_if_connect_tracing_unsupported()
+
+    if importlib.util.find_spec("opentelemetry.sdk") is None:
+        warnings.warn(
+            "Trajectory logging requires the tracing extra. "
+            "Install it with: pip install 'commons[tracing]'",
+            stacklevel=2,
+        )
+        return False
+
     if not tracing_configured():
+        enable_content_observability()
         return False
-    return content_capture_enabled()
+
+    if not content_capture_enabled():
+        return False
+
+    if share_with is not None:
+        share_trajectory_access(share_with)
+    return True
 
 
 def tracing_configured() -> bool:
@@ -96,8 +138,12 @@ def tracing_configured() -> bool:
 
     Says nothing about whether that provider exports them anywhere. A provider
     with no span processor, or one sampling nothing, records and discards, and
-    only its owner can know that.
+    only its owner can know that. ``OTEL_SDK_DISABLED=true`` turns the SDK's
+    tracers into no-ops whatever provider is installed, so it counts as not
+    configured.
     """
+    if os.environ.get("OTEL_SDK_DISABLED", "").strip().lower() == "true":
+        return False
     provider = trace.get_tracer_provider()
     return not isinstance(
         provider, trace.ProxyTracerProvider | trace.NoOpTracerProvider
