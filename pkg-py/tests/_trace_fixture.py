@@ -2,9 +2,11 @@
 
 The conversations run through real logging agents over a scripted model, so
 the spans are the ones a live model would produce for the same turns. A
-tracer provider can be installed once per process, so run this in its own:
+tracer provider can be installed once per process, so run this in its own.
+To regenerate the committed trace, from the repository root:
 
-    cd pkg-py && uv run python -m tests._trace_fixture ../tests/shared/traces/python
+    rm tests/shared/traces/python/trace-1.jsonl
+    cd pkg-py && uv run --extra tracing python -m tests._trace_fixture ../tests/shared/traces/python && cd .. && scripts/sync-shared.sh
 """
 
 from __future__ import annotations
@@ -107,9 +109,16 @@ def write_trace(directory: Path) -> Path:
     )
     trace.set_tracer_provider(provider)
 
-    with tempfile.TemporaryDirectory() as docs:
-        asyncio.run(converse(documents(Path(docs))))
-    provider.shutdown()
+    completed = False
+    try:
+        with tempfile.TemporaryDirectory() as docs:
+            asyncio.run(converse(documents(Path(docs))))
+        completed = True
+    finally:
+        provider.shutdown()
+        # A partial trace would block the next run.
+        if not completed:
+            trace_file.unlink(missing_ok=True)
     return trace_file
 
 

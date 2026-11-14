@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -27,9 +28,9 @@ _DATE = re.compile(r"Today's date is \d{4}-\d{2}-\d{2}\.")
 def normalized(path: Path) -> list[dict[str, Any]]:
     """The spans in file order, with what varies between runs replaced.
 
-    Ids and conversation ids become the order each first appears, and
-    timestamps, resource attributes, the scope version, and the prompt's date
-    are dropped.
+    Ids and conversation ids become the order each first appears, the
+    prompt's date becomes a placeholder, and timestamps, resource attributes,
+    and the scope version are dropped.
     """
     ordinals: dict[str, str] = {}
 
@@ -64,17 +65,19 @@ def normalized(path: Path) -> list[dict[str, Any]]:
 
 def test_the_agent_still_writes_the_committed_trace(tmp_path: Path) -> None:
     pytest.importorskip("opentelemetry.exporter.otlp.json.file")
-    written = run_in_fresh_interpreter(
+    run_in_fresh_interpreter(
         "from pathlib import Path; from tests._trace_fixture import write_trace; "
-        f"print(write_trace(Path({str(tmp_path)!r})))"
+        f"write_trace(Path({str(tmp_path)!r}))"
     )
     committed = normalized(COMMITTED)
     assert committed
-    assert normalized(Path(written.strip())) == committed, (
+    assert normalized(tmp_path / TRACE_FILE) == committed, (
         "The agent no longer writes the committed trace. If the change is intended, "
-        "regenerate it: cd pkg-py && rm ../tests/shared/traces/python/trace-1.jsonl && "
-        "uv run python -m tests._trace_fixture ../tests/shared/traces/python, "
-        "then run scripts/sync-shared.sh and the R suite."
+        "regenerate it from the repository root: "
+        "rm tests/shared/traces/python/trace-1.jsonl && cd pkg-py && "
+        "uv run --extra tracing python -m tests._trace_fixture "
+        "../tests/shared/traces/python && cd .. && scripts/sync-shared.sh, "
+        "then run the R suite."
     )
 
 
@@ -90,8 +93,10 @@ def test_the_shared_file_naming_cases_are_present() -> None:
 
 
 @pytest.mark.parametrize(
-    "name", [TRACE_FILE, recipe_trace_file()], ids=["write_trace", "recipe"]
+    "name", [lambda: TRACE_FILE, recipe_trace_file], ids=["write_trace", "recipe"]
 )
-def test_trace_files_are_written_under_a_name_a_reader_takes(name: str) -> None:
+def test_trace_files_are_written_under_a_name_a_reader_takes(
+    name: Callable[[], str],
+) -> None:
     taken = {case["file"] for case in FILE_NAMING if case["read"]}
-    assert name in taken
+    assert name() in taken
