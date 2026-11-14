@@ -6,7 +6,7 @@
 
 ## Optional extras
 
-The core dependencies will allow you to build and query an agent. Installing the `shiny` group (via `pip install commons[shiny]`) will additionally install everything `commons.ui` needs to serve a full chat UI; importing `commons.ui` without it raises an `ImportError` that names the missing packages and the install command. Nothing in commons currently needs the `tracing` group (it is a placeholder for future functionality).
+The core dependencies will allow you to build and query an agent. Installing the `shiny` group (via `pip install commons[shiny]`) will additionally install everything `commons.ui` needs to serve a full chat UI; importing `commons.ui` without it raises an `ImportError` that names the missing packages and the install command. The `tracing` group installs what `log=True` needs to write trace files locally.
 
 ## Get started
 

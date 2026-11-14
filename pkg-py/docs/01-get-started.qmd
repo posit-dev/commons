@@ -323,6 +323,35 @@ def app_server(input, output, session):
 app = App(app_ui, app_server)
 ```
 
+## Logging conversations
+
+Pass `log=True` to `commons.Commons()` to record each conversation with OpenTelemetry. The agent checks the tracing setup when it is built and warns with the steps to finish it when something is missing. Install the extra that logging needs with `pip install commons[tracing]`.
+
+commons configures no exporter. Where the spans go is your OpenTelemetry setup. To write them to local files, install a tracer provider with a file exporter before you build the agent:
+
+```python
+import os
+from pathlib import Path
+
+from opentelemetry import trace
+from opentelemetry.exporter.otlp.json.file import FileSpanExporter
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+trace_file = Path("traces") / "trace-1.jsonl"
+trace_file.parent.mkdir(exist_ok=True)
+# A trace reader finds the directory through this variable.
+os.environ["OTEL_EXPORTER_OTLP_TRACES_FILE"] = str(trace_file)
+
+provider = TracerProvider()
+provider.add_span_processor(BatchSpanProcessor(FileSpanExporter(path=str(trace_file))))
+trace.set_tracer_provider(provider)
+```
+
+On Posit Connect (version 2026.09.0 or later) the server exports the spans itself, so this recipe is not needed there. An administrator must set `OpenTelemetry.Enabled` and `OpenTelemetry.AllowContentInstrumentation` to `true`, and the content needs Content Observability turned on. `share_with=["ada"]` adds the named Connect users as collaborators on the content, so that they can read its traces. This is a wider grant than trace access, and the users need an account that can publish.
+
+The R package's `trajectory_read()` reads the resulting trace files and Connect's trace store.
+
 ## Example application
 
 [`demo.py`](https://github.com/posit-dev/commons/blob/main/pkg-py/demo.py), in the Python package's directory, is a fuller worked example: an agent over made-up forest canopy data with a semantic layer of measures and a context layer. Run it with `uv run shiny run demo.py` for the chat UI, or `uv run python demo.py` to ask the same questions from the terminal. [`demo.ipynb`](https://github.com/posit-dev/commons/blob/main/pkg-py/demo.ipynb) is the same agent in a notebook, with cells for reading what the agent registered and adding a measure of your own.
