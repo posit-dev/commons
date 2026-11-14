@@ -643,3 +643,47 @@ test_that("conversation turn spans capture the active session user", {
   )
   expect_null(recorded$traces[[3]]$attributes[[attribute]])
 })
+
+test_that("provenance spans follow the shared candidates cases", {
+  skip_if_not_installed("otelsdk")
+  contract <- shared_fixture("traces")$provenance
+  expect_gt(length(contract$candidates_cases), 0)
+
+  for (case in contract$candidates_cases) {
+    decisions <- lapply(case$decisions, function(decision) {
+      decision$quote <- decision$quote %||% NA_character_
+      decision
+    })
+    recorded <- otelsdk::with_otel_record({
+      record_provenance_span("B", decisions)
+    })
+
+    span <- recorded$traces[[1]]
+    expect_equal(span$name, contract$span, label = case$name)
+    expect_setequal(
+      names(span$attributes),
+      c(contract$tag_attribute, contract$candidates_attribute)
+    )
+    expect_equal(
+      jsonlite::fromJSON(
+        span$attributes[[contract$candidates_attribute]],
+        simplifyVector = FALSE
+      ),
+      case$expected,
+      label = case$name
+    )
+  }
+})
+
+test_that("a provenance span without a tag records no tag attribute", {
+  skip_if_not_installed("otelsdk")
+  contract <- shared_fixture("traces")$provenance
+
+  recorded <- otelsdk::with_otel_record({
+    record_provenance_span(NA_character_, list())
+  })
+
+  attributes <- recorded$traces[[1]]$attributes
+  expect_null(attributes[[contract$tag_attribute]])
+  expect_identical(attributes[[contract$candidates_attribute]], "[]")
+})
