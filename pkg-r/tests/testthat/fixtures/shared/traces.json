@@ -165,6 +165,10 @@
     "span": "commons_provenance",
     "tag_attribute": "commons.provenance.tag",
     "candidates_attribute": "commons.citation.candidates",
+    "tag_cases": [
+      { "name": "no tag", "tag": null, "recorded": null },
+      { "name": "a tag", "tag": "B", "recorded": "B" }
+    ],
     "candidates_cases": [
       { "name": "no citations", "decisions": [], "expected": [] },
       {

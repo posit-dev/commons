@@ -118,7 +118,7 @@ def start_turn_span(user: str | None) -> Span:
 
 
 def citation_candidates_json(decisions: Sequence[CitationDecision]) -> str:
-    """The decisions as the JSON array the candidates attribute holds.
+    """The decisions as the JSON array written to the candidates attribute.
 
     A decision's ``label`` and ``kind`` are left out when absent. ``quote``
     is always present and is ``null`` for a malformed body.
@@ -138,6 +138,7 @@ def citation_candidates_json(decisions: Sequence[CitationDecision]) -> str:
             for decision in decisions
         ],
         separators=(",", ":"),
+        ensure_ascii=False,
     )
 
 

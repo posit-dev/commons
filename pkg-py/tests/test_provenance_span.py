@@ -12,11 +12,14 @@ from chatlas.types import ContentText
 
 from commons import context_layer
 from commons._citations import CitationDecision
+from commons._provenance import Tag
 from commons._tracing import (
     CANDIDATES_ATTRIBUTE,
     PROVENANCE_SPAN,
     TAG_ATTRIBUTE,
     citation_candidates_json,
+    commons_span,
+    record_provenance_span,
 )
 
 from ._agents import agent_over, collect, logging_agent_over, sales
@@ -38,6 +41,11 @@ def test_the_names_match_the_shared_contract() -> None:
     assert CANDIDATES_ATTRIBUTE == PROVENANCE["candidates_attribute"]
 
 
+def test_the_shared_cases_are_present() -> None:
+    assert PROVENANCE["candidates_cases"]
+    assert PROVENANCE["tag_cases"]
+
+
 @pytest.mark.parametrize(
     "case", PROVENANCE["candidates_cases"], ids=lambda c: c["name"]
 )
@@ -45,6 +53,24 @@ def test_decisions_serialize_to_the_shared_shape(case: Any) -> None:
     decisions = [CitationDecision(**decision) for decision in case["decisions"]]
 
     assert json.loads(citation_candidates_json(decisions)) == case["expected"]
+
+
+def test_non_ascii_quotes_are_written_as_utf8() -> None:
+    decision = CitationDecision(quote="café", status="rejected")
+
+    assert "café" in citation_candidates_json([decision])
+
+
+@pytest.mark.parametrize("case", PROVENANCE["tag_cases"], ids=lambda c: c["name"])
+def test_the_tag_attribute_follows_the_shared_cases(
+    case: Any, logging_live: Any
+) -> None:
+    tag = None if case["tag"] is None else Tag(case["tag"])
+    with commons_span("parent") as parent:
+        record_provenance_span(parent, tag, [])
+
+    (provenance,) = logging_live(PROVENANCE["span"])
+    assert provenance.attributes.get(TAG_ATTRIBUTE) == case["recorded"]
 
 
 def expected_tag(tags: list[str], verified: bool) -> str:

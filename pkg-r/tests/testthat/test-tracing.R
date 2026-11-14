@@ -675,15 +675,26 @@ test_that("provenance spans follow the shared candidates cases", {
   }
 })
 
-test_that("a provenance span without a tag records no tag attribute", {
+test_that("provenance spans follow the shared tag cases", {
   skip_if_not_installed("otelsdk")
   contract <- shared_fixture("traces")$provenance
+  expect_gt(length(contract$tag_cases), 0)
 
-  recorded <- otelsdk::with_otel_record({
-    record_provenance_span(NA_character_, list())
-  })
+  for (case in contract$tag_cases) {
+    recorded <- otelsdk::with_otel_record({
+      record_provenance_span(case$tag %||% NA_character_, list())
+    })
 
-  attributes <- recorded$traces[[1]]$attributes
-  expect_null(attributes[[contract$tag_attribute]])
-  expect_identical(attributes[[contract$candidates_attribute]], "[]")
+    attributes <- recorded$traces[[1]]$attributes
+    expect_identical(
+      attributes[[contract$tag_attribute]],
+      case$recorded,
+      label = case$name
+    )
+    expect_identical(
+      attributes[[contract$candidates_attribute]],
+      "[]",
+      label = case$name
+    )
+  }
 })
