@@ -7,11 +7,14 @@ To regenerate the committed trace, from the repository root:
 
     rm -f tests/shared/traces/python/trace-1.jsonl
     cd pkg-py && uv run --extra tracing python -m tests._trace_fixture ../tests/shared/traces/python && cd .. && scripts/sync-shared.sh
+
+``recipe()`` reads the get-started recipe that writes trace files locally.
 """
 
 from __future__ import annotations
 
 import asyncio
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -28,6 +31,8 @@ from ._agents import collect
 from ._provider import scripted_chat, text
 
 TRACE_FILE = "trace-1.jsonl"
+GET_STARTED = Path(__file__).parents[1] / "docs" / "01-get-started.qmd"
+RECIPE_HEADING = "## Logging conversations"
 
 DOCUMENTS = [
     "Orders are one row per placed order.",
@@ -50,6 +55,15 @@ def cited(answer: str, quote: str) -> list[Any]:
     return [
         ContentText(text=f"{answer}\n\n<citation>\n\nWhy.\n\n> {quote}\n\n</citation>")
     ]
+
+
+def recipe() -> str:
+    """The Python block in the get-started section on logging conversations."""
+    text = GET_STARTED.read_text(encoding="utf-8")
+    section = text.split(RECIPE_HEADING, 1)[1].split("\n## ", 1)[0]
+    match = re.search(r"```python\n(.*?)```", section, re.DOTALL)
+    assert match, f"no Python block under {RECIPE_HEADING!r}"
+    return match.group(1)
 
 
 def source() -> Any:

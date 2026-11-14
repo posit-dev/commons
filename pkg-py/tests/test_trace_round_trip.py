@@ -12,11 +12,10 @@ import pytest
 
 from ._fresh_interpreter import run_in_fresh_interpreter
 from ._shared import SHARED_DIR, load_shared_fixture
-from ._trace_fixture import TRACE_FILE
+from ._trace_fixture import TRACE_FILE, recipe
 
 COMMITTED = SHARED_DIR / "traces" / "python" / "trace-1.jsonl"
 FILE_NAMING = load_shared_fixture("traces")["file_naming"]["cases"]
-GET_STARTED = Path(__file__).parents[1] / "docs" / "01-get-started.qmd"
 
 _IDS = ("traceId", "spanId", "parentSpanId")
 _TIMESTAMPS = ("startTimeUnixNano", "endTimeUnixNano")
@@ -81,8 +80,7 @@ def test_the_agent_still_writes_the_committed_trace(tmp_path: Path) -> None:
 
 
 def recipe_trace_file() -> str:
-    section = GET_STARTED.read_text().split("## Logging conversations", 1)[1]
-    match = re.search(r'^trace_file = .*"([^"/]+)"$', section, re.MULTILINE)
+    match = re.search(r'^trace_file = .*"([^"/]+)"$', recipe(), re.MULTILINE)
     assert match, "the recipe names no trace file"
     return match.group(1)
 
