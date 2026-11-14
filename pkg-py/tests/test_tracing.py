@@ -11,19 +11,24 @@ import warnings
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
+import httpx
 import pytest
 
 # The SDK ships in the `tracing` extra. CI installs every extra, so these run
 # there; a plain dev environment skips them rather than failing to import.
 pytest.importorskip("opentelemetry.sdk")
 
+from commons import _tracing
+from commons._connect import ConnectClient
 from commons._tracing import (
     CAPTURE_VAR,
     TRACER_NAME,
     commons_span,
     content_capture_enabled,
+    enable_content_observability,
     enable_trajectory_tracing,
     tracing_configured,
+    warn_if_connect_tracing_unsupported,
 )
 
 from . import _spans
@@ -34,6 +39,8 @@ if TYPE_CHECKING:
     from opentelemetry.sdk.trace import ReadableSpan
 
 CONTENT_CAPTURE = load_shared_fixture("traces")["content_capture"]
+CONNECT = load_shared_fixture("connect")
+OBSERVABILITY = CONNECT["observability"]
 
 
 @pytest.fixture(autouse=True)
@@ -237,3 +244,148 @@ def test_logging_on_with_a_no_op_provider_is_not_stamped() -> None:
     )
 
     assert output.split() == ["False", "False"]
+
+
+# Phrases that tell the warnings apart. Each one occurs in exactly one warning.
+WARNING_PHRASES = {
+    "requires Connect >=": "version",
+    "disabled by this Posit Connect": "disabled",
+    "Enabled Content Observability": "toggled",
+    "Content Observability is enabled": "already_on",
+    "OpenTelemetry tracing is not active": "failed",
+}
+
+
+def warning_kind(warning: warnings.WarningMessage) -> str:
+    text = str(warning.message)
+    (kind,) = {kind for phrase, kind in WARNING_PHRASES.items() if phrase in text}
+    return kind
+
+
+def connect_client(
+    handler: Callable[[httpx.Request], httpx.Response],
+) -> ConnectClient:
+    http = httpx.Client(transport=httpx.MockTransport(handler))
+    return ConnectClient("https://connect.example.com", "the-api-key", http=http)
+
+
+@pytest.fixture
+def on_connect(monkeypatch: pytest.MonkeyPatch) -> None:
+    environment = CONNECT["environment"]
+    monkeypatch.delenv(environment["product"], raising=False)
+    monkeypatch.setenv(environment["content_guid"], "content-guid")
+
+
+@pytest.fixture
+def fresh_attempt(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(_tracing, "_OBSERVABILITY_ATTEMPTED", False)
+
+
+def settings_client(settings: object) -> ConnectClient:
+    def answer(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/__api__/server_settings"
+        if settings is None:
+            return httpx.Response(500)
+        return httpx.Response(200, json=settings)
+
+    return connect_client(answer)
+
+
+def content_client(
+    case: dict[str, Any],
+) -> tuple[ConnectClient, list[httpx.Request]]:
+    seen: list[httpx.Request] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        if request.method == "PATCH":
+            return httpx.Response(500 if case.get("patch_fails") else 200, json={})
+        if case["content"] is None:
+            return httpx.Response(500)
+        return httpx.Response(200, json=case["content"])
+
+    return connect_client(answer), seen
+
+
+@pytest.mark.parametrize(
+    "case",
+    OBSERVABILITY["server_settings"]["cases"],
+    ids=lambda case: case["name"],
+)
+def test_the_server_warning_follows_the_shared_cases(
+    case: dict[str, Any], on_connect: None
+) -> None:
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        warn_if_connect_tracing_unsupported(client=settings_client(case["settings"]))
+
+    kinds = [warning_kind(warning) for warning in caught]
+    assert kinds == ([] if case["warns"] is None else [case["warns"]])
+
+
+def test_the_version_warning_names_the_server_version(on_connect: None) -> None:
+    with pytest.warns(UserWarning, match=r"running Connect 2026\.08\.1") as caught:
+        warn_if_connect_tracing_unsupported(
+            client=settings_client({"version": "2026.08.1"})
+        )
+
+    assert "2026.09.0" in str(caught[0].message)
+
+
+@pytest.mark.parametrize(
+    "case", OBSERVABILITY["enable"]["cases"], ids=lambda case: case["name"]
+)
+def test_enablement_follows_the_shared_cases(
+    case: dict[str, Any], on_connect: None, fresh_attempt: None
+) -> None:
+    client, seen = content_client(case)
+
+    with pytest.warns(UserWarning) as caught:
+        enable_content_observability(client=client)
+
+    assert ("PATCH" in [request.method for request in seen]) is case["patched"]
+    assert [warning_kind(warning) for warning in caught] == [case["outcome"]]
+
+
+def test_enablement_is_attempted_once_per_process(
+    on_connect: None, fresh_attempt: None
+) -> None:
+    client, seen = content_client({"content": {"otel_enabled": False}})
+    with pytest.warns(UserWarning):
+        enable_content_observability(client=client)
+    requests_made = len(seen)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        enable_content_observability(client=client)
+
+    assert len(seen) == requests_made
+
+
+def test_neither_check_asks_connect_anything_off_connect(
+    monkeypatch: pytest.MonkeyPatch, fresh_attempt: None
+) -> None:
+    environment = CONNECT["environment"]
+    monkeypatch.delenv(environment["product"], raising=False)
+    monkeypatch.delenv(environment["content_guid"], raising=False)
+    client, seen = content_client({"content": {"otel_enabled": False}})
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        warn_if_connect_tracing_unsupported(client=client)
+        enable_content_observability(client=client)
+
+    assert seen == []
+
+
+def test_enablement_without_credentials_warns_instead_of_raising(
+    monkeypatch: pytest.MonkeyPatch, on_connect: None, fresh_attempt: None
+) -> None:
+    environment = CONNECT["environment"]
+    monkeypatch.delenv(environment["server"], raising=False)
+    monkeypatch.delenv(environment["api_key"], raising=False)
+
+    with pytest.warns(UserWarning) as caught:
+        enable_content_observability()
+
+    assert [warning_kind(warning) for warning in caught] == ["failed"]
