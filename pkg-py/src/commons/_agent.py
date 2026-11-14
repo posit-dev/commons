@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import uuid
 import warnings
 import weakref
 from collections.abc import AsyncGenerator, Mapping, Sequence
@@ -198,6 +199,7 @@ class Commons(Chat[Any, Any]):
             )
             # chatlas never generates one, so an id the caller chose is explicitly kept
             self.conversation_id = client.conversation_id
+            self._own_conversation_id: str | None = None
             _carry_model_params(self, client)
 
             self._sources = sources
@@ -288,6 +290,8 @@ class Commons(Chat[Any, Any]):
         A reminder queued with `queue_restore_reminder()` rides this turn,
         and a turn that fails leaves it queued for the next one.
         """
+        if self._tracing:
+            self._ensure_conversation_id()
         was_pending = self._restore_reminder_pending
         inputs = self._prepare_turn_inputs(args)
         self._citation_request.reset()
@@ -334,6 +338,8 @@ class Commons(Chat[Any, Any]):
                 "agent: the provenance marker and citations it appends would leave the "
                 "streamed JSON unparseable."
             )
+        if self._tracing:
+            self._ensure_conversation_id()
         from_index = len(self.get_turns())
         was_pending = self._restore_reminder_pending
         inputs = self._prepare_turn_inputs(args)
@@ -467,9 +473,30 @@ class Commons(Chat[Any, Any]):
         super().add_turn(turn)
 
     def set_turns(self, turns: Sequence[Turn]) -> None:
-        """Replace the conversation, dropping any reminder queued for it."""
+        """Replace the conversation, dropping any reminder queued for it.
+
+        Clearing the turns starts a new conversation, so an id the agent
+        generated is dropped. An id the caller chose stays.
+        """
         self._restore_reminder_pending = False
+        if not turns and self._own_conversation_id is not None:
+            if self.conversation_id == self._own_conversation_id:
+                self.conversation_id = None
+            self._own_conversation_id = None
         super().set_turns(turns)
+
+    def _ensure_conversation_id(self) -> None:
+        """Give the conversation an id when nothing else has.
+
+        A host may assign ``None`` before every turn, as shinychat does
+        without a history controller, so the agent's own id is generated
+        once and reused for each such turn.
+        """
+        if self.conversation_id is not None:
+            return
+        if self._own_conversation_id is None:
+            self._own_conversation_id = str(uuid.uuid4())
+        self.conversation_id = self._own_conversation_id
 
     def queue_restore_reminder(self) -> None:
         """Tell the next turn that the session behind its history is gone."""

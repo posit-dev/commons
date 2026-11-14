@@ -4,7 +4,6 @@ from collections.abc import AsyncGenerator
 from pathlib import Path
 from typing import Any
 
-import pandas as pd
 import pytest
 from chatlas import (
     AssistantTurn,
@@ -23,15 +22,10 @@ from commons._reminders import (
     ContentTurnReminder,
 )
 
+from ._agents import collect, frame
 from ._provider import scripted_chat, text
 
 QUOTE = "Canopy cover is always acre-weighted for reporting."
-
-
-def frame() -> pd.DataFrame:
-    return pd.DataFrame(
-        {"revenue": [500.0, 900.0, 300.0], "region": ["EMEA", "Americas", "EMEA"]}
-    )
 
 
 @pytest.fixture
@@ -49,10 +43,6 @@ def notes(tmp_path: Path) -> Any:
 def split(raw: str, at: int) -> list[Any]:
     """The same text streamed as two chunks, so a tag straddles the boundary."""
     return [ContentText(text=raw[:at]), ContentText(text=raw[at:])]
-
-
-async def collect(agent: Commons, *args: Any, **kwargs: Any) -> list[Any]:
-    return [chunk async for chunk in await agent.stream_async(*args, **kwargs)]
 
 
 def tool_request(tool: str, /, **arguments: Any) -> list[Any]:

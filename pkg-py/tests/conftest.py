@@ -7,8 +7,11 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from commons._agent import Commons
 from commons._icons import get_asset_base_url, set_asset_base_url
+from commons._tracing import CAPTURE_VAR
 from tests import _spans
+from tests._agents import logging_agent_over, sales
 from tests._env_file import load_repo_env_file
 
 if TYPE_CHECKING:
@@ -57,3 +60,18 @@ def spans() -> Iterator[Callable[..., list[ReadableSpan]]]:
     recording.clear()
     yield _spans.finished
     recording.clear()
+
+
+@pytest.fixture
+def logging_live(
+    spans: Callable[..., list[ReadableSpan]], monkeypatch: pytest.MonkeyPatch
+) -> Callable[..., list[ReadableSpan]]:
+    """Make trajectory logging live for one test: spans recorded, capture on."""
+    monkeypatch.setenv(CAPTURE_VAR, "true")
+    return spans
+
+
+@pytest.fixture
+def logging_agent(logging_live: Callable[..., list[ReadableSpan]]) -> Commons:
+    """An agent over one table with trajectory logging live."""
+    return logging_agent_over(sales())
