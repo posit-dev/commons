@@ -34,10 +34,10 @@ def connect_double(
     def route(request: httpx.Request) -> httpx.Response:
         seen.append(request)
         path = request.url.path
-        if path.endswith("/server_settings"):
-            return httpx.Response(200, json={})
         if fail is not None and fail in path:
             return httpx.Response(500, json={"error": "boom"})
+        if path.endswith("/server_settings"):
+            return httpx.Response(200, json={})
         if path.endswith("/permissions") and request.method == "GET":
             return httpx.Response(200, json=permitted)
         if path.endswith("/permissions"):

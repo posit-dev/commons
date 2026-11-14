@@ -33,6 +33,16 @@ def _no_asset_bundle() -> Iterator[None]:
     set_asset_base_url(before)
 
 
+@pytest.fixture(autouse=True)
+def _forget_grants() -> Iterator[None]:
+    # Which users were granted access is process-wide memo state.
+    from commons import _connect
+
+    _connect._GRANTED.clear()
+    yield
+    _connect._GRANTED.clear()
+
+
 @pytest.fixture
 def served_bundle() -> str:
     """Serve a bundle for the duration of one test, and give its base URL."""

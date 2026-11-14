@@ -34,13 +34,6 @@ def _on_connect(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("CONNECT_API_KEY", "the-api-key")
 
 
-@pytest.fixture(autouse=True)
-def _forget_grants() -> None:
-    from commons import _connect
-
-    _connect._GRANTED.clear()
-
-
 def test_the_shared_fixture_covers_a_grant_and_a_skip() -> None:
     assert {bool(case["expected"]) for case in SHARING} == {True, False}
 

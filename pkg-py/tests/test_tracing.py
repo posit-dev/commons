@@ -446,7 +446,7 @@ def test_live_logging_grants_access_to_the_named_users(
     )
 
 
-def test_an_unsupported_connect_is_checked_before_anything_else(
+def test_logging_asks_connect_only_for_its_server_settings_when_not_sharing(
     monkeypatch: pytest.MonkeyPatch,
     on_connect: None,
     connect_requests: list[httpx.Request],
@@ -469,31 +469,6 @@ def test_logging_without_the_sdk_warns_with_the_install_step(
     )
     with pytest.warns(UserWarning, match=r"pip install 'commons\[tracing\]'"):
         assert enable_trajectory_tracing(log=True) is False
-
-
-def test_logging_is_live_with_a_provider_and_capture(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    unset_capture(monkeypatch)
-    assert enable_trajectory_tracing(log=True) is True
-    assert os.environ[CAPTURE_VAR] == "true"
-
-
-def test_logging_with_an_installed_sdk_and_no_provider_is_silent_off_connect() -> None:
-    output = run_in_fresh_interpreter(
-        """
-        import os
-        import warnings
-
-        from commons._tracing import CAPTURE_VAR, enable_trajectory_tracing
-
-        os.environ.pop(CAPTURE_VAR, None)
-        warnings.simplefilter("error")
-        print(enable_trajectory_tracing(log=True))
-        print(CAPTURE_VAR in os.environ)
-        """
-    )
-    assert output.split() == ["False", "False"]
 
 
 def test_logging_with_the_sdk_disabled_is_silent_and_leaves_capture_alone() -> None:

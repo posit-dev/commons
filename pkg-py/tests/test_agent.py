@@ -4,6 +4,7 @@ import copy
 from pathlib import Path
 from typing import Annotated, Any
 
+import httpx
 import pandas as pd
 import pytest
 from chatlas import Chat, ContentToolResult, Tool, UserTurn
@@ -12,9 +13,11 @@ from pydantic import BaseModel, Field
 from commons import Injected, context_layer, data_source, measure, semantic_layer
 from commons._agent import Commons
 from commons._citations import CorpusEntry
+from commons._connect import ConnectClient
 from commons._reminders import RESTORED_CONVERSATION_REMINDER, ContentTurnReminder
 from commons._tracing import CAPTURE_VAR
 
+from ._connect_double import connect_double
 from ._provider import ScriptedProvider, scripted_chat, text
 
 DICTIONARY = """
@@ -699,6 +702,22 @@ def test_a_connect_outage_does_not_stop_construction(
     monkeypatch.setenv("CONNECT_SERVER", "http://127.0.0.1:9")
     monkeypatch.setenv("CONNECT_API_KEY", "the-api-key")
     monkeypatch.setenv(CAPTURE_VAR, "true")
-    with pytest.warns(UserWarning):
+    with pytest.warns(UserWarning, match="Could not share"):
         agent = Commons(client, source, log=True, share_with=["ada"])
     assert isinstance(agent, Commons)
+
+
+def test_a_failed_construction_changes_nothing_on_connect(
+    client: Chat, source: Any, spans: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: list[httpx.Request] = []
+    monkeypatch.setenv("CONNECT_CONTENT_GUID", "content-guid")
+    monkeypatch.setattr(
+        ConnectClient,
+        "from_env",
+        classmethod(lambda cls, **_: connect_double(seen=seen)[0]),
+    )
+    monkeypatch.setenv(CAPTURE_VAR, "true")
+    with pytest.raises(ValueError, match="network"):
+        Commons(client, source, network="bogus", log=True, share_with=["ada"])  # type: ignore[arg-type]
+    assert seen == []

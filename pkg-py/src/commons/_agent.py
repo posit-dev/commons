@@ -171,7 +171,6 @@ class Commons(Chat[Any, Any]):
         check_trajectory_arguments(log, share_with)
         definitions = build_registry(sources)
         semantic = semantic_registry(sources)
-        tracing = enable_trajectory_tracing(log=log, share_with=share_with)
         with commons_span(
             "commons_agent_create",
             {
@@ -199,7 +198,6 @@ class Commons(Chat[Any, Any]):
             self.conversation_id = client.conversation_id
             _carry_model_params(self, client)
 
-            self._tracing = tracing
             self._sources = sources
             self._context_layer = augment_context_layer(context_layer, sources.values())
             self._definitions = definitions
@@ -253,6 +251,8 @@ class Commons(Chat[Any, Any]):
                 tools=tools,
                 model=self.model,
             )
+            # Last, so a failed construction has changed nothing on Connect.
+            self._tracing = enable_trajectory_tracing(log=log, share_with=share_with)
 
     def __repr__(self) -> str:
         count = len(self._sources)
