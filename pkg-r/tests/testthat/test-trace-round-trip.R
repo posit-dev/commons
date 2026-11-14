@@ -40,6 +40,8 @@ test_that("trajectory_read() reads the trace the Python agent wrote", {
         trace_contents(turns, ellmer::ContentToolResult)
       )
       expect_length(linked, if (isTRUE(want$tool$linked)) 1 else 0)
+    } else {
+      expect_length(trace_contents(turns, ellmer::ContentToolRequest), 0)
     }
 
     provenance <- attr(turns, "provenance")
