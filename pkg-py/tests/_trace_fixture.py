@@ -5,7 +5,7 @@ the spans are the ones a live model would produce for the same turns. A
 tracer provider can be installed once per process, so run this in its own.
 To regenerate the committed trace, from the repository root:
 
-    rm tests/shared/traces/python/trace-1.jsonl
+    rm -f tests/shared/traces/python/trace-1.jsonl
     cd pkg-py && uv run --extra tracing python -m tests._trace_fixture ../tests/shared/traces/python && cd .. && scripts/sync-shared.sh
 """
 
