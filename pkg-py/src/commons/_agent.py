@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import logging
 import warnings
 import weakref
 from collections.abc import AsyncGenerator, Mapping, Sequence
@@ -53,6 +54,7 @@ from ._tracing import (
     check_trajectory_arguments,
     commons_span,
     enable_trajectory_tracing,
+    record_provenance_span,
     start_turn_span,
     trajectory_user,
 )
@@ -71,6 +73,9 @@ STOP_POLL_INTERVAL = 0.1
 
 # Frozen and empty, so every agent built without a semantic layer can share it.
 _NO_MEASURES = semantic_layer()
+
+
+logger = logging.getLogger(__name__)
 
 
 class Commons(Chat[Any, Any]):
@@ -414,6 +419,13 @@ class Commons(Chat[Any, Any]):
                 collect_appended_tags(self.get_turns(), from_index),
                 scanner.any_verified,
             )
+            if turn is not None:
+                try:
+                    record_provenance_span(turn, tag, scanner.candidates)
+                except Exception:
+                    # Telemetry must not cost the user the answer.
+                    logger.debug("Recording the provenance span failed", exc_info=True)
+
             aside = provenance_aside(tag)
             if aside:
                 yield aside

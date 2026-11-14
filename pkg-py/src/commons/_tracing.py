@@ -42,6 +42,7 @@ from ._connect import (
 
 if TYPE_CHECKING:
     from ._citations import CitationDecision
+    from ._provenance import Tag
 
 __all__ = [
     "CANDIDATES_ATTRIBUTE",
@@ -59,6 +60,7 @@ __all__ = [
     "content_capture_enabled",
     "enable_content_observability",
     "enable_trajectory_tracing",
+    "record_provenance_span",
     "start_turn_span",
     "tracing_configured",
     "trajectory_user",
@@ -137,6 +139,24 @@ def citation_candidates_json(decisions: Sequence[CitationDecision]) -> str:
         ],
         separators=(",", ":"),
     )
+
+
+def record_provenance_span(
+    parent: Span, tag: Tag | None, decisions: Sequence[CitationDecision]
+) -> None:
+    """Record an answer's provenance as a span under ``parent``, and end it.
+
+    Both attributes are set as the span starts, because Connect snapshots a
+    span's attributes then. The tag attribute is absent without a tag.
+    """
+    attributes = {CANDIDATES_ATTRIBUTE: citation_candidates_json(decisions)}
+    if tag is not None:
+        attributes[TAG_ATTRIBUTE] = str(tag)
+    _TRACER.start_span(
+        PROVENANCE_SPAN,
+        context=trace.set_span_in_context(parent),
+        attributes=attributes,
+    ).end()
 
 
 def as_current(span: Span | None) -> AbstractContextManager[Any]:
