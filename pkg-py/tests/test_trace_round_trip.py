@@ -20,17 +20,31 @@ FILE_NAMING = load_shared_fixture("traces")["file_naming"]["cases"]
 _IDS = ("traceId", "spanId", "parentSpanId")
 _TIMESTAMPS = ("startTimeUnixNano", "endTimeUnixNano")
 _CONVERSATION = "gen_ai.conversation.id"
-# The system prompt and tool descriptions, which change on their own schedule.
-_PROSE = ("gen_ai.system_instructions", "gen_ai.tool.description")
+# The system prompt and tool descriptions change on their own schedule.
+_INSTRUCTIONS = "gen_ai.system_instructions"
+_TOOL_DESCRIPTION = "gen_ai.tool.description"
+_PROSE = "<prose>"
+
+
+def _masked_instructions(value: str) -> str:
+    """The system instructions with each part's text masked and its shape kept."""
+    parts = json.loads(value)
+    if isinstance(parts, list):
+        for part in parts:
+            if isinstance(part, dict) and isinstance(part.get("content"), str):
+                part["content"] = _PROSE
+    return json.dumps(parts)
 
 
 def normalized(path: Path) -> list[dict[str, Any]]:
     """The spans in file order, with what varies between runs replaced.
 
-    Ids and conversation ids become the order each first appears, the system
-    instructions and tool descriptions become a placeholder, and timestamps,
-    resource attributes, and the scope version are dropped. Span names,
-    attribute keys, and message content are compared as written.
+    Ids and conversation ids become the order each first appears, the text
+    of the system instructions and tool descriptions becomes a placeholder,
+    and timestamps, resource attributes, and the scope version are dropped.
+    The system instructions keep their structure, so a change to their part
+    count or part types still fails. Span names, attribute keys, and message
+    content are compared as written.
     """
     ordinals: dict[str, str] = {}
 
@@ -55,8 +69,12 @@ def normalized(path: Path) -> list[dict[str, Any]]:
                             continue
                         if attribute["key"] == _CONVERSATION:
                             value["stringValue"] = ordinal(value["stringValue"])
-                        elif attribute["key"] in _PROSE:
-                            value["stringValue"] = "<prose>"
+                        elif attribute["key"] == _INSTRUCTIONS:
+                            value["stringValue"] = _masked_instructions(
+                                value["stringValue"]
+                            )
+                        elif attribute["key"] == _TOOL_DESCRIPTION:
+                            value["stringValue"] = _PROSE
                     spans.append({"scope": scope, **span})
     return spans
 
