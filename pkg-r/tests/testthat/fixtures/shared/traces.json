@@ -192,5 +192,17 @@
         "expected": [{ "quote": "b", "status": "rejected" }, { "quote": "a", "status": "rejected" }]
       }
     ]
+  },
+  "file_naming": {
+    "description": "Which files in a trace directory a reader takes as trace files when no exporter template is set. A writer must choose a name a reader takes. trace-latest.jsonl is not read: the file exporter in R's otelsdk keeps it as a hard link to the newest numbered file, which is read already.",
+    "cases": [
+      { "file": "trace.jsonl", "read": true },
+      { "file": "trace-1.jsonl", "read": true },
+      { "file": "trace-12.jsonl", "read": true },
+      { "file": "trace-latest.jsonl", "read": false },
+      { "file": "trace-1.jsonl.bak", "read": false },
+      { "file": "spans.jsonl", "read": false },
+      { "file": "trace-1.json", "read": false }
+    ]
   }
 }
