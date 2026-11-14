@@ -251,8 +251,10 @@ class Commons(Chat[Any, Any]):
                 tools=tools,
                 model=self.model,
             )
-            # Last, so a failed construction has changed nothing on Connect.
-            self._tracing = enable_trajectory_tracing(log=log, share_with=share_with)
+
+        # After construction succeeds, so a failure has changed nothing on
+        # Connect, and outside the setup span, which times only the build.
+        self._tracing = enable_trajectory_tracing(log=log, share_with=share_with)
 
     def __repr__(self) -> str:
         count = len(self._sources)
