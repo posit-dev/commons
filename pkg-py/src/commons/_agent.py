@@ -147,13 +147,19 @@ class Commons(Chat[Any, Any]):
                 f"{type(semantic_layer).__name__}."
             )
         check_instructions(instructions)
+        definitions = build_registry(sources)
+        semantic = semantic_registry(sources)
         with commons_span(
             "commons_agent_create",
             {
                 "commons.agent.n_data_sources": len(sources),
                 "commons.agent.has_context_layer": context_layer is not None,
+                "commons.agent.n_measures": len(semantic_layer.measures),
+                "commons.agent.n_definitions": len(definitions.records),
+                "commons.agent.n_semantic_members": len(semantic.members),
+                "commons.agent.n_calculations": len(semantic.calculations),
             },
-        ) as span:
+        ):
             # Built here so a host that cannot sandbox the session fails now,
             # before any model asks to run code. The process starts on first use.
             worker = Worker(
@@ -172,17 +178,8 @@ class Commons(Chat[Any, Any]):
 
             self._sources = sources
             self._context_layer = augment_context_layer(context_layer, sources.values())
-            self._definitions = build_registry(sources)
+            self._definitions = definitions
             self._measures = semantic_layer.measures
-            semantic = semantic_registry(sources)
-            span.set_attributes(
-                {
-                    "commons.agent.n_measures": len(self._measures),
-                    "commons.agent.n_definitions": len(self._definitions.records),
-                    "commons.agent.n_semantic_members": len(semantic.members),
-                    "commons.agent.n_calculations": len(semantic.calculations),
-                }
-            )
             # The injectables side stays here because it is the only part that
             # knows what a DataSource is: a measure asks for a source by name and
             # receives whatever that source is queried through.

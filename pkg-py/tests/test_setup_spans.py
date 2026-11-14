@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING, Any
 import pandas as pd
 import pytest
 import sqlalchemy
-from shiny.session import session_context
 
 import commons
 from commons import context_layer, data_source
@@ -17,7 +16,6 @@ from commons._agent import Commons
 
 from . import _spans
 from ._provider import scripted_chat
-from ._session import IdleSession
 from ._shared import load_shared_fixture
 
 if TYPE_CHECKING:
@@ -111,6 +109,10 @@ def run_agent_create(tmp_path: Path) -> Callable[[], Any]:
 
 def run_chat_server(tmp_path: Path) -> Callable[[], Any]:
     pytest.importorskip("shinychat")
+    from shiny.session import session_context
+
+    from ._session import IdleSession
+
     served = agent()
 
     def serve() -> None:

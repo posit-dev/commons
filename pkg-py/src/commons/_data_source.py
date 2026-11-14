@@ -138,6 +138,10 @@ class DataSource:
     @classmethod
     def from_frames(cls, **frames: Any) -> DataSource:
         """Load named data frames into a locked-down in-process DuckDB."""
+        return cls._from_frames(frames, None)
+
+    @classmethod
+    def _from_frames(cls, frames: dict[str, Any], dictionary: Any) -> DataSource:
         with commons_span(
             "commons_data_source_create", {"commons.data_source.kind": "frames"}
         ):
@@ -161,11 +165,15 @@ class DataSource:
                 _duckdb.lock_down(con)
 
             tables = list(frames)
-            return cls(
+            source = cls(
                 backend=DuckDBBackend(con),
                 tables=tables,
                 table_ids={name: TableId(table=name) for name in tables},
             )
+            # Attached here rather than in the constructor, so this is where
+            # the dictionary's definitions can be lowered.
+            source.dictionary = dictionary
+            return _with_compiled_definitions(source)
 
     @classmethod
     def from_engine(
@@ -542,12 +550,7 @@ def data_source(
                 "`exclude` drops relations from a warehouse catalog listing; "
                 "with named frames there is no listing to drop them from."
             )
-        source = DataSource.from_frames(**frames)
-        source.dictionary = resolved
-
-        # The frames form attaches its dictionary here rather than in the
-        # constructor, so this is where its definitions can be lowered.
-        source = _with_compiled_definitions(source)
+        source = DataSource._from_frames(frames, resolved)
     return source
 
 
