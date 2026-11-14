@@ -9,6 +9,7 @@ own behalf without a publisher configuring anything.
 from __future__ import annotations
 
 import os
+import re
 import warnings
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager, nullcontext
@@ -17,12 +18,22 @@ from typing import Any, Self
 import httpx
 
 __all__ = [
+    "MINIMUM_TRACING_VERSION",
     "ConnectClient",
     "ConnectError",
     "connect_content_guid",
+    "content",
+    "enable_otel",
     "is_connect_runtime",
+    "parse_connect_version",
+    "server_settings",
     "share_trajectory_access",
 ]
+
+# The first Connect release that records trajectories.
+MINIMUM_TRACING_VERSION = (2026, 9, 0)
+
+_VERSION = re.compile(r"([0-9]+(?:\.[0-9]+){1,2})")
 
 # Connect pages a prefix search over users; a short page is the last one.
 _USER_PAGE_SIZE = 500
@@ -108,13 +119,18 @@ class ConnectClient:
         *path: str,
         params: dict[str, Any] | None = None,
         json: Any = None,
+        versioned: bool = True,
     ) -> httpx.Response:
         """Perform a request against ``/__api__/v1/<path>``.
+
+        ``versioned=False`` drops the ``v1``, for the few endpoints outside
+        the versioned API.
 
         Raises ``ConnectError`` when the request fails in transit or the
         status is anything other than 2xx.
         """
-        url = httpx.URL("/".join((self.server, "__api__", "v1", *path)))
+        prefix = ("__api__", "v1") if versioned else ("__api__",)
+        url = httpx.URL("/".join((self.server, *prefix, *path)))
         # Messages name the path only: the request carries the API key in a
         # header, and a message can reach a log or a bug report.
         try:
@@ -137,6 +153,43 @@ class ConnectClient:
                 status_code=response.status_code,
             )
         return response
+
+
+def parse_connect_version(text: object) -> tuple[int, ...] | None:
+    """The numeric version in a Connect version string, or ``None``.
+
+    Reads the first ``major.minor`` or ``major.minor.patch`` in the text, so a
+    development build such as ``v2026.10.0-dev+12-gabc123`` parses.
+    """
+    if not isinstance(text, str):
+        return None
+    match = _VERSION.search(text)
+    if match is None:
+        return None
+    return tuple(int(part) for part in match.group(1).split("."))
+
+
+def server_settings(client: ConnectClient) -> dict[str, Any]:
+    """The server's settings, from an endpoint outside the versioned API."""
+    settings = client.request("GET", "server_settings", versioned=False).json()
+    with unexpected_shape("server settings"):
+        if not isinstance(settings, dict):
+            raise TypeError(type(settings).__name__)
+    return settings
+
+
+def content(client: ConnectClient, guid: str) -> dict[str, Any]:
+    """The content item `guid`."""
+    item = client.request("GET", "content", guid).json()
+    with unexpected_shape("content"):
+        if not isinstance(item, dict):
+            raise TypeError(type(item).__name__)
+    return item
+
+
+def enable_otel(client: ConnectClient, guid: str) -> None:
+    """Turn on Content Observability for the content item `guid`."""
+    client.request("PATCH", "content", guid, json={"otel_enabled": True})
 
 
 def normalize_server(server: str) -> str:
