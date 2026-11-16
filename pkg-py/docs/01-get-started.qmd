@@ -361,7 +361,7 @@ for conversation_id, trajectory in trajectories.items():
     print(conversation_id, trajectory.last_active, len(trajectory.turns))
 ```
 
-The result is a dictionary keyed by conversation id, with the oldest conversation first. Each `Trajectory` has the conversation's `turns`, the time of its last chat activity as `last_active`, and the authenticated `user` of the session when Connect recorded one. It also has one `ExchangeProvenance` per exchange (a user's question and the turns that answer it), which gives the answer's provenance tag and its citation decisions.
+The result is a dictionary keyed by conversation id, with the oldest conversation first. Each `Trajectory` has the conversation's `turns`, the time of its last chat activity as `last_active`, and the `user` the agent recorded for the session, which is the authenticated Shiny session user on Posit Connect. It also has one `ExchangeProvenance` per exchange (a user's question and the turns that answer it), which gives the answer's provenance tag and its citation decisions.
 
 Use `n` to keep only the most recent conversations, and `since` and `until` to keep the chat activity in a time window. Each bound is a `datetime`, a `date`, or a string like `"2026-07-22"` or `"2026-07-22 14:30"`, and a date or a string is read in local time. A conversation that continues past `until` is returned as it was at `until`.
 
@@ -369,7 +369,7 @@ Use `n` to keep only the most recent conversations, and `since` and `until` to k
 recent = commons.trajectory_read("traces", n=20, since="2026-07-01")
 ```
 
-`trajectory_read()` also reads from Posit Connect (version 2026.09.0 or later). Pass a content GUID, a content URL (`.../content/<guid>/`), a vanity URL (`.../content/<name>/`), or a dashboard URL (`.../connect/#/apps/<guid>/`). With no source, it reads the content's own traces when it runs on Connect. Off Connect, it reads the deployed content's traces when the project has a deployment record, written by rsconnect-python under `rsconnect-python/` or by the R package rsconnect under `rsconnect/`. Otherwise it reads the local trace directory: the directory of `OTEL_EXPORTER_OTLP_TRACES_FILE` when that variable is set, and otherwise `COMMONS_TRACES_DIR`.
+`trajectory_read()` also reads from Posit Connect (version 2026.09.0 or later). Pass a content GUID, a content URL (`.../content/<guid>/`), a vanity URL (`.../content/<name>/`), or a dashboard URL (`.../connect/#/apps/<guid>/`). With no source, it reads the content's own traces when it runs on Connect. Off Connect, it reads the deployed content's traces when the project has a deployment record, written by rsconnect-python under `rsconnect-python/` or by the R package rsconnect under `rsconnect/`. Otherwise it reads the local trace directory: the directory of `OTEL_EXPORTER_OTLP_TRACES_FILE` when that variable is set, and otherwise `COMMONS_TRACES_DIR`, or `commons-traces` under the temporary directory.
 
 ```python
 deployed = commons.trajectory_read(
