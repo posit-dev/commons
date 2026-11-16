@@ -397,31 +397,11 @@ recorded_call_test_spans <- function(
 }
 
 test_that("linear calls attach records to their own final exchanges", {
-  q1 <- text_semconv_message("user", "Q1")
-  a1 <- text_semconv_message("assistant", "A1")
-  q2 <- text_semconv_message("user", "Q2")
-  a2 <- text_semconv_message("assistant", "A2")
-  spans <- parse_otlp_lines(otlp_test_line(c(
-    recorded_call_test_spans("t1", "conv-a", list(q1, a1), "A", "10"),
-    recorded_call_test_spans(
-      "t2",
-      "conv-a",
-      list(q1, a1, q2, a2),
-      "B",
-      "20",
-      dedicated_provenance_span = TRUE
-    )
-  )))
+  expect_trajectory_member(build$provenance)
+})
 
-  provenance <- attr(
-    build_trajectories(spans)[["conv-a"]]$turns,
-    "provenance"
-  )
-
-  expect_identical(
-    vapply(provenance, `[[`, character(1), "provenance_tag"),
-    c("A", "B")
-  )
+test_that("exchanges split at plain user turns", {
+  expect_trajectory_member(build$exchanges)
 })
 
 test_that("restored context stays unannotated when only the new call was recorded", {
@@ -671,60 +651,15 @@ test_that("the latest descendant tool-loop span contributes one call record", {
 })
 
 test_that("conflicting records fail closed with one conversation warning", {
-  messages <- list(
-    text_semconv_message("user", "Q1"),
-    text_semconv_message("assistant", "A1")
-  )
-  spans <- parse_otlp_lines(otlp_test_line(c(
-    recorded_call_test_spans("t1", "conv-a", messages, "A", "10"),
-    recorded_call_test_spans("t2", "conv-a", messages, "C", "20")
-  )))
-
-  expect_warning(
-    conversation <- build_trajectories(spans)[["conv-a"]],
-    "conflicting audit records"
-  )
-  turns <- conversation$turns
-  expect_true(is.na(attr(turns, "provenance")[[1]]$provenance_tag))
+  expect_trajectory_member(build$conflicting_records)
 })
 
 test_that("identical duplicate records collapse to one claim", {
-  messages <- list(
-    text_semconv_message("user", "Q1"),
-    text_semconv_message("assistant", "A1")
-  )
-  spans <- parse_otlp_lines(otlp_test_line(c(
-    recorded_call_test_spans("t1", "conv-a", messages, "A", "10"),
-    recorded_call_test_spans("t2", "conv-a", messages, "A", "20")
-  )))
-
-  expect_no_warning(conversation <- build_trajectories(spans)[["conv-a"]])
-  turns <- conversation$turns
-  expect_identical(attr(turns, "provenance")[[1]]$provenance_tag, "A")
+  expect_trajectory_member(build$duplicate_records)
 })
 
 test_that("an incomplete tool call does not receive provenance", {
-  request <- list(
-    role = "assistant",
-    parts = list(list(
-      type = "tool_call",
-      id = "call-1",
-      name = "run_sql",
-      arguments = list(sql = "select 1")
-    ))
-  )
-  messages <- list(text_semconv_message("user", "Q1"), request)
-  spans <- parse_otlp_lines(otlp_test_line(
-    recorded_call_test_spans("t1", "conv-a", messages, "A", "10")
-  ))
-
-  provenance <- attr(
-    build_trajectories(spans)[["conv-a"]]$turns,
-    "provenance"
-  )
-
-  expect_length(provenance, 1)
-  expect_true(is.na(provenance[[1]]$provenance_tag))
+  expect_trajectory_member(build$incomplete_call)
 })
 
 trajectory_scaling_spans <- function(n) {
@@ -840,22 +775,7 @@ test_that("trajectory reconstruction parses each selected chat span once", {
 })
 
 test_that("provenance defaults to NA/empty with no commons_conversation_turn ancestor", {
-  spans <- parse_otlp_lines(otlp_test_line(list(
-    chat_test_span(
-      "lonetrace",
-      "chat1",
-      input_messages = '[{"role":"user","parts":[{"type":"text","content":"Hi."}]}]'
-    )
-  )))
-
-  trajectories <- build_trajectories(spans)
-
-  provenance <- attr(trajectories[["lonetrace"]]$turns, "provenance")
-  expect_length(provenance, 1)
-  expect_identical(
-    provenance[[1]],
-    list(provenance_tag = NA_character_, citation_decisions = list())
-  )
+  expect_trajectory_member(build$no_provenance)
 })
 
 test_that("chat spans without a wrapper fall back to their trace id", {
