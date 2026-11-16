@@ -116,5 +116,34 @@
       {"name": "a key-value list is returned as written", "value": {"kvlistValue": {"values": [{"key": "k", "value": {"stringValue": "v"}}]}}, "expected": {"kvlistValue": {"values": [{"key": "k", "value": {"stringValue": "v"}}]}}},
       {"name": "bytes are returned as written", "value": {"bytesValue": "aGk="}, "expected": {"bytesValue": "aGk="}}
     ]
+  },
+  "exporter_template": {
+    "description": "Which files a reader takes when OTEL_EXPORTER_OTLP_TRACES_FILE names a file template. The runner sets the variable to `template` inside a fresh directory, writes one span into each of `files` with the file's name as its span id, and reads the directory. `read` lists the files whose span comes back. The template's base name is matched as written, except that `%N` stands for one or more digits. The default names that traces.json's file_naming pins are still read beside a template.",
+    "cases": [
+      {"name": "files named from the template are read and its latest link is not", "template": "spans-%N.ndjson", "files": ["spans-0.ndjson", "spans-latest.ndjson"], "read": ["spans-0.ndjson"]},
+      {"name": "the default names are still read beside a template", "template": "spans-%N.ndjson", "files": ["trace-1.jsonl", "spans-3.ndjson", "trace-latest.jsonl"], "read": ["trace-1.jsonl", "spans-3.ndjson"]},
+      {"name": "%N needs at least one digit", "template": "spans-%N.ndjson", "files": ["spans-.ndjson", "spans-12.ndjson"], "read": ["spans-12.ndjson"]},
+      {"name": "a dot in the template matches only a dot", "template": "spans.%N.jsonl", "files": ["spans.0.jsonl", "spansX0Xjsonl"], "read": ["spans.0.jsonl"]},
+      {"name": "a plus in the template matches only a plus", "template": "run+%N.jsonl", "files": ["run+1.jsonl", "runn1.jsonl"], "read": ["run+1.jsonl"]},
+      {"name": "a template without %N names one file", "template": "conversations.jsonl", "files": ["conversations.jsonl", "conversations-1.jsonl"], "read": ["conversations.jsonl"]}
+    ]
+  },
+  "traces_dir": {
+    "description": "Where a reader looks for trace files when it is given no source. `exporter_file` and `commons_traces_dir` are the values of OTEL_EXPORTER_OTLP_TRACES_FILE and COMMONS_TRACES_DIR, null when unset. When the exporter's file is set and not empty, its directory is the one; otherwise COMMONS_TRACES_DIR is. With neither set, each package uses a directory under its own temporary directory, which is not pinned.",
+    "cases": [
+      {"name": "the exporter's file names the directory", "exporter_file": "/some/dir/trace-%N.jsonl", "commons_traces_dir": null, "dir": "/some/dir"},
+      {"name": "the exporter's file wins over COMMONS_TRACES_DIR", "exporter_file": "/a/trace.jsonl", "commons_traces_dir": "/b", "dir": "/a"},
+      {"name": "COMMONS_TRACES_DIR names it when no exporter file is set", "exporter_file": null, "commons_traces_dir": "/b", "dir": "/b"},
+      {"name": "an empty exporter variable counts as unset", "exporter_file": "", "commons_traces_dir": "/b", "dir": "/b"},
+      {"name": "a bare file name is in the working directory", "exporter_file": "trace.jsonl", "commons_traces_dir": null, "dir": "."}
+    ]
+  },
+  "missing_directory": {
+    "description": "A source path that is not a directory reads as no spans, so a reader returns no conversations from it. `path` is relative to a fresh temporary directory. When `file` is true, the runner first writes one valid span line to a file at that path.",
+    "cases": [
+      {"name": "a directory that does not exist", "path": "nope", "file": false},
+      {"name": "a directory under one that does not exist", "path": "nope/nested", "file": false},
+      {"name": "a path that names a trace file", "path": "trace-1.jsonl", "file": true}
+    ]
   }
 }

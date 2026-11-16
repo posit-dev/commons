@@ -1,9 +1,16 @@
 """Parse OTLP JSON trace lines into spans."""
 
 import json
+import os
+import re
+import tempfile
 from collections.abc import Iterable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
+
+EXPORTER_FILE_VAR = "OTEL_EXPORTER_OTLP_TRACES_FILE"
+TRACES_DIR_VAR = "COMMONS_TRACES_DIR"
 
 
 @dataclass(frozen=True)
@@ -87,3 +94,40 @@ def parse_otlp_lines(lines: Iterable[str]) -> list[Span]:
             for scope in _entries(resource, "scopeSpans"):
                 spans.extend(_otlp_span(span) for span in _entries(scope, "spans"))
     return spans
+
+
+def local_traces_pattern() -> re.Pattern[str]:
+    """Match the numbered trace files, and files named from an exporter template.
+
+    ``trace-latest.jsonl`` is excluded because it is a hard link to the newest
+    numbered file, so reading it would duplicate that file's spans.
+    """
+    patterns = [r"trace(?:-[0-9]+)?\.jsonl"]
+    template = os.path.basename(os.environ.get(EXPORTER_FILE_VAR, ""))
+    if template:
+        patterns.append(re.escape(template).replace("%N", "[0-9]+"))
+    return re.compile("^(?:" + "|".join(patterns) + ")$")
+
+
+def local_traces_dir() -> Path:
+    """The directory that holds the trace files when no source is given."""
+    exporter_file = os.environ.get(EXPORTER_FILE_VAR, "")
+    if exporter_file:
+        return Path(exporter_file).parent
+    return Path(
+        os.environ.get(
+            TRACES_DIR_VAR, os.path.join(tempfile.gettempdir(), "commons-traces")
+        )
+    )
+
+
+def read_local_spans(path: Path) -> list[Span]:
+    """Read the spans of the trace files in a directory, in file-name order."""
+    if not path.is_dir():
+        return []
+    pattern = local_traces_pattern()
+    files = sorted(p for p in path.iterdir() if p.is_file() and pattern.match(p.name))
+    lines: list[str] = []
+    for file in files:
+        lines.extend(file.read_text(encoding="utf-8", errors="replace").splitlines())
+    return parse_otlp_lines(lines)
