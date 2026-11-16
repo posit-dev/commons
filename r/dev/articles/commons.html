@@ -519,6 +519,23 @@ be able to use, such as the tidyverse, by listing them under
 <code>Imports</code> in <code>DESCRIPTION</code> or loading them in
 <code>app.R</code>. The agent writes its code at runtime, so rsconnect
 can’t detect the packages that code uses.</p>
+<p>On Connect, viewers can share copies of their conversations and
+results, which requires the app to be associated with a Connect Visitor
+API Key integration that can publish. To enable it, associate the
+integration after the first deploy:</p>
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">client</span> <span class="op">&lt;-</span> <span class="fu">connectapi</span><span class="fu">::</span><span class="fu">connect</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="va">app</span> <span class="op">&lt;-</span> <span class="fu">connectapi</span><span class="fu">::</span><span class="fu">content_item</span><span class="op">(</span><span class="va">client</span>, <span class="st">"&lt;content GUID&gt;"</span><span class="op">)</span></span>
+<span><span class="va">visitor_key</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/funprog.html" class="external-link">Filter</a></span><span class="op">(</span></span>
+<span>  <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="op">{</span></span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical</a></span><span class="op">(</span><span class="va">x</span><span class="op">$</span><span class="va">template</span>, <span class="st">"connect"</span><span class="op">)</span> <span class="op">&amp;&amp;</span></span>
+<span>      <span class="fu"><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical</a></span><span class="op">(</span><span class="va">x</span><span class="op">$</span><span class="va">auth_type</span>, <span class="st">"Visitor API Key"</span><span class="op">)</span> <span class="op">&amp;&amp;</span></span>
+<span>      <span class="fu"><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical</a></span><span class="op">(</span><span class="va">x</span><span class="op">$</span><span class="va">config</span><span class="op">$</span><span class="va">max_role</span>, <span class="st">"Publisher"</span><span class="op">)</span></span>
+<span>  <span class="op">}</span>,</span>
+<span>  <span class="fu">connectapi</span><span class="fu">::</span><span class="fu">get_integrations</span><span class="op">(</span><span class="va">client</span><span class="op">)</span></span>
+<span><span class="op">)</span></span>
+<span><span class="co"># set_integrations() replaces the app's associations, so keep the existing ones.</span></span>
+<span><span class="fu">connectapi</span><span class="fu">::</span><span class="fu">set_integrations</span><span class="op">(</span><span class="va">app</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fu">connectapi</span><span class="fu">::</span><span class="fu">get_integrations</span><span class="op">(</span><span class="va">app</span><span class="op">)</span>, <span class="va">visitor_key</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
 <p>To reuse the same trusted calculations in reports, apps, and other
 projects, see <a href="sharing.html">Sharing a commons across
 projects</a>.</p>

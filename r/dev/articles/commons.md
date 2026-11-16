@@ -389,6 +389,27 @@ able to use, such as the tidyverse, by listing them under `Imports` in
 `DESCRIPTION` or loading them in `app.R`. The agent writes its code at
 runtime, so rsconnect can’t detect the packages that code uses.
 
+On Connect, viewers can share copies of their conversations and results,
+which requires the app to be associated with a Connect Visitor API Key
+integration that can publish. To enable it, associate the integration
+after the first deploy:
+
+``` r
+
+client <- connectapi::connect()
+app <- connectapi::content_item(client, "<content GUID>")
+visitor_key <- Filter(
+  function(x) {
+    identical(x$template, "connect") &&
+      identical(x$auth_type, "Visitor API Key") &&
+      identical(x$config$max_role, "Publisher")
+  },
+  connectapi::get_integrations(client)
+)
+# set_integrations() replaces the app's associations, so keep the existing ones.
+connectapi::set_integrations(app, c(connectapi::get_integrations(app), visitor_key[1]))
+```
+
 To reuse the same trusted calculations in reports, apps, and other
 projects, see [Sharing a commons across
 projects](https://posit-dev.github.io/commons/r/dev/articles/sharing.md).
