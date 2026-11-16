@@ -7,7 +7,9 @@ deployed entry point, and the R package rsconnect writes ``.dcf`` files under
 
 import json
 import logging
+import os
 import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -21,9 +23,8 @@ SKIPPED_DIRECTORIES = frozenset(
     {"rsconnect", "rsconnect-python", "renv", "packrat", "node_modules"}
 )
 
-_CONTENT_GUID = re.compile(
-    r"/content/([0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12})"
-)
+_GUID = r"[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}"
+_CONTENT_GUID = re.compile(r"/content/(" + _GUID + ")")
 _DCF_FIELD = re.compile(r"^([^\s:]+):(.*)$")
 _HOSTED_DOMAINS = frozenset({"shinyapps.io", "api.shinyapps.io", "posit.cloud"})
 
@@ -74,9 +75,7 @@ def deployment_record_files(directory: Path, max_depth: int = 3) -> list[Path]:
             try:
                 r_store = current / "rsconnect"
                 if r_store.is_dir():
-                    files.extend(
-                        sorted(p for p in r_store.rglob("*.dcf") if p.is_file())
-                    )
+                    files.extend(_dcf_files(r_store))
                 python_store = current / "rsconnect-python"
                 if python_store.is_dir():
                     files.extend(
@@ -96,6 +95,19 @@ def deployment_record_files(directory: Path, max_depth: int = 3) -> list[Path]:
         level = below
         if not level:
             break
+    return files
+
+
+def _dcf_files(directory: Path) -> list[Path]:
+    """The `.dcf` files below `directory`, skipping hidden files and directories."""
+    files: list[Path] = []
+    for root, directories, names in os.walk(directory):
+        directories[:] = sorted(d for d in directories if not d.startswith("."))
+        files.extend(
+            Path(root) / name
+            for name in sorted(names)
+            if name.endswith(".dcf") and not name.startswith(".")
+        )
     return files
 
 
@@ -130,17 +142,20 @@ def _python_record(file: Path, entry: Any) -> Deployment | None:
     if not isinstance(entry, dict):
         return None
     server = entry.get("server_url")
-    url = entry.get("app_url")
-    # A `#` marks a Connect Cloud account, and shinyapps.io content has no
-    # /content/<guid> URL.
+    # A `#` marks a Connect Cloud account. shinyapps.io content has neither a
+    # GUID nor a /content/<guid> URL.
     if not isinstance(server, str) or not server or "#" in server:
         return None
-    match = _CONTENT_GUID.search(url) if isinstance(url, str) else None
-    if match is None:
-        return None
+    guid = entry.get("app_guid")
+    if not isinstance(guid, str) or re.fullmatch(_GUID, guid) is None:
+        url = entry.get("app_url")
+        match = _CONTENT_GUID.search(url) if isinstance(url, str) else None
+        if match is None:
+            return None
+        guid = match.group(1)
     title = entry.get("title")
     name = title if isinstance(title, str) and title else file.name
-    return Deployment(match.group(1), normalize_server(server), name, file)
+    return Deployment(guid, normalize_server(server), name, file)
 
 
 def _dcf_record(file: Path, text: str) -> Deployment | None:
@@ -179,16 +194,26 @@ def _dcf_fields(text: str) -> dict[str, str] | None:
 
 
 def registered_connect_servers() -> list[str]:
-    """The Connect servers registered with rsconnect-python, when it is installed."""
+    """The Connect servers registered with rsconnect-python, in nickname order."""
+    # rsconnect-python (1.33) keeps `servers.json` in its configuration
+    # directory: a JSON object keyed by nickname, each value an object with
+    # `name`, `url`, and `api_key`.
     try:
-        from rsconnect import metadata
-
-        servers = metadata.ServerStore(metadata.config_dirname()).get_all_servers()
-    except Exception:  # noqa: BLE001 (an unreadable store registers no servers)
+        text = (_rsconnect_python_config_dir() / "servers.json").read_text(
+            encoding="utf-8"
+        )
+        servers = json.loads(text)
+    except (OSError, ValueError):
         return []
+    entries = (
+        [s for s in servers.values() if isinstance(s, dict)]
+        if isinstance(servers, dict)
+        else []
+    )
+    entries.sort(key=lambda entry: str(entry.get("name") or ""))
     urls: list[str] = []
-    for server in servers if isinstance(servers, list) else []:
-        url = server.get("url") if isinstance(server, dict) else None
+    for entry in entries:
+        url = entry.get("url")
         if not isinstance(url, str) or not url:
             continue
         host = (urlparse(url).hostname or "").lower()
@@ -196,3 +221,17 @@ def registered_connect_servers() -> list[str]:
             continue
         urls.append(normalize_server(url))
     return list(dict.fromkeys(urls))
+
+
+def _rsconnect_python_config_dir() -> Path:
+    """rsconnect-python's configuration directory, as its config_dirname() finds it."""
+    home = os.environ.get("HOME", "~")
+    base = home
+    if sys.platform.startswith("linux"):
+        base = os.environ.get("XDG_CONFIG_HOME", home)
+    elif sys.platform == "darwin":
+        base = os.path.join(home, "Library", "Application Support")
+    elif sys.platform == "win32":
+        base = os.environ.get("APPDATA", home)
+    name = ".rsconnect-python" if base == home else "rsconnect-python"
+    return Path(os.path.expanduser(base)) / name
