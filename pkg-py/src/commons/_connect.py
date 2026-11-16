@@ -222,12 +222,21 @@ def version_is_older(version: tuple[int, ...], minimum: str) -> bool:
 
 
 def window_param(at: datetime | None, pad: timedelta) -> str | None:
-    """A window bound as Connect's `from`, `to`, or `since` query value."""
+    """A window bound as Connect's `from`, `to`, or `since` query value.
+
+    None when there is no bound, or when padding takes it out of the range of
+    datetime; the window is applied exactly after the read either way.
+    """
     # Connect ignores a timestamp it cannot parse, so send UTC with a `Z`. The
-    # pads keep the parent spans that start before the window.
+    # pads keep the parent spans that start before the window. Pad in UTC:
+    # arithmetic on an aware local time is wall-clock arithmetic.
     if at is None:
         return None
-    return (at + pad).astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    try:
+        padded = at.astimezone(UTC) + pad
+    except OverflowError:
+        return None
+    return padded.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def connect_trace_lines(
@@ -341,7 +350,8 @@ def _job_trace_lines(
         )
 
     pending = [(key, 0) for key in keys]
-    with ThreadPoolExecutor(max_workers=_JOB_WORKERS) as pool:
+    pool = ThreadPoolExecutor(max_workers=_JOB_WORKERS)
+    try:
         while pending:
             futures = [pool.submit(job_page, key, offset) for key, offset in pending]
             unfinished: list[tuple[str, int]] = []
@@ -361,6 +371,9 @@ def _job_trace_lines(
                 if page and total is not None and offset < total:
                     unfinished.append((key, offset))
             pending = unfinished
+    finally:
+        # A failure leaves the queued requests unsent.
+        pool.shutdown(cancel_futures=True)
     return lines
 
 

@@ -11,7 +11,9 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Callable
+import time
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from typing import Any
 
 import httpx
@@ -398,9 +400,13 @@ def test_from_env_prefers_the_given_server(monkeypatch: pytest.MonkeyPatch) -> N
     assert client.server == "https://other.example.com"
 
 
-def _trace_client(route: Callable[[httpx.Request], httpx.Response]) -> ConnectClient:
-    http = httpx.Client(transport=httpx.MockTransport(route))
-    return ConnectClient("https://connect.example.com", "key", http=http)
+@contextmanager
+def _trace_client(
+    route: Callable[[httpx.Request], httpx.Response],
+    server: str = "https://connect.example.com",
+) -> Iterator[ConnectClient]:
+    with httpx.Client(transport=httpx.MockTransport(route)) as http:
+        yield ConnectClient(server, "key", http=http)
 
 
 def _request_key(request: httpx.Request) -> tuple[str, tuple[tuple[str, str], ...]]:
@@ -415,16 +421,16 @@ def _fixture_key(request: dict[str, Any]) -> tuple[str, tuple[tuple[str, str], .
 @pytest.mark.parametrize("case", TRACE_CASES)
 def test_trace_lines_match_the_shared_fixture(case: dict[str, Any]) -> None:
     route, seen = connect_fixture_server(case["server"])
-    client = _trace_client(route)
 
     def read() -> list[str]:
-        return connect_trace_lines(
-            client,
-            GUID,
-            since=_instant(case.get("since")),
-            until=_instant(case.get("until")),
-            enough=(lambda lines: True) if case.get("enough") else None,
-        )
+        with _trace_client(route) as client:
+            return connect_trace_lines(
+                client,
+                GUID,
+                since=_instant(case.get("since")),
+                until=_instant(case.get("until")),
+                enough=(lambda lines: True) if case.get("enough") else None,
+            )
 
     if case.get("error") == "access":
         with pytest.raises(ConnectError, match=re.escape(TRACES["access_error"])):
@@ -443,15 +449,14 @@ def test_trace_lines_match_the_shared_fixture(case: dict[str, Any]) -> None:
 @pytest.mark.parametrize("case", VANITY_SEARCH["cases"], ids=lambda case: case["name"])
 def test_vanity_search_matches_the_shared_fixture(case: dict[str, Any]) -> None:
     route, seen = connect_fixture_server({}, search=case["pages"])
-    http = httpx.Client(transport=httpx.MockTransport(route))
-    client = ConnectClient(case["server"], "key", http=http)
     url = f"{case['server']}/content/{case['query']}"
 
-    if case["expected"] is None:
-        with pytest.raises(LookupError, match="Can't find content"):
-            vanity_guid(client, url, case["query"])
-    else:
-        assert vanity_guid(client, url, case["query"]) == case["expected"]
+    with _trace_client(route, case["server"]) as client:
+        if case["expected"] is None:
+            with pytest.raises(LookupError, match="Can't find content"):
+                vanity_guid(client, url, case["query"])
+        else:
+            assert vanity_guid(client, url, case["query"]) == case["expected"]
 
     assert [int(r.url.params["page_number"]) for r in seen] == case["page_numbers"]
     request = VANITY_SEARCH["request"]
@@ -469,8 +474,11 @@ def test_the_trace_page_size_and_store_version_match_the_shared_fixture() -> Non
 def test_an_access_error_names_the_share_with_argument() -> None:
     route, _ = connect_fixture_server({"traces": {"status": 403}})
 
-    with pytest.raises(ConnectError, match="share_with") as raised:
-        connect_trace_lines(_trace_client(route), GUID)
+    with (
+        _trace_client(route) as client,
+        pytest.raises(ConnectError, match="share_with") as raised,
+    ):
+        connect_trace_lines(client, GUID)
 
     assert raised.value.status_code == 403
     cause = raised.value.__cause__
@@ -495,7 +503,8 @@ def test_a_response_without_a_total_ends_the_read_after_one_page(
             200, headers={"Server": f"Posit Connect v{version}"}, text=body
         )
 
-    assert connect_trace_lines(_trace_client(route), GUID) == ["line1", "line2"]
+    with _trace_client(route) as client:
+        assert connect_trace_lines(client, GUID) == ["line1", "line2"]
     assert [r.url.path.endswith("/traces") for r in seen].count(True) == 1
 
 
@@ -515,5 +524,29 @@ def test_malformed_jobs_read_as_no_jobs(jobs: object) -> None:
             text="current\n",
         )
 
-    assert connect_trace_lines(_trace_client(route), GUID) == ["current"]
+    with _trace_client(route) as client:
+        assert connect_trace_lines(client, GUID) == ["current"]
     assert [r.url.path.rsplit("/", 1)[-1] for r in seen] == ["traces", "jobs"]
+
+
+def test_a_failed_job_request_cancels_the_queued_ones() -> None:
+    jobs = [{"key": f"job{i}"} for i in range(100)]
+    seen: list[httpx.Request] = []
+
+    def route(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        path = request.url.path
+        if path.endswith("/jobs"):
+            return httpx.Response(200, json=jobs)
+        if path.endswith("/jobs/job0/traces"):
+            return httpx.Response(500)
+        if "/jobs/" in path:
+            time.sleep(0.05)
+            return httpx.Response(200, headers={"X-Total-Count": "1"}, text="x\n")
+        return httpx.Response(200, headers={"X-Total-Count": "0"}, text="")
+
+    with _trace_client(route) as client, pytest.raises(ConnectError):
+        connect_trace_lines(client, GUID)
+
+    # Only the requests already running when job0 failed are sent.
+    assert len([r for r in seen if r.url.path.endswith("/traces")]) < 60
