@@ -640,6 +640,182 @@
       }
     ]
   },
+  "restored_context": {
+    "description": "A restored session replays its earlier exchanges to the model without recording them again, so the first call after a restore records the whole history in one chat span. Only the exchange that call ends at gets its record; the restored exchanges before it have none.",
+    "cases": [
+      {
+        "name": "restored context stays unannotated when only the new call was recorded",
+        "spans": [
+          {"trace": "t3", "span": "t3-root", "name": "commons_conversation_turn", "end": "30", "attributes": {"commons.provenance.tag": "C", "commons.citation.candidates": []}},
+          {"trace": "t3", "span": "t3-agent", "parent": "t3-root", "name": "invoke_agent", "end": "30"},
+          {"trace": "t3", "span": "t3-chat", "parent": "t3-agent", "chat": true, "conversation": "conv-a", "end": "30",
+            "input": [
+              {"role": "user", "parts": [{"type": "text", "content": "Q1"}]},
+              {"role": "assistant", "parts": [{"type": "text", "content": "A1"}]},
+              {"role": "user", "parts": [{"type": "text", "content": "Q2"}]},
+              {"role": "assistant", "parts": [{"type": "text", "content": "A2"}]},
+              {"role": "user", "parts": [{"type": "text", "content": "Q3"}]}
+            ],
+            "output": [{"role": "assistant", "parts": [{"type": "text", "content": "A3"}]}]}
+        ],
+        "trajectories": [{"id": "conv-a", "provenance": [{"tag": null, "decisions": []}, {"tag": null, "decisions": []}, {"tag": "C", "decisions": []}]}]
+      }
+    ]
+  },
+  "after_restore": {
+    "description": "Each call after a restore claims the exchange its own history ends at, whatever the number of restored exchanges before it.",
+    "cases": [
+      {
+        "name": "calls after restore attach to their respective new exchanges",
+        "spans": [
+          {"trace": "t3", "span": "t3-root", "name": "commons_conversation_turn", "end": "30", "attributes": {"commons.provenance.tag": "A", "commons.citation.candidates": []}},
+          {"trace": "t3", "span": "t3-agent", "parent": "t3-root", "name": "invoke_agent", "end": "30"},
+          {"trace": "t3", "span": "t3-chat", "parent": "t3-agent", "chat": true, "conversation": "conv-a", "end": "30",
+            "input": [
+              {"role": "user", "parts": [{"type": "text", "content": "Q1"}]},
+              {"role": "assistant", "parts": [{"type": "text", "content": "A1"}]},
+              {"role": "user", "parts": [{"type": "text", "content": "Q2"}]},
+              {"role": "assistant", "parts": [{"type": "text", "content": "A2"}]},
+              {"role": "user", "parts": [{"type": "text", "content": "Q3"}]}
+            ],
+            "output": [{"role": "assistant", "parts": [{"type": "text", "content": "A3"}]}]},
+          {"trace": "t4", "span": "t4-root", "name": "commons_conversation_turn", "end": "40", "attributes": {"commons.provenance.tag": "C", "commons.citation.candidates": []}},
+          {"trace": "t4", "span": "t4-agent", "parent": "t4-root", "name": "invoke_agent", "end": "40"},
+          {"trace": "t4", "span": "t4-chat", "parent": "t4-agent", "chat": true, "conversation": "conv-a", "end": "40",
+            "input": [
+              {"role": "user", "parts": [{"type": "text", "content": "Q1"}]},
+              {"role": "assistant", "parts": [{"type": "text", "content": "A1"}]},
+              {"role": "user", "parts": [{"type": "text", "content": "Q2"}]},
+              {"role": "assistant", "parts": [{"type": "text", "content": "A2"}]},
+              {"role": "user", "parts": [{"type": "text", "content": "Q3"}]},
+              {"role": "assistant", "parts": [{"type": "text", "content": "A3"}]},
+              {"role": "user", "parts": [{"type": "text", "content": "Q4"}]}
+            ],
+            "output": [{"role": "assistant", "parts": [{"type": "text", "content": "A4"}]}]}
+        ],
+        "trajectories": [{"id": "conv-a", "provenance": [{"tag": null, "decisions": []}, {"tag": null, "decisions": []}, {"tag": "A", "decisions": []}, {"tag": "C", "decisions": []}]}]
+      }
+    ]
+  },
+  "switched_conversation": {
+    "description": "When a session switches to another history under the same conversation id, the latest chat span supplies the turns, and a call recorded on the abandoned history matches none of its exchanges.",
+    "cases": [
+      {
+        "name": "switched conversations do not donate audit records",
+        "spans": [
+          {"trace": "old", "span": "old-root", "name": "commons_conversation_turn", "end": "10", "attributes": {"commons.provenance.tag": "A", "commons.citation.candidates": []}},
+          {"trace": "old", "span": "old-agent", "parent": "old-root", "name": "invoke_agent", "end": "10"},
+          {"trace": "old", "span": "old-chat", "parent": "old-agent", "chat": true, "conversation": "conv-a", "end": "10",
+            "input": [{"role": "user", "parts": [{"type": "text", "content": "Old question"}]}],
+            "output": [{"role": "assistant", "parts": [{"type": "text", "content": "Old answer"}]}]},
+          {"trace": "new", "span": "new-root", "name": "commons_conversation_turn", "end": "20", "attributes": {"commons.provenance.tag": "C", "commons.citation.candidates": []}},
+          {"trace": "new", "span": "new-agent", "parent": "new-root", "name": "invoke_agent", "end": "20"},
+          {"trace": "new", "span": "new-chat", "parent": "new-agent", "chat": true, "conversation": "conv-a", "end": "20",
+            "input": [{"role": "user", "parts": [{"type": "text", "content": "New question"}]}],
+            "output": [{"role": "assistant", "parts": [{"type": "text", "content": "New answer"}]}]}
+        ],
+        "trajectories": [{"id": "conv-a",
+          "turns": [
+            {"role": "user", "contents": [{"type": "text", "text": "New question"}]},
+            {"role": "assistant", "contents": [{"type": "text", "text": "New answer"}]}
+          ],
+          "provenance": [{"tag": "C", "decisions": []}]}]
+      }
+    ]
+  },
+  "edited_paths": {
+    "description": "Editing a message abandons the exchanges from that message on. A call whose history is a prefix of the edited history keeps its record; a call recorded on the abandoned path matches nothing.",
+    "cases": [
+      {
+        "name": "edited paths retain shared-prefix records and drop abandoned records",
+        "spans": [
+          {"trace": "t1", "span": "t1-root", "name": "commons_conversation_turn", "end": "10", "attributes": {"commons.provenance.tag": "A", "commons.citation.candidates": []}},
+          {"trace": "t1", "span": "t1-agent", "parent": "t1-root", "name": "invoke_agent", "end": "10"},
+          {"trace": "t1", "span": "t1-chat", "parent": "t1-agent", "chat": true, "conversation": "conv-a", "end": "10",
+            "input": [{"role": "user", "parts": [{"type": "text", "content": "Q1"}]}],
+            "output": [{"role": "assistant", "parts": [{"type": "text", "content": "A1"}]}]},
+          {"trace": "t2", "span": "t2-root", "name": "commons_conversation_turn", "end": "20", "attributes": {"commons.provenance.tag": "B", "commons.citation.candidates": []}},
+          {"trace": "t2", "span": "t2-agent", "parent": "t2-root", "name": "invoke_agent", "end": "20"},
+          {"trace": "t2", "span": "t2-chat", "parent": "t2-agent", "chat": true, "conversation": "conv-a", "end": "20",
+            "input": [
+              {"role": "user", "parts": [{"type": "text", "content": "Q1"}]},
+              {"role": "assistant", "parts": [{"type": "text", "content": "A1"}]},
+              {"role": "user", "parts": [{"type": "text", "content": "Q2"}]}
+            ],
+            "output": [{"role": "assistant", "parts": [{"type": "text", "content": "A2"}]}]},
+          {"trace": "t3", "span": "t3-root", "name": "commons_conversation_turn", "end": "30", "attributes": {"commons.provenance.tag": "C", "commons.citation.candidates": []}},
+          {"trace": "t3", "span": "t3-agent", "parent": "t3-root", "name": "invoke_agent", "end": "30"},
+          {"trace": "t3", "span": "t3-chat", "parent": "t3-agent", "chat": true, "conversation": "conv-a", "end": "30",
+            "input": [
+              {"role": "user", "parts": [{"type": "text", "content": "Q1"}]},
+              {"role": "assistant", "parts": [{"type": "text", "content": "A1"}]},
+              {"role": "user", "parts": [{"type": "text", "content": "Q2 edited"}]}
+            ],
+            "output": [{"role": "assistant", "parts": [{"type": "text", "content": "A2 edited"}]}]}
+        ],
+        "trajectories": [{"id": "conv-a", "provenance": [{"tag": "A", "decisions": []}, {"tag": "C", "decisions": []}]}]
+      },
+      {
+        "name": "an edited first question keeps no earlier record",
+        "spans": [
+          {"trace": "t1", "span": "t1-root", "name": "commons_conversation_turn", "end": "10", "attributes": {"commons.provenance.tag": "A", "commons.citation.candidates": []}},
+          {"trace": "t1", "span": "t1-chat", "parent": "t1-root", "chat": true, "conversation": "conv-a", "end": "10",
+            "input": [{"role": "user", "parts": [{"type": "text", "content": "Q1"}]}],
+            "output": [{"role": "assistant", "parts": [{"type": "text", "content": "A1"}]}]},
+          {"trace": "t2", "span": "t2-root", "name": "commons_conversation_turn", "end": "20", "attributes": {"commons.provenance.tag": "B", "commons.citation.candidates": []}},
+          {"trace": "t2", "span": "t2-chat", "parent": "t2-root", "chat": true, "conversation": "conv-a", "end": "20",
+            "input": [
+              {"role": "user", "parts": [{"type": "text", "content": "Q1"}]},
+              {"role": "assistant", "parts": [{"type": "text", "content": "A1"}]},
+              {"role": "user", "parts": [{"type": "text", "content": "Q2"}]}
+            ],
+            "output": [{"role": "assistant", "parts": [{"type": "text", "content": "A2"}]}]},
+          {"trace": "t3", "span": "t3-root", "name": "commons_conversation_turn", "end": "30"},
+          {"trace": "t3", "span": "t3-chat", "parent": "t3-root", "chat": true, "conversation": "conv-a", "end": "30",
+            "input": [{"role": "user", "parts": [{"type": "text", "content": "Q1 edited"}]}],
+            "output": [{"role": "assistant", "parts": [{"type": "text", "content": "A1 edited"}]}]}
+        ],
+        "trajectories": [{"id": "conv-a", "provenance": [{"tag": null, "decisions": []}]}]
+      }
+    ]
+  },
+  "tool_loop": {
+    "description": "A turn whose answer needs tools records one chat span per round of its tool loop. Only the latest of them is the turn's call, so the turn claims one exchange, the one its final answer completes.",
+    "cases": [
+      {
+        "name": "the latest descendant tool-loop span contributes one call record",
+        "spans": [
+          {"trace": "t1", "span": "root1", "name": "commons_conversation_turn", "attributes": {"commons.provenance.tag": "A"}},
+          {"trace": "t1", "span": "agent1", "parent": "root1", "name": "invoke_agent"},
+          {"trace": "t1", "span": "chat1", "parent": "agent1", "chat": true, "conversation": "conv-a", "end": "10",
+            "input": [{"role": "user", "parts": [{"type": "text", "content": "What is the weather?"}]}],
+            "output": [{"role": "assistant", "parts": [{"type": "text", "content": "It's sunny."}]}]},
+          {"trace": "t2", "span": "root2", "name": "commons_conversation_turn", "attributes": {"commons.provenance.tag": "B", "commons.citation.candidates": [{"quote": "Canopy cover is measured in June.", "status": "accepted", "label": "documentation", "kind": "prose"}]}},
+          {"trace": "t2", "span": "agent2", "parent": "root2", "name": "invoke_agent"},
+          {"trace": "t2", "span": "chat2a", "parent": "agent2", "chat": true, "conversation": "conv-a", "end": "20",
+            "input": [
+              {"role": "user", "parts": [{"type": "text", "content": "What is the weather?"}]},
+              {"role": "assistant", "parts": [{"type": "text", "content": "It's sunny."}]},
+              {"role": "user", "parts": [{"type": "text", "content": "Roll a die."}]}
+            ],
+            "output": [{"role": "assistant", "parts": [{"type": "tool_call", "id": "c1", "name": "roll_die", "arguments": {"sides": 6}}]}]},
+          {"trace": "t2", "span": "chat2b", "parent": "agent2", "chat": true, "conversation": "conv-a", "end": "30",
+            "input": [
+              {"role": "user", "parts": [{"type": "text", "content": "What is the weather?"}]},
+              {"role": "assistant", "parts": [{"type": "text", "content": "It's sunny."}]},
+              {"role": "user", "parts": [{"type": "text", "content": "Roll a die."}]},
+              {"role": "assistant", "parts": [{"type": "tool_call", "id": "c1", "name": "roll_die", "arguments": {"sides": 6}}]},
+              {"role": "tool", "parts": [{"type": "tool_call_response", "id": "c1", "response": 4}]}
+            ],
+            "output": [{"role": "assistant", "parts": [{"type": "text", "content": "You rolled a 4."}]}]}
+        ],
+        "trajectories": [{"id": "conv-a", "provenance": [
+          {"tag": "A", "decisions": []},
+          {"tag": "B", "decisions": [{"quote": "Canopy cover is measured in June.", "status": "accepted", "label": "documentation", "kind": "prose"}]}
+        ]}]
+      }
+    ]
+  },
   "contentless": {
     "description": "A conversation whose chat spans record no message content has no turns, and the read drops it. The read warns when it drops every conversation, and reports a message when it drops only some. A read with no chat spans drops nothing and reports nothing.",
     "cases": [
