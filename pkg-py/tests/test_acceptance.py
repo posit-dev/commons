@@ -30,6 +30,7 @@ from commons import (
     semantic_layer,
 )
 from commons._provenance import provenance_aside
+from commons._trajectory import trajectory_read
 
 from ._provider import scripted_chat, text
 
@@ -108,6 +109,7 @@ def tool_results(built: Commons) -> list[str]:
 def test_the_package_exports_the_agent() -> None:
     assert commons.Commons is Commons
     assert commons.Tag is Tag
+    assert commons.trajectory_read is trajectory_read
 
 
 def test_every_exported_name_resolves() -> None:

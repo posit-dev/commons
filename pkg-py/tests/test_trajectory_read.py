@@ -5,6 +5,7 @@ runs the same cases, so a case belongs in the fixture rather than here. This
 module adds only what the fixture cannot pin.
 """
 
+import json
 import time
 from collections.abc import Iterator
 from datetime import UTC, date, datetime
@@ -12,9 +13,12 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from chatlas.types import ContentToolRequest, ContentToolResult
 
+import commons
 from commons._trajectory import trajectory_read, window_bound
 from commons._trajectory._otlp import EXPORTER_FILE_VAR, TRACES_DIR_VAR
+from tests._shared import SHARED_DIR
 from tests._trajectories import (
     BOUND_MEMBERS,
     BUILD,
@@ -165,3 +169,34 @@ def test_a_bound_of_another_type_is_rejected(tmp_path: Path) -> None:
         window_bound(1.5, "until")
     with pytest.raises(TypeError, match="since must be"):
         trajectory_read(tmp_path, since=["2026-07-22"])  # type: ignore[arg-type]
+
+
+TRACE = SHARED_DIR / "traces" / "python"
+EXPECTED = json.loads((TRACE / "expected.json").read_text(encoding="utf-8"))
+
+
+def test_the_committed_python_trace_reads_as_expected() -> None:
+    trajectories = commons.trajectory_read(str(TRACE))
+
+    assert len(trajectories) == len(EXPECTED["conversations"])
+    for trajectory, want in zip(
+        trajectories.values(), EXPECTED["conversations"], strict=True
+    ):
+        turns = trajectory.turns
+        assert [turn.role for turn in turns] == want["roles"]
+        contents = [c for turn in turns for c in turn.contents]
+        requests = [c for c in contents if isinstance(c, ContentToolRequest)]
+        results = [c for c in contents if isinstance(c, ContentToolResult)]
+        if want["tool"] is None:
+            assert requests == []
+        else:
+            (request,) = [r for r in requests if r.name == want["tool"]["name"]]
+            linked = [r for r in results if r.request is request]
+            assert len(linked) == (1 if want["tool"]["linked"] else 0)
+        assert [
+            None if r.tag is None else str(r.tag) for r in trajectory.provenance
+        ] == [e["provenance_tag"] for e in want["exchanges"]]
+        assert [[d.status for d in r.decisions] for r in trajectory.provenance] == [
+            e["decision_statuses"] for e in want["exchanges"]
+        ]
+        assert trajectory.user is None
