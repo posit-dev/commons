@@ -136,6 +136,27 @@ def _conversations(count: int) -> str:
     return "conversation" if count == 1 else "conversations"
 
 
+def filter_chat_spans(
+    spans: Sequence[Span], since: datetime | None, until: datetime | None
+) -> list[Span]:
+    """Keep the chat spans that start in the window, and every other span."""
+    low = None if since is None else _nanos(since)
+    high = None if until is None else _nanos(until)
+    return [
+        span
+        for span in spans
+        if not is_chat_span(span)
+        or (
+            (low is None or span.start_time_unix_nano >= low)
+            and (high is None or span.start_time_unix_nano < high)
+        )
+    ]
+
+
+def _nanos(at: datetime) -> int:
+    return (at - _EPOCH) // timedelta(microseconds=1) * 1000
+
+
 def is_chat_span(span: Span) -> bool:
     return span.attributes.get("gen_ai.operation.name") == "chat"
 

@@ -889,59 +889,13 @@ test_that("trajectory_read drops content-less conversations, keeping the rest", 
 })
 
 test_that("from/to filter conversations by chat-span start time", {
-  path <- withr::local_tempdir()
   withr::local_envvar(OTEL_EXPORTER_OTLP_TRACES_FILE = NA)
-  writeLines(staggered_test_line(), file.path(path, "trace-0.jsonl"))
-
-  expect_named(
-    trajectory_read(path, from = .POSIXct(200, tz = "UTC")),
-    c("t200", "t300")
-  )
-  expect_named(
-    trajectory_read(path, to = .POSIXct(200, tz = "UTC")),
-    "t100"
-  )
-  expect_named(
-    trajectory_read(
-      path,
-      from = .POSIXct(150, tz = "UTC"),
-      to = .POSIXct(250, tz = "UTC")
-    ),
-    "t200"
-  )
+  expect_trajectory_member(build$window, read = TRUE)
 })
 
 test_that("a conversation continuing past `to` returns history as of `to`", {
-  path <- withr::local_tempdir()
   withr::local_envvar(OTEL_EXPORTER_OTLP_TRACES_FILE = NA)
-  json <- test_turn_json()
-  line <- otlp_test_line(list(
-    chat_test_span(
-      "t1",
-      "s1",
-      input_messages = json$input,
-      start_time = "100000000000",
-      end_time = "101000000000"
-    ),
-    chat_test_span(
-      "t1",
-      "s2",
-      input_messages = json$input,
-      output_messages = json$output,
-      start_time = "300000000000",
-      end_time = "301000000000"
-    )
-  ))
-  writeLines(line, file.path(path, "trace-0.jsonl"))
-
-  full <- trajectory_read(path)
-  as_of <- trajectory_read(path, to = .POSIXct(200, tz = "UTC"))
-
-  expect_s7_class(
-    full[[1]]$turns[[length(full[[1]]$turns)]],
-    ellmer::AssistantTurn
-  )
-  expect_length(as_of[[1]]$turns, length(full[[1]]$turns) - 1)
+  expect_trajectory_member(build$as_of, read = TRUE)
 })
 
 test_that("n keeps the most recent conversations", {
@@ -958,24 +912,11 @@ test_that("trajectory_read validates n, from, and to", {
 })
 
 test_that("Date and string window bounds mean local midnight", {
-  expect_equal(
-    check_window_bound(as.Date("2026-07-22")),
-    as.POSIXct("2026-07-22")
-  )
-  expect_equal(check_window_bound("2026-07-22"), as.POSIXct("2026-07-22"))
+  expect_window_bound_member(build$local_midnight)
 })
 
 test_that("window bound strings must parse completely", {
-  expect_equal(
-    check_window_bound("2026-07-22T14:30:00"),
-    as.POSIXct("2026-07-22 14:30:00")
-  )
-  expect_equal(
-    check_window_bound("2026-07-22 14:30"),
-    as.POSIXct("2026-07-22 14:30:00")
-  )
-  expect_error(check_window_bound("2026-07-22oops"), "must be")
-  expect_error(check_window_bound("2026-07-22 14:30:00Z"), "must be")
+  expect_window_bound_member(build$complete_parse)
 })
 
 test_that("an empty Connect read diagnoses disabled tracing settings", {
