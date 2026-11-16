@@ -84,9 +84,11 @@ def trajectory_read(
     result is keyed by conversation id, with the oldest conversation
     first.
 
-    Raises `ValueError` when there is no Connect server or API key, a URL
-    is not recognised, or a bound is invalid; `LookupError` when a vanity
-    URL is not found; and a `RuntimeError` when Connect refuses access.
+    Raises `TypeError` when `source`, `n`, or a bound has an unsupported
+    type; `ValueError` when there is no Connect server or API key, a URL
+    is not recognised, or a bound or `n` has an invalid value;
+    `LookupError` when a vanity URL is not found; and a `RuntimeError`
+    when Connect refuses access.
     """
     keep = _check_n(n)
     low = window_bound(since, "since")
