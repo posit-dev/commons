@@ -165,6 +165,25 @@ Reconcile new evidence with earlier assumptions and decisions as it appears. Sur
    as above. This passes the value to the deployed content; setting it locally
    without including it in `envVars` does not.
 
+   After deploying, associate a Connect Visitor API Key integration that can publish via the Connect API to enable the sharing feature:
+
+   ```r
+   client <- connectapi::connect()
+   app <- connectapi::content_item(client, "<content GUID>")
+   visitor_key <- Filter(
+     function(x) {
+       identical(x$template, "connect") &&
+         identical(x$auth_type, "Visitor API Key") &&
+         identical(x$config$max_role, "Publisher")
+     },
+     connectapi::get_integrations(client)
+   )
+   # set_integrations() replaces the app's associations, so keep the existing ones.
+   connectapi::set_integrations(app, c(connectapi::get_integrations(app), visitor_key[1]))
+   ```
+
+   If `visitor_key` is empty, ask a Connect administrator to create a Visitor API Key integration with the Publisher role.
+
    `agent$prewarm()` finishes building the context index before it returns. It also starts pin downloads in a background process; do not claim that pins are bundled unless the board cache is project-local and those downloads are known to have finished before deployment.
 
    Verify that the agent starts, that representative context searches retrieve the intended guidance, and that it can answer a few representative questions. Check that it reaches for each extracted measure, as described at the end of extraction step 9.
