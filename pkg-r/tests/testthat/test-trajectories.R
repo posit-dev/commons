@@ -1,3 +1,5 @@
+semconv <- shared_fixture(file.path("trajectories", "semconv"))
+
 test_that("parse_otlp_lines unwraps envelopes and flattens attributes", {
   cases <- shared_fixture(file.path("trajectories", "otlp"))$lines$cases
   expect_gt(length(cases), 0)
@@ -22,35 +24,16 @@ test_that("otlp_attribute_value handles OTLP value encodings", {
 })
 
 test_that("trajectories rebuild ellmer turns from semconv messages", {
-  json <- test_turn_json()
-  spans <- parse_otlp_lines(otlp_test_line(list(
-    chat_test_span(
-      "t1",
-      "s1",
-      system_instructions = json$system,
-      input_messages = json$input,
-      output_messages = json$output
+  cases <- semconv$turns$cases
+  expect_gt(length(cases), 0)
+
+  for (case in cases) {
+    expect_semconv_turns(
+      trajectory_turns(semconv_fixture_span(case$attributes)),
+      case$turns,
+      info = case$name
     )
-  )))
-
-  trajectories <- build_trajectories(spans)
-
-  expect_length(trajectories, 1)
-  turns <- trajectories[[1]]$turns
-  expect_length(turns, 5)
-  expect_s7_class(turns[[1]], ellmer::SystemTurn)
-  expect_equal(turns[[1]]@text, "Be helpful.")
-  expect_s7_class(turns[[2]], ellmer::UserTurn)
-  expect_equal(turns[[2]]@text, "Roll a die.")
-  expect_s7_class(turns[[3]], ellmer::AssistantTurn)
-  expect_s7_class(turns[[3]]@contents[[1]], ellmer::ContentToolRequest)
-  expect_equal(turns[[3]]@contents[[1]]@arguments, list(sides = 6L))
-  expect_s7_class(turns[[4]], ellmer::UserTurn)
-  expect_s7_class(turns[[4]]@contents[[1]], ellmer::ContentToolResult)
-  expect_equal(turns[[4]]@contents[[1]]@value, 4L)
-  expect_equal(turns[[4]]@contents[[1]]@request@name, "roll_die")
-  expect_s7_class(turns[[5]], ellmer::AssistantTurn)
-  expect_equal(turns[[5]]@text, "You rolled a 4.")
+  }
 })
 
 test_that("exchange signatures compare semantic turn content", {
@@ -1076,18 +1059,16 @@ test_that("chat spans without a wrapper fall back to their trace id", {
 })
 
 test_that("generic parts and empty messages are dropped", {
-  input <- paste0(
-    '[{"role":"user","parts":[{"type":"generic","class":"MyContent"}]},',
-    '{"role":"user","parts":[{"type":"text","content":"Kept."}]}]'
-  )
-  spans <- parse_otlp_lines(otlp_test_line(list(
-    chat_test_span("t1", "s1", input_messages = input)
-  )))
+  cases <- semconv$dropped$cases
+  expect_gt(length(cases), 0)
 
-  turns <- build_trajectories(spans)[[1]]$turns
-
-  expect_length(turns, 1)
-  expect_equal(turns[[1]]@text, "Kept.")
+  for (case in cases) {
+    expect_semconv_turns(
+      trajectory_turns(semconv_fixture_span(case$attributes)),
+      case$turns,
+      info = case$name
+    )
+  }
 })
 
 test_that("trajectory_read reads OTLP files from a directory", {

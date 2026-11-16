@@ -162,3 +162,32 @@ expect_otlp_span <- function(span, expected, info = NULL) {
     )
   }
 }
+
+semconv_fixture_span <- function(attributes) {
+  encoded <- lapply(names(attributes), function(key) {
+    otlp_test_attr(key, otlp_fixture_line(attributes[[key]]))
+  })
+  parse_otlp_lines(otlp_test_line(list(
+    otlp_test_span("t1", "s1", attributes = encoded)
+  )))[[1]]
+}
+
+expect_semconv_turns <- function(turns, expected, info = NULL) {
+  expect_length(turns, length(expected))
+  for (i in seq_along(expected)) {
+    turn <- turns[[i]]
+    e <- expected[[i]]
+    expect_identical(turn@role, e$role, info = info)
+    expect_length(turn@contents, length(e$contents))
+    for (j in seq_along(e$contents)) {
+      content <- turn@contents[[j]]
+      d <- e$contents[[j]]
+      if (d$type == "text") {
+        expect_true(S7::S7_inherits(content, ellmer::ContentText), info = info)
+        expect_identical(content@text, d$text, info = info)
+      } else {
+        fail(paste0("unknown descriptor type ", d$type), info = info)
+      }
+    }
+  }
+}
