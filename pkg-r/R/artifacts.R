@@ -480,6 +480,7 @@ artifact_commit <- function(store, id, title, source, run = NULL) {
   version <- length(artifact$versions) + 1L
   dir <- file.path(store$root, id, paste0("v", version))
   artifact$versions[[version]] <- list(source = source, dir = dir)
+  artifact$status <- "running"
   artifact_notify(store, list(
     type = "version",
     id = id,
