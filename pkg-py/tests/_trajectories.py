@@ -15,6 +15,7 @@ import pytest
 from chatlas import Turn
 from chatlas.types import ContentText, ContentToolRequest, ContentToolResult
 
+from commons._trajectory import trajectory_read
 from commons._trajectory._build import (
     ExchangeProvenance,
     Trajectory,
@@ -39,6 +40,7 @@ BUILD_MEMBERS = (
     "conflicting_records",
     "incomplete_call",
 )
+READ_MEMBERS = ("contentless", "n", "window", "as_of")
 
 
 def cases(members: Sequence[str]) -> list[Any]:
@@ -151,7 +153,12 @@ def run_case(
     try:
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
-            result = build_trajectories(parse_otlp_lines([fixture_line(spans)]))
+            if directory is None:
+                result = build_trajectories(parse_otlp_lines([fixture_line(spans)]))
+            else:
+                trace = directory / "trace-1.jsonl"
+                trace.write_text(fixture_line(spans) + "\n", encoding="utf-8")
+                result = trajectory_read(directory, n=case.get("n"))
     finally:
         logger.removeHandler(handler)
         logger.setLevel(level)

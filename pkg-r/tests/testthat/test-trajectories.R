@@ -873,6 +873,7 @@ test_that("trajectory_read hints when no conversation carries content", {
 })
 
 test_that("trajectory_read drops content-less conversations, keeping the rest", {
+  expect_trajectory_member(build$contentless, read = TRUE)
   path <- withr::local_tempdir()
   withr::local_envvar(OTEL_EXPORTER_OTLP_TRACES_FILE = NA)
   json <- test_turn_json()
@@ -944,16 +945,8 @@ test_that("a conversation continuing past `to` returns history as of `to`", {
 })
 
 test_that("n keeps the most recent conversations", {
-  path <- withr::local_tempdir()
   withr::local_envvar(OTEL_EXPORTER_OTLP_TRACES_FILE = NA)
-  writeLines(staggered_test_line(), file.path(path, "trace-0.jsonl"))
-
-  expect_named(trajectory_read(path, n = 2), c("t200", "t300"))
-  expect_named(trajectory_read(path, n = 5), c("t100", "t200", "t300"))
-  expect_named(
-    trajectory_read(path, n = 1, from = .POSIXct(150, tz = "UTC")),
-    "t300"
-  )
+  expect_trajectory_member(build$n, read = TRUE)
 })
 
 test_that("trajectory_read validates n, from, and to", {

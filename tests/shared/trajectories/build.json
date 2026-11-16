@@ -587,5 +587,71 @@
         "trajectories": [{"id": "conv-a", "provenance": [{"tag": null, "decisions": []}]}]
       }
     ]
+  },
+  "contentless": {
+    "description": "A conversation whose chat spans record no message content has no turns, and the read drops it. The read warns when it drops every conversation, and reports a message when it drops only some. A read with no chat spans drops nothing and reports nothing.",
+    "cases": [
+      {
+        "name": "conversations without content are all dropped with a warning",
+        "spans": [
+          {"trace": "t1", "span": "s1", "chat": true},
+          {"trace": "t2", "span": "s2", "chat": true}
+        ],
+        "notice": "warning",
+        "trajectories": []
+      },
+      {
+        "name": "a conversation without content is dropped and the rest are kept",
+        "spans": [
+          {"trace": "t1", "span": "s1", "chat": true, "input": [{"role": "user", "parts": [{"type": "text", "content": "Hi."}]}]},
+          {"trace": "t2", "span": "s2", "chat": true}
+        ],
+        "notice": "message",
+        "trajectories": [{"id": "t1", "turns": [{"role": "user", "contents": [{"type": "text", "text": "Hi."}]}]}]
+      },
+      {
+        "name": "messages that are not JSON are no content",
+        "spans": [
+          {"trace": "t1", "span": "s1", "chat": true, "input": "not json"}
+        ],
+        "notice": "warning",
+        "trajectories": []
+      },
+      {
+        "name": "a read with no chat spans reports nothing",
+        "spans": [
+          {"trace": "t1", "span": "turn", "name": "commons_conversation_turn"}
+        ],
+        "trajectories": []
+      }
+    ]
+  },
+  "n": {
+    "description": "`n` keeps the `n` most recent conversations, after the window and after dropping the conversations without content. It must be a whole number of at least 1. `error` marks a value that the read rejects before it reads.",
+    "spans": [
+      {"trace": "t100", "span": "s1", "chat": true, "input": [{"role": "user", "parts": [{"type": "text", "content": "Hi."}]}], "start": "100000000000", "end": "101000000000"},
+      {"trace": "t200", "span": "s2", "chat": true, "input": [{"role": "user", "parts": [{"type": "text", "content": "Hi."}]}], "start": "200000000000", "end": "201000000000"},
+      {"trace": "t300", "span": "s3", "chat": true, "input": [{"role": "user", "parts": [{"type": "text", "content": "Hi."}]}], "start": "300000000000", "end": "301000000000"}
+    ],
+    "cases": [
+      {"name": "n keeps the most recent conversations", "n": 2, "trajectories": [{"id": "t200"}, {"id": "t300"}]},
+      {"name": "n beyond the count keeps every conversation", "n": 5, "trajectories": [{"id": "t100"}, {"id": "t200"}, {"id": "t300"}]},
+      {"name": "a whole number written with a fraction is accepted", "n": 1.0, "trajectories": [{"id": "t300"}]},
+      {
+        "name": "n counts only conversations with content",
+        "n": 1,
+        "spans": [
+          {"trace": "t100", "span": "s1", "chat": true, "input": [{"role": "user", "parts": [{"type": "text", "content": "Hi."}]}], "start": "100000000000", "end": "101000000000"},
+          {"trace": "t200", "span": "s2", "chat": true, "start": "200000000000", "end": "201000000000"}
+        ],
+        "notice": "message",
+        "trajectories": [{"id": "t100"}]
+      },
+      {"name": "zero is rejected", "n": 0, "error": true},
+      {"name": "a negative number is rejected", "n": -1, "error": true},
+      {"name": "a fraction is rejected", "n": 1.5, "error": true},
+      {"name": "a string is rejected", "n": "x", "error": true},
+      {"name": "a logical is rejected", "n": true, "error": true}
+    ]
   }
 }
