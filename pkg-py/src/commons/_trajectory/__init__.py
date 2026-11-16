@@ -14,7 +14,12 @@ from ._build import (
     drop_contentless,
     filter_chat_spans,
 )
-from ._source import ConnectSource, read_source_spans, resolve_trajectory_source
+from ._source import (
+    ConnectSource,
+    read_source_spans,
+    resolve_trajectory_source,
+    warn_if_tracing_disabled,
+)
 
 __all__ = ["Exchange", "Trajectory", "trajectory_read"]
 
@@ -67,7 +72,9 @@ def trajectory_read(
     high = window_bound(until, "until")
     resolved = resolve_trajectory_source(source)
     try:
-        spans = read_source_spans(resolved)
+        spans = read_source_spans(resolved, n=keep, since=low, until=high)
+        if isinstance(resolved, ConnectSource) and not spans:
+            warn_if_tracing_disabled(resolved)
     finally:
         if isinstance(resolved, ConnectSource):
             resolved.client.close()

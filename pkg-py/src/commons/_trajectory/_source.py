@@ -2,19 +2,35 @@
 
 import os
 import re
+import warnings
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from urllib.parse import unquote
 
 from .._connect import (
     ConnectClient,
+    ConnectError,
     connect_content_guid,
     connect_trace_lines,
+    content,
     is_connect_runtime,
+    server_settings,
     vanity_guid,
+)
+from .._tracing import CONTENT_TRACING_HINT, SERVER_TRACING_HINT
+from ._build import (
+    filter_chat_spans,
+    has_severed_ancestry,
+    is_chat_span,
+    latest_chat_spans,
 )
 from ._deployment import find_deployment, registered_connect_servers
 from ._otlp import Span, local_traces_dir, parse_otlp_lines, read_local_spans
+from ._semconv import trajectory_turns
+
+EMPTY_READ_MESSAGE = "No traces were found for this content."
 
 _CONTENT_GUID = re.compile(r"[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}")
 _GUID = r"([0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12})"
@@ -138,7 +154,95 @@ def _directory(path: str) -> Path:
     return Path(path) if path else Path(os.devnull)
 
 
-def read_source_spans(source: LocalSource | ConnectSource) -> list[Span]:
+def read_source_spans(
+    source: LocalSource | ConnectSource,
+    *,
+    n: int | None = None,
+    since: datetime | None = None,
+    until: datetime | None = None,
+) -> list[Span]:
+    """The source's spans; `n`, `since`, and `until` narrow a read from Connect."""
     if isinstance(source, ConnectSource):
-        return parse_otlp_lines(connect_trace_lines(source.client, source.guid))
+        return read_connect_spans(
+            source.client, source.guid, n=n, since=since, until=until
+        )
     return read_local_spans(source.path)
+
+
+def read_connect_spans(
+    client: ConnectClient,
+    guid: str,
+    *,
+    n: int | None,
+    since: datetime | None,
+    until: datetime | None,
+) -> list[Span]:
+    """The content's spans, with the window and `n` sent to Connect."""
+    spans = _fetch_connect_spans(client, guid, since, n=n, since=since, until=until)
+    # The padded `from` can still drop a turn span that started more than an
+    # hour earlier, so a severed chain is fetched once more without it.
+    if since is not None and has_severed_ancestry(
+        filter_chat_spans(spans, since, until)
+    ):
+        spans = _fetch_connect_spans(client, guid, None, n=n, since=since, until=until)
+    return spans
+
+
+def _fetch_connect_spans(
+    client: ConnectClient,
+    guid: str,
+    pushdown: datetime | None,
+    *,
+    n: int | None,
+    since: datetime | None,
+    until: datetime | None,
+) -> list[Span]:
+    enough = None if n is None else enough_trace_lines(n, since, until)
+    lines = connect_trace_lines(
+        client, guid, since=pushdown, until=until, enough=enough
+    )
+    return parse_otlp_lines(lines)
+
+
+def enough_trace_lines(
+    n: int, since: datetime | None, until: datetime | None
+) -> Callable[[Sequence[str]], bool]:
+    """A check that the lines read so far hold `n` conversations with content."""
+    spans: list[Span] = []
+    parsed = 0
+
+    def enough(lines: Sequence[str]) -> bool:
+        nonlocal parsed
+        spans.extend(parse_otlp_lines(lines[parsed:]))
+        parsed = len(lines)
+        kept = filter_chat_spans(spans, since, until)
+        if has_severed_ancestry(kept):
+            return False
+        latest = latest_chat_spans([span for span in kept if is_chat_span(span)])
+        if len(latest) < n:
+            return False
+        return sum(1 for span in latest.values() if trajectory_turns(span)) >= n
+
+    return enough
+
+
+def warn_if_tracing_disabled(source: ConnectSource) -> None:
+    """Warn when a setting explains why Connect has no traces for the content.
+
+    Called from trajectory_read(), so the warning points at its caller.
+    """
+    try:
+        content_enabled = content(source.client, source.guid).get("otel_enabled")
+    except (ConnectError, ValueError):
+        content_enabled = None
+    try:
+        settings = server_settings(source.client)
+    except (ConnectError, ValueError):
+        settings = {}
+    hints = []
+    if content_enabled is False:
+        hints.append(CONTENT_TRACING_HINT)
+    if settings.get("allow_content_instrumentation") is False:
+        hints.append(SERVER_TRACING_HINT)
+    if hints:
+        warnings.warn(" ".join([EMPTY_READ_MESSAGE, *hints]), stacklevel=3)

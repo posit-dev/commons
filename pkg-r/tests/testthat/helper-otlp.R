@@ -77,44 +77,6 @@ chat_test_span <- function(
   )
 }
 
-conversation_test_span <- function(trace_id, span_id, parent_span_id = NULL) {
-  otlp_test_span(
-    trace_id,
-    span_id,
-    parent_span_id = parent_span_id,
-    name = "commons_conversation_turn"
-  )
-}
-
-# Three single-span conversations starting at 100s, 200s, and 300s past the
-# epoch, grouped by trace id.
-staggered_test_line <- function() {
-  json <- test_turn_json()
-  otlp_test_line(list(
-    chat_test_span(
-      "t100",
-      "s1",
-      input_messages = json$input,
-      start_time = "100000000000",
-      end_time = "101000000000"
-    ),
-    chat_test_span(
-      "t200",
-      "s2",
-      input_messages = json$input,
-      start_time = "200000000000",
-      end_time = "201000000000"
-    ),
-    chat_test_span(
-      "t300",
-      "s3",
-      input_messages = json$input,
-      start_time = "300000000000",
-      end_time = "301000000000"
-    )
-  ))
-}
-
 test_turn_json <- function() {
   list(
     system = '[{"type":"text","content":"Be helpful."}]',

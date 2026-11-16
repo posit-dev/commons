@@ -477,6 +477,8 @@ connect_cases <- shared_fixture(file.path("trajectories", "connect"))
 
 test_that("an empty Connect read diagnoses disabled tracing settings", {
   skip_on_cran()
+  expect_connect_read_member(connect_cases$empty_read)
+
   client <- list(server = "https://connect.example.com", api_key = "key")
   content_enabled <- FALSE
   instrumentation_allowed <- TRUE
@@ -509,183 +511,36 @@ test_that("an empty Connect read diagnoses disabled tracing settings", {
 })
 
 test_that("a Connect read recovers a wrapper the `from` pushdown dropped", {
-  withr::local_envvar(
-    CONNECT_SERVER = "https://connect.example.com",
-    CONNECT_API_KEY = "key"
-  )
-  json <- test_turn_json()
-  wrapper <- conversation_test_span("t1", "root1")
-  chat <- chat_test_span(
-    "t1",
-    "chat1",
-    parent_span_id = "root1",
-    conversation_id = "conv-a",
-    input_messages = json$input,
-    start_time = "200000000000",
-    end_time = "201000000000"
-  )
-  state <- new.env()
-  state$froms <- list()
-  local_mocked_bindings(
-    connect_trace_lines = function(client, guid, from = NULL, to = NULL, ...) {
-      state$froms <- c(state$froms, list(from))
-      if (is.null(from)) {
-        otlp_test_line(list(wrapper, chat))
-      } else {
-        otlp_test_line(list(chat))
-      }
-    }
-  )
-
-  trajectories <- trajectory_read(
-    "ea3c1445-cb71-42df-a2f2-bdb18874ef41",
-    from = .POSIXct(150, tz = "UTC")
-  )
-
-  expect_length(state$froms, 2)
-  expect_null(state$froms[[2]])
-  expect_named(trajectories, "conv-a")
+  expect_connect_read_member(connect_cases$refetch)
 })
 
 test_that("a windowed Connect read with intact ancestry fetches once", {
-  withr::local_envvar(
-    CONNECT_SERVER = "https://connect.example.com",
-    CONNECT_API_KEY = "key"
-  )
-  json <- test_turn_json()
-  state <- new.env()
-  state$fetches <- 0
-  local_mocked_bindings(
-    connect_trace_lines = function(client, guid, from = NULL, to = NULL, ...) {
-      state$fetches <- state$fetches + 1
-      otlp_test_line(list(
-        conversation_test_span("t1", "root1"),
-        chat_test_span(
-          "t1",
-          "chat1",
-          parent_span_id = "root1",
-          conversation_id = "conv-a",
-          input_messages = json$input,
-          start_time = "200000000000",
-          end_time = "201000000000"
-        )
-      ))
-    }
-  )
-
-  trajectories <- trajectory_read(
-    "ea3c1445-cb71-42df-a2f2-bdb18874ef41",
-    from = .POSIXct(150, tz = "UTC")
-  )
-
-  expect_equal(state$fetches, 1)
-  expect_named(trajectories, "conv-a")
+  expect_connect_read_member(connect_cases$fetch_once)
 })
 
 test_that("enough_trace_lines is satisfied once n conversations have content", {
-  lines <- staggered_test_line()
-
-  enough <- enough_trace_lines(2, NULL, NULL)
-  expect_true(enough(lines))
-
-  enough <- enough_trace_lines(5, NULL, NULL)
-  expect_false(enough(lines))
-
-  enough <- enough_trace_lines(1, .POSIXct(250, tz = "UTC"), NULL)
-  expect_true(enough(lines))
+  expect_enough_member(connect_cases$enough)
 })
 
 test_that("only ancestry below the turn wrapper counts as severed", {
-  json <- test_turn_json()
-  spans <- parse_otlp_lines(otlp_test_line(list(
-    # The wrapper's own parent (added by an instrumented host) is missing,
-    # but turn-ancestor resolution stops at the wrapper.
-    conversation_test_span("t1", "root1", parent_span_id = "host1"),
-    chat_test_span(
-      "t1",
-      "chat1",
-      parent_span_id = "root1",
-      input_messages = json$input
+  cases <- connect_cases$severed$cases
+  expect_gt(length(cases), 0)
+  for (case in cases) {
+    spans <- parse_otlp_lines(connect_fixture_line(case[["spans"]]))
+    expect_identical(
+      has_severed_ancestry(spans),
+      case[["expected"]],
+      info = case[["name"]]
     )
-  )))
-  expect_false(has_severed_ancestry(spans))
-
-  severed <- parse_otlp_lines(otlp_test_line(list(
-    chat_test_span(
-      "t1",
-      "chat1",
-      parent_span_id = "root1",
-      input_messages = json$input
-    )
-  )))
-  expect_true(has_severed_ancestry(severed))
+  }
 })
 
 test_that("enough_trace_lines waits for a chat span's trailing wrapper", {
-  json <- test_turn_json()
-  chat_only <- otlp_test_line(list(
-    chat_test_span(
-      "t1",
-      "chat1",
-      parent_span_id = "root1",
-      input_messages = json$input
-    )
-  ))
-  with_wrapper <- c(
-    chat_only,
-    otlp_test_line(list(conversation_test_span("t1", "root1")))
-  )
-
-  enough <- enough_trace_lines(1, NULL, NULL)
-  expect_false(enough(chat_only))
-  expect_true(enough(with_wrapper))
+  expect_enough_member(connect_cases$enough_ancestry)
 })
 
 test_that("trajectory_read stops Connect paging after n conversations", {
-  withr::local_envvar(
-    CONNECT_SERVER = "https://connect.example.com",
-    CONNECT_API_KEY = "key"
-  )
-  json <- test_turn_json()
-  pages <- lapply(c("300", "200", "100"), function(seconds) {
-    otlp_test_line(list(chat_test_span(
-      paste0("t", seconds),
-      paste0("s", seconds),
-      input_messages = json$input,
-      start_time = paste0(seconds, "000000000"),
-      end_time = paste0(seconds, "500000000")
-    )))
-  })
-  state <- new.env()
-  state$served <- 0
-  local_mocked_bindings(
-    connect_trace_lines = function(
-      client,
-      guid,
-      from = NULL,
-      to = NULL,
-      enough = NULL,
-      ...
-    ) {
-      lines <- character()
-      for (page in pages) {
-        lines <- c(lines, page)
-        state$served <- state$served + 1
-        if (!is.null(enough) && enough(lines)) {
-          break
-        }
-      }
-      lines
-    }
-  )
-
-  trajectories <- trajectory_read(
-    "ea3c1445-cb71-42df-a2f2-bdb18874ef41",
-    n = 1
-  )
-
-  expect_equal(state$served, 1)
-  expect_named(trajectories, "t300")
+  expect_connect_read_member(connect_cases$early_stop)
 })
 
 test_that("trajectory_read returns an empty list for a missing directory", {
