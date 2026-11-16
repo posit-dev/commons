@@ -156,248 +156,25 @@ test_that("chat spans group by their conversation id across traces", {
   expect_trajectory_member(build$conversation_id)
 })
 
-text_semconv_message <- function(role, text) {
-  list(role = role, parts = list(list(type = "text", content = text)))
-}
-
-semconv_messages_json <- function(messages) {
-  jsonlite::toJSON(messages, auto_unbox = TRUE)
-}
-
 test_that("title generation does not replace the conversation it titles", {
   expect_trajectory_member(build$title_spans)
 })
 
 test_that("missing latest input recovers history and subsequent outputs", {
-  question <- text_semconv_message("user", "Make a plot.")
-  plot_request <- list(
-    role = "assistant",
-    parts = list(list(
-      type = "tool_call",
-      id = "plot-1",
-      name = "run_r",
-      arguments = list(code = "plot(1:10)")
-    ))
-  )
-  final <- text_semconv_message("assistant", "The plot is shown above.")
-  spans <- parse_otlp_lines(otlp_test_line(list(
-    conversation_test_span("t1", "root"),
-    chat_test_span(
-      "t1",
-      "chat1",
-      parent_span_id = "root",
-      conversation_id = "conv-a",
-      input_messages = semconv_messages_json(list(question)),
-      output_messages = semconv_messages_json(list(plot_request)),
-      end_time = "10"
-    ),
-    chat_test_span(
-      "t1",
-      "chat2",
-      parent_span_id = "root",
-      conversation_id = "conv-a",
-      output_messages = semconv_messages_json(list(final)),
-      end_time = "20"
-    )
-  )))
-
-  turns <- build_trajectories(spans)[["conv-a"]]$turns
-
-  expect_identical(
-    vapply(turns, function(turn) turn@role, character(1)),
-    c("user", "assistant", "user", "assistant")
-  )
-  expect_equal(turns[[1]]@text, "Make a plot.")
-  expect_equal(turns[[2]]@contents[[1]]@name, "run_r")
-  expect_s7_class(turns[[3]]@contents[[1]], ellmer::ContentToolResult)
-  expect_equal(
-    turns[[3]]@contents[[1]]@value,
-    "(Tool result was not captured.)"
-  )
-  expect_identical(
-    turns[[3]]@contents[[1]]@request,
-    turns[[2]]@contents[[1]]
-  )
-  expect_equal(turns[[4]]@text, "The plot is shown above.")
-  expect_length(split_exchanges(turns), 1)
+  expect_trajectory_member(build$missing_latest_input)
 })
 
 test_that("missing input in a later agent turn preserves earlier exchanges", {
-  question <- text_semconv_message("user", "Make a plot.")
-  plot_request <- list(
-    role = "assistant",
-    parts = list(list(
-      type = "tool_call",
-      id = "plot-1",
-      name = "run_r",
-      arguments = list(code = "plot(1:10)")
-    ))
-  )
-  plot_answer <- text_semconv_message(
-    "assistant",
-    "The plot is shown above."
-  )
-  followup_answer <- text_semconv_message(
-    "assistant",
-    "The result is unchanged."
-  )
-  spans <- parse_otlp_lines(otlp_test_line(list(
-    conversation_test_span("first-trace", "root1"),
-    chat_test_span(
-      "first-trace",
-      "chat1",
-      parent_span_id = "root1",
-      conversation_id = "conv-a",
-      input_messages = semconv_messages_json(list(question)),
-      output_messages = semconv_messages_json(list(plot_request)),
-      end_time = "10"
-    ),
-    chat_test_span(
-      "first-trace",
-      "chat2",
-      parent_span_id = "root1",
-      conversation_id = "conv-a",
-      output_messages = semconv_messages_json(list(plot_answer)),
-      end_time = "20"
-    ),
-    conversation_test_span("second-trace", "root2"),
-    chat_test_span(
-      "second-trace",
-      "chat3",
-      parent_span_id = "root2",
-      conversation_id = "conv-a",
-      output_messages = semconv_messages_json(list(followup_answer)),
-      end_time = "30"
-    )
-  )))
-
-  turns <- build_trajectories(spans)[["conv-a"]]$turns
-
-  expect_identical(
-    vapply(turns, function(turn) turn@role, character(1)),
-    c("user", "assistant", "user", "assistant", "user", "assistant")
-  )
-  expect_equal(turns[[1]]@text, "Make a plot.")
-  expect_equal(
-    turns[[3]]@contents[[1]]@value,
-    "(Tool result was not captured.)"
-  )
-  expect_equal(turns[[4]]@text, "The plot is shown above.")
-  expect_equal(turns[[5]]@text, "(Input content was not captured.)")
-  expect_equal(turns[[6]]@text, "The result is unchanged.")
-  expect_length(split_exchanges(turns), 2)
+  expect_trajectory_member(build$missing_later_input)
 })
 
 test_that("missing initial rich input is represented explicitly", {
-  spans <- parse_otlp_lines(otlp_test_line(list(
-    conversation_test_span("t1", "root"),
-    chat_test_span(
-      "t1",
-      "chat1",
-      parent_span_id = "root",
-      conversation_id = "conv-a",
-      output_messages = semconv_messages_json(list(
-        text_semconv_message("assistant", "I can describe that image.")
-      )),
-      end_time = "10"
-    )
-  )))
-
-  turns <- build_trajectories(spans)[["conv-a"]]$turns
-
-  expect_identical(
-    vapply(turns, function(turn) turn@role, character(1)),
-    c("user", "assistant")
-  )
-  expect_equal(turns[[1]]@text, "(Input content was not captured.)")
-  expect_equal(turns[[2]]@text, "I can describe that image.")
-  expect_length(split_exchanges(turns), 1)
+  expect_trajectory_member(build$missing_initial_input)
 })
 
 test_that("missing input outside an agent turn does not invent a user turn", {
-  spans <- parse_otlp_lines(otlp_test_line(list(
-    chat_test_span(
-      "old-trace",
-      "chat1",
-      conversation_id = "conv-a",
-      input_messages = semconv_messages_json(list(
-        text_semconv_message("user", "Old question")
-      )),
-      end_time = "10"
-    ),
-    chat_test_span(
-      "new-trace",
-      "chat2",
-      conversation_id = "conv-a",
-      output_messages = semconv_messages_json(list(
-        text_semconv_message("assistant", "Unrelated answer")
-      )),
-      end_time = "20"
-    )
-  )))
-
-  turns <- build_trajectories(spans)[["conv-a"]]$turns
-
-  expect_length(turns, 1)
-  expect_identical(turns[[1]]@role, "assistant")
-  expect_equal(turns[[1]]@text, "Unrelated answer")
+  expect_trajectory_member(build$missing_input_outside_turn)
 })
-
-recorded_call_test_spans <- function(
-  trace_id,
-  conversation_id,
-  messages,
-  tag,
-  end_time,
-  citation_decisions = list(),
-  dedicated_provenance_span = FALSE
-) {
-  root_id <- paste0(trace_id, "-root")
-  agent_id <- paste0(trace_id, "-agent")
-  attributes <- list(
-    otlp_test_attr("commons.provenance.tag", tag),
-    otlp_test_attr(
-      "commons.citation.candidates",
-      jsonlite::toJSON(citation_decisions, auto_unbox = TRUE)
-    )
-  )
-  spans <- list(
-    otlp_test_span(
-      trace_id,
-      root_id,
-      name = "commons_conversation_turn",
-      attributes = if (dedicated_provenance_span) list() else attributes,
-      end_time = end_time
-    ),
-    otlp_test_span(
-      trace_id,
-      agent_id,
-      parent_span_id = root_id,
-      name = "invoke_agent",
-      end_time = end_time
-    ),
-    chat_test_span(
-      trace_id,
-      paste0(trace_id, "-chat"),
-      parent_span_id = agent_id,
-      conversation_id = conversation_id,
-      input_messages = semconv_messages_json(head(messages, -1L)),
-      output_messages = semconv_messages_json(tail(messages, 1L)),
-      end_time = end_time
-    )
-  )
-  if (dedicated_provenance_span) {
-    spans[[length(spans) + 1]] <- otlp_test_span(
-      trace_id,
-      paste0(trace_id, "-provenance"),
-      parent_span_id = root_id,
-      name = "commons_provenance",
-      attributes = attributes,
-      end_time = end_time
-    )
-  }
-  spans
-}
 
 test_that("linear calls attach records to their own final exchanges", {
   expect_trajectory_member(build$provenance)

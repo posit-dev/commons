@@ -3,16 +3,17 @@
 ``pkg-r/R/trajectory-read.R`` holds the R counterpart.
 """
 
+import functools
 import json
 import logging
 import re
 import warnings
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from chatlas import Turn
+from chatlas import Turn, UserTurn
 from chatlas.types import ContentText, ContentToolRequest, ContentToolResult
 
 from .._citations import CitationDecision
@@ -25,9 +26,19 @@ from .._tracing import (
     USER_ATTRIBUTE,
 )
 from ._otlp import Span
-from ._semconv import SYSTEM_INSTRUCTIONS, system_turns, trajectory_turns
+from ._semconv import (
+    INPUT_MESSAGES,
+    OUTPUT_MESSAGES,
+    SYSTEM_INSTRUCTIONS,
+    has_json,
+    message_turns,
+    system_turns,
+    trajectory_turns,
+)
 
 TITLE_PROMPT = "You title chat conversations."
+MISSING_INPUT = "(Input content was not captured.)"
+MISSING_RESULT = "(Tool result was not captured.)"
 
 _logger = logging.getLogger(__name__)
 
@@ -92,14 +103,16 @@ def build_trajectories(spans: Sequence[Span]) -> dict[str, Trajectory]:
     by_conversation: dict[str, list[Span]] = {}
     for span in chat_spans:
         by_conversation.setdefault(conversation_id(span), []).append(span)
+    turns_of = functools.partial(
+        _chat_span_turns, cache={}, by_conversation=by_conversation, index=index
+    )
     provenance_spans = _latest_provenance_spans(spans, index)
     calls = _recorded_calls(chat_spans, index, provenance_spans)
-    cache: dict[_SpanKey, list[Turn]] = {}
-    candidates = _call_candidates(calls, cache)
+    candidates = _call_candidates(calls, turns_of)
 
     trajectories: dict[str, Trajectory] = {}
     for id_, span in latest.items():
-        turns = _chat_span_turns(span, cache)
+        turns = turns_of(span)
         trajectories[id_] = Trajectory(
             turns=list(turns),
             last_active=_instant(span_time(span)),
@@ -268,12 +281,100 @@ def _conversation_user(
     return user if isinstance(user, str) and user else None
 
 
-def _chat_span_turns(span: Span, cache: dict[_SpanKey, list[Turn]]) -> list[Turn]:
+def _chat_span_turns(
+    span: Span,
+    cache: dict[_SpanKey, list[Turn]],
+    by_conversation: dict[str, list[Span]],
+    index: dict[_SpanKey, Span],
+) -> list[Turn]:
     """The turns a selected chat span records, parsed once per span."""
     key = _span_key(span)
     if key not in cache:
-        cache[key] = trajectory_turns(span)
+        cache[key] = _recover_missing_input(
+            span, trajectory_turns(span), by_conversation, index
+        )
     return cache[key]
+
+
+def _recover_missing_input(
+    span: Span,
+    turns: list[Turn],
+    by_conversation: dict[str, list[Span]],
+    index: dict[_SpanKey, Span],
+) -> list[Turn]:
+    """The span's turns, with its history rebuilt when its input is missing."""
+    # A recorder that cannot write a call's input (rich content) leaves it
+    # out, so the history is rebuilt from the conversation's earlier spans.
+    if has_json(span.attributes.get(INPUT_MESSAGES)):
+        return turns
+    if _turn_ancestor(span, index) is None:
+        return turns
+    pairs: list[tuple[Span, Span]] = []
+    for candidate in by_conversation.get(conversation_id(span), []):
+        turn = _turn_ancestor(candidate, index)
+        if turn is not None and not _is_title_span(candidate):
+            pairs.append((candidate, turn))
+    pairs.sort(key=lambda pair: span_time(pair[0]))
+    key = _span_key(span)
+    target = next(
+        (i for i, (candidate, _) in enumerate(pairs) if _span_key(candidate) == key),
+        None,
+    )
+    if target is None:
+        return turns
+    history: Span | None = None
+    start = 0
+    for i in range(target):
+        if has_json(pairs[i][0].attributes.get(INPUT_MESSAGES)):
+            history, start = pairs[i][0], i
+    return _recovered_turns(span, history, pairs[start : target + 1])
+
+
+def _recovered_turns(
+    latest: Span,
+    history: Span | None,
+    output_spans: Sequence[tuple[Span, Span]],
+) -> list[Turn]:
+    """The history's input, then each output span's output, in order."""
+    requests: dict[str, ContentToolRequest] = {}
+    system = system_turns(latest.attributes.get(SYSTEM_INSTRUCTIONS))
+    if not system and history is not None:
+        system = system_turns(history.attributes.get(SYSTEM_INSTRUCTIONS))
+    if history is None:
+        input_ = [_missing_input_turn()]
+    else:
+        input_ = message_turns(history.attributes.get(INPUT_MESSAGES), requests)
+    output: list[Turn] = []
+    previous: list[Turn] = []
+    previous_turn: _SpanKey | None = None
+    for chat_span, turn_span in output_spans:
+        turn_key = _span_key(turn_span)
+        if previous_turn is not None:
+            if turn_key == previous_turn:
+                missing = _missing_tool_results(previous)
+                if missing is not None:
+                    output.append(missing)
+            else:
+                output.append(_missing_input_turn())
+        previous = message_turns(chat_span.attributes.get(OUTPUT_MESSAGES), requests)
+        output.extend(previous)
+        previous_turn = turn_key
+    return [*system, *input_, *output]
+
+
+def _missing_input_turn() -> Turn:
+    return UserTurn([ContentText(text=MISSING_INPUT)])
+
+
+def _missing_tool_results(turns: Sequence[Turn]) -> Turn | None:
+    """A placeholder result for each tool request in the turns, if any."""
+    results = [
+        ContentToolResult(value=MISSING_RESULT, request=content)
+        for turn in turns
+        for content in turn.contents
+        if isinstance(content, ContentToolRequest)
+    ]
+    return UserTurn(results) if results else None
 
 
 def _latest_provenance_spans(
@@ -416,12 +517,12 @@ def _exchange_is_complete(exchange: Sequence[Turn]) -> bool:
 
 
 def _call_candidates(
-    calls: dict[_SpanKey, _RecordedCall], cache: dict[_SpanKey, list[Turn]]
+    calls: dict[_SpanKey, _RecordedCall], turns_of: Callable[[Span], list[Turn]]
 ) -> dict[str, list[_Candidate]]:
     """The records that complete calls claim, by conversation id."""
     candidates: dict[str, list[_Candidate]] = {}
     for call in calls.values():
-        exchanges = split_exchanges(_chat_span_turns(call.chat_span, cache))
+        exchanges = split_exchanges(turns_of(call.chat_span))
         if not exchanges or not _exchange_is_complete(exchanges[-1]):
             continue
         candidates.setdefault(call.conversation_id, []).append(
