@@ -40,13 +40,10 @@ def _nanos(value: Any) -> int:
 def _number(value: Any) -> int | float | None:
     """An integer value; one that is not a number reads as None, as NA does in R."""
     try:
-        return int(value)
-    except (TypeError, ValueError):
-        pass
-    try:
-        return float(value)
+        number = float(value)
     except (TypeError, ValueError):
         return None
+    return int(number) if number.is_integer() else number
 
 
 def _entries(parent: dict[str, Any], key: str) -> list[dict[str, Any]]:

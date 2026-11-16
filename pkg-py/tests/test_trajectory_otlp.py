@@ -189,6 +189,14 @@ def test_an_integer_that_is_not_a_number_decodes_to_none(value: str) -> None:
     assert otlp_attribute_value({"intValue": value}) is None
 
 
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [("42", 42), (42, 42), ("1.5", 1.5), (1.5, 1.5), (1e309, float("inf"))],
+)
+def test_an_integer_decodes_as_a_number(value: object, expected: float) -> None:
+    assert otlp_attribute_value({"intValue": value}) == expected
+
+
 def test_a_bad_integer_does_not_stop_the_parse() -> None:
     envelope = {
         "resourceSpans": [
