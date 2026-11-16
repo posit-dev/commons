@@ -106,7 +106,9 @@ def _dcf_files(directory: Path) -> list[Path]:
         files.extend(
             Path(root) / name
             for name in sorted(names)
-            if name.endswith(".dcf") and not name.startswith(".")
+            if name.endswith(".dcf")
+            and not name.startswith(".")
+            and (Path(root) / name).is_file()
         )
     return files
 

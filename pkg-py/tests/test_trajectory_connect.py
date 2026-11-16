@@ -23,6 +23,7 @@ from commons._tracing import CONTENT_TRACING_HINT, SERVER_TRACING_HINT
 from commons._trajectory import trajectory_read
 from commons._trajectory._build import has_severed_ancestry
 from commons._trajectory._deployment import (
+    deployment_record_files,
     find_deployment,
     registered_connect_servers,
 )
@@ -289,6 +290,17 @@ def test_a_python_record_that_is_not_an_object_is_skipped(tmp_path: Path) -> Non
 
     assert found is not None
     assert found.guid == GUID
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="no named pipes here")
+def test_a_record_path_that_is_not_a_regular_file_is_skipped(tmp_path: Path) -> None:
+    # Reading a named pipe would wait for a writer.
+    store = tmp_path / "rsconnect" / "connect.example.com" / "me"
+    store.mkdir(parents=True)
+    os.mkfifo(store / "pipe.dcf")
+    (store / "link.dcf").symlink_to(store / "pipe.dcf")
+
+    assert deployment_record_files(tmp_path) == []
 
 
 def test_a_python_record_beside_its_entry_point_only(tmp_path: Path) -> None:
