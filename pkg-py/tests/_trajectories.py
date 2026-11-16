@@ -157,8 +157,10 @@ def run_case(
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)
     try:
-        with warnings.catch_warnings(record=True) as caught:
+        with warnings.catch_warnings():
             warnings.simplefilter("always")
+            # Record each warning as it is shown, in order with the log messages.
+            warnings.showwarning = lambda *_args, **_kwargs: notices.append("warning")
             if directory is None:
                 result = build_trajectories(parse_otlp_lines([fixture_line(spans)]))
             else:
@@ -173,7 +175,6 @@ def run_case(
     finally:
         logger.removeHandler(handler)
         logger.setLevel(level)
-    notices[:0] = ["warning"] * len(caught)
     return result, notices
 
 

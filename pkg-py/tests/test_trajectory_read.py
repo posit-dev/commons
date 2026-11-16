@@ -134,6 +134,16 @@ def test_an_empty_path_reads_nothing(
     assert trajectory_read("") == {}
 
 
+@pytest.mark.parametrize("member", ["contentless", "conflicting_records"])
+def test_a_warning_points_at_the_caller(member: str, tmp_path: Path) -> None:
+    case = next(c for c in BUILD[member]["cases"] if c.get("notice") == "warning")
+    trace = tmp_path / "trace-1.jsonl"
+    trace.write_text(fixture_line(case["spans"]) + "\n", encoding="utf-8")
+    with pytest.warns(UserWarning) as caught:
+        trajectory_read(tmp_path)
+    assert [w.filename for w in caught] == [__file__]
+
+
 def test_a_source_of_another_type_is_rejected() -> None:
     with pytest.raises(TypeError, match="source must be"):
         trajectory_read(3)  # type: ignore[arg-type]
