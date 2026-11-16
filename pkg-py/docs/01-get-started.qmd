@@ -378,7 +378,7 @@ deployed = commons.trajectory_read(
 )
 ```
 
-A read from Connect needs the `CONNECT_API_KEY` environment variable. It also needs `CONNECT_SERVER` when the server is not in the URL, in the deployment record, or the only server registered with rsconnect-python. The key's user needs editor-level access to the content: they must own it or be a collaborator, which is what `share_with` grants. `n`, `since`, and `until` are sent to Connect, so a filtered read does not transfer the whole trace store. When Connect has no traces for the content, `trajectory_read()` warns if the content's or the server's tracing setting explains why.
+A read from Connect needs the `CONNECT_API_KEY` environment variable. It also needs `CONNECT_SERVER` when the server is not in the URL, in the deployment record, or the only server registered with rsconnect-python. The key's user needs editor-level access to the content: they must own it or be a collaborator, which is what `share_with` grants. `since` and `until` are sent to Connect, so Connect leaves out most traces outside the window. The per-job trace stores that older content can have are filtered by `since` only. `n` is not sent, and is applied after the read. When Connect has no traces for the content and the content's or the server's tracing setting is off, `trajectory_read()` warns and names that setting.
 
 ## Example application
 
