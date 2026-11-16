@@ -145,13 +145,17 @@ test_that("commons_theme() bundles the commons chat assets", {
   )
 })
 
-test_that("icon URLs resolve inside the commons-chat dependency", {
+test_that("icon URLs resolve inside the commons-icons dependency", {
   url <- commons_icon_url("trusted-icon.svg")
-  expect_match(url, "^commons-chat-[^/]+/figs/trusted-icon\\.svg$")
+  expect_identical(url, "commons-icons-1.0/trusted-icon.svg")
 
   # The dependency ships the file the URL points to
-  dep <- commons_chat_dependency()
-  expect_true(file.exists(file.path(dep$src$file, "figs", "trusted-icon.svg")))
+  dep <- commons_icons_dependency()
+  expect_true(file.exists(file.path(dep$src$file, "trusted-icon.svg")))
+
+  # And commons_theme() puts it on the page
+  deps <- htmltools::findDependencies(bslib::bs_theme_dependencies(commons_theme()))
+  expect_true("commons-icons" %in% vapply(deps, `[[`, "", "name"))
 })
 
 test_that("commons_app requires a commons agent", {

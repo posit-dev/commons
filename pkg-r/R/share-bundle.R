@@ -37,8 +37,8 @@ write_conversation_bundle <- function(
       "Can't find shinychat's {.code shiny-chat-container} to write the conversation into."
     )
   }
-  # Asset URLs carry the version of the deployment that streamed them, which
-  # a restored conversation may outlive.
+  # Conversations saved before icons had a stable URL carry the commons-chat
+  # version of the deployment that streamed them, which they may outlive.
   dep <- commons_chat_dependency()
   wire <- gsub(
     "commons-chat-[0-9.]+/",

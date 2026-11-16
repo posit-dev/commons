@@ -12,6 +12,8 @@ commons_theme <- function(..., preset = "shiny") {
   )
   bslib::bs_bundle(
     theme,
-    sass::sass_layer(html_deps = list(commons_chat_dependency()))
+    sass::sass_layer(
+      html_deps = list(commons_chat_dependency(), commons_icons_dependency())
+    )
   )
 }
