@@ -14,6 +14,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -155,6 +156,18 @@ def test_an_aware_bound_in_another_zone_is_sent_in_utc() -> None:
     assert window_param(at, TO_PAD) == "2026-07-22T14:30:01Z"
 
 
+def test_a_bound_in_a_repeated_hour_is_padded_in_utc() -> None:
+    # 01:30 on the second pass through Denver's repeated hour is 08:30 UTC.
+    # Padding in local time would shift it by the hour that repeats.
+    at = datetime(2026, 11, 1, 1, 30, fold=1, tzinfo=ZoneInfo("America/Denver"))
+    assert window_param(at, TO_PAD) == "2026-11-01T08:30:01Z"
+
+
+def test_a_bound_padded_out_of_range_is_not_sent() -> None:
+    assert window_param(datetime.min.replace(tzinfo=UTC), FROM_PAD) is None
+    assert window_param(datetime.max.replace(tzinfo=UTC), TO_PAD) is None
+
+
 @pytest.mark.parametrize(("member", "case"), cases(RECORD_MEMBERS))
 def test_deployment_records_match_the_shared_fixture(
     member: dict[str, Any],
@@ -222,11 +235,40 @@ def test_a_python_record_keyed_by_a_cloud_account_is_skipped(tmp_path: Path) -> 
     assert find_deployment(tmp_path) is None
 
 
-def test_a_python_record_without_a_content_url_is_skipped(tmp_path: Path) -> None:
+def test_a_python_record_without_a_guid_or_content_url_is_skipped(
+    tmp_path: Path,
+) -> None:
+    # As rsconnect-python records a shinyapps.io deployment.
     record = _python_record(app_url="https://me.shinyapps.io/app/")
+    record["app_guid"] = None
     _write_python_record(tmp_path / "rsconnect-python" / "app.json", record)
 
     assert find_deployment(tmp_path) is None
+
+
+def test_a_python_record_with_a_vanity_url_is_read_by_its_guid(
+    tmp_path: Path,
+) -> None:
+    record = _python_record(app_url="https://connect.example.com/my-agent/")
+    _write_python_record(tmp_path / "rsconnect-python" / "app.json", record)
+
+    found = find_deployment(tmp_path)
+
+    assert found is not None
+    assert found.guid == GUID
+
+
+def test_a_python_record_without_a_guid_falls_back_to_its_url(
+    tmp_path: Path,
+) -> None:
+    record = _python_record()
+    record["app_guid"] = "not-a-guid"
+    _write_python_record(tmp_path / "rsconnect-python" / "app.json", record)
+
+    found = find_deployment(tmp_path)
+
+    assert found is not None
+    assert found.guid == GUID
 
 
 def test_a_python_record_that_is_not_an_object_is_skipped(tmp_path: Path) -> None:
@@ -309,9 +351,17 @@ def test_a_python_record_for_two_servers_reports_one(
     assert len(caplog.records) == 1
 
 
+def _store_dir() -> Path:
+    # Where rsconnect-python 1.33 keeps servers.json, given _isolated_home's
+    # HOME, XDG_CONFIG_HOME, and APPDATA, which are one directory.
+    home = Path(os.environ["HOME"])
+    if sys.platform == "darwin":
+        return home / "Library" / "Application Support" / "rsconnect-python"
+    return home / ".rsconnect-python"
+
+
 def _write_servers(entries: list[dict[str, str]]) -> None:
-    metadata = pytest.importorskip("rsconnect.metadata")
-    directory = Path(metadata.config_dirname())
+    directory = _store_dir()
     directory.mkdir(parents=True, exist_ok=True)
     servers = {entry["name"]: entry for entry in entries}
     (directory / "servers.json").write_text(json.dumps(servers), encoding="utf-8")
@@ -348,12 +398,14 @@ def test_several_registered_servers_are_all_listed() -> None:
     ]
 
 
-def test_no_registered_servers_without_rsconnect_python(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _write_servers([_server("connect", "https://connect.example.com")])
-    monkeypatch.setitem(sys.modules, "rsconnect", None)
-    monkeypatch.setitem(sys.modules, "rsconnect.metadata", None)
+def test_no_registered_servers_without_a_store() -> None:
+    assert registered_connect_servers() == []
+
+
+@pytest.mark.parametrize("text", ["not json", "[]", '{"a": "https://x.example.com"}'])
+def test_a_store_that_is_not_read_registers_no_servers(text: str) -> None:
+    _store_dir().mkdir(parents=True)
+    (_store_dir() / "servers.json").write_text(text, encoding="utf-8")
 
     assert registered_connect_servers() == []
 
