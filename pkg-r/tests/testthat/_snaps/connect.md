@@ -27,7 +27,8 @@
 # connect_trace_lines explains auth failures on the traces endpoint
 
     Code
-      connect_trace_lines(list(server = "s", api_key = "k"), "guid")
+      connect_trace_lines(list(server = "https://connect.example.com", api_key = "k"),
+      "guid")
     Condition
       Error:
       ! Couldn't read this content's traces from Posit Connect.
