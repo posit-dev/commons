@@ -303,6 +303,25 @@ def test_a_record_path_that_is_not_a_regular_file_is_skipped(tmp_path: Path) -> 
     assert deployment_record_files(tmp_path) == []
 
 
+def test_a_record_path_that_cannot_be_checked_is_skipped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = tmp_path / "rsconnect" / "connect.example.com" / "me"
+    store.mkdir(parents=True)
+    (store / "locked.dcf").write_text("x")
+    (store / "agent.dcf").write_text("x")
+    is_file = Path.is_file
+
+    def checked(path: Path) -> bool:
+        if path.name == "locked.dcf":
+            raise PermissionError(path)
+        return is_file(path)
+
+    monkeypatch.setattr(Path, "is_file", checked)
+
+    assert deployment_record_files(tmp_path) == [store / "agent.dcf"]
+
+
 def test_a_python_record_beside_its_entry_point_only(tmp_path: Path) -> None:
     path = tmp_path / "rsconnect-python" / "nested" / "app.json"
     _write_python_record(path, _python_record())
