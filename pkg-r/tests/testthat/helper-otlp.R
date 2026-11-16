@@ -201,6 +201,14 @@ expect_semconv_turns <- function(turns, expected, info = NULL) {
         } else {
           expect_identical(content@request@id, d$request$id, info = info)
           expect_identical(content@request@name, d$request$name, info = info)
+          requests <- Filter(
+            function(c) S7::S7_inherits(c, ellmer::ContentToolRequest),
+            unlist(lapply(turns, function(t) t@contents), recursive = FALSE)
+          )
+          expect_true(
+            any(vapply(requests, identical, logical(1), content@request)),
+            info = info
+          )
         }
       } else {
         fail(paste0("unknown descriptor type ", d$type), info = info)
