@@ -4,6 +4,7 @@ import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import unquote
 
 from .._connect import is_connect_runtime
 from ._otlp import Span, local_traces_dir, read_local_spans
@@ -14,6 +15,12 @@ CONNECT_NOT_SUPPORTED = (
 )
 
 _CONTENT_GUID = re.compile(r"[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}")
+_GUID = r"([0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12})"
+_CONTENT_URL = re.compile(r"(.*?)/content/" + _GUID)
+# A dashboard's path, by default /connect, is not part of the server's URL.
+_DASHBOARD_URL = re.compile(r"(.*?)(?:/connect)?/#/apps/" + _GUID)
+_VANITY_URL = re.compile(r"(.*?)/content/(.+?)/?$")
+_URL = re.compile(r"^https?://")
 
 
 @dataclass(frozen=True)
@@ -23,6 +30,22 @@ class LocalSource:
 
 def is_content_guid(text: str) -> bool:
     return _CONTENT_GUID.fullmatch(text) is not None
+
+
+def content_url_guid(url: str) -> tuple[str, str] | None:
+    """The server and GUID in a content or dashboard URL."""
+    if not _URL.match(url):
+        return None
+    match = _CONTENT_URL.match(url) or _DASHBOARD_URL.match(url)
+    return None if match is None else (match.group(1), match.group(2))
+
+
+def content_vanity_url(url: str) -> tuple[str, str] | None:
+    """The server and the search query in a vanity URL."""
+    if not _URL.match(url):
+        return None
+    match = _VANITY_URL.match(re.sub(r"[?#].*$", "", url, flags=re.DOTALL))
+    return None if match is None else (match.group(1), unquote(match.group(2)))
 
 
 def resolve_trajectory_source(source: str | os.PathLike[str] | None) -> LocalSource:

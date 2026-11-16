@@ -473,6 +473,8 @@ test_that("window bound strings must parse completely", {
   expect_window_bound_member(build$complete_parse)
 })
 
+connect_cases <- shared_fixture(file.path("trajectories", "connect"))
+
 test_that("an empty Connect read diagnoses disabled tracing settings", {
   skip_on_cran()
   client <- list(server = "https://connect.example.com", api_key = "key")
@@ -905,43 +907,51 @@ test_that("local_traces_dir follows the active file exporter", {
 })
 
 test_that("is_content_guid recognizes GUIDs", {
-  expect_true(is_content_guid("ea3c1445-cb71-42df-a2f2-bdb18874ef41"))
-  expect_false(is_content_guid("not-a-guid"))
-  expect_false(is_content_guid("/tmp/logs"))
+  cases <- connect_cases$content_guid$cases
+  expect_gt(length(cases), 0)
+  for (case in cases) {
+    expect_identical(
+      is_content_guid(case[["text"]]),
+      case[["expected"]],
+      info = case[["name"]]
+    )
+  }
 })
 
 test_that("content_url_guid extracts the server and GUID", {
-  parsed <- content_url_guid(
-    "https://connect.example.com/rsc/content/ea3c1445-cb71-42df-a2f2-bdb18874ef41/foo"
-  )
-  expect_equal(parsed$server, "https://connect.example.com/rsc")
-  expect_equal(parsed$guid, "ea3c1445-cb71-42df-a2f2-bdb18874ef41")
-
-  parsed <- content_url_guid(
-    "https://connect.example.com/connect/#/apps/ea3c1445-cb71-42df-a2f2-bdb18874ef41/logs"
-  )
-  expect_equal(parsed$server, "https://connect.example.com")
-  expect_equal(parsed$guid, "ea3c1445-cb71-42df-a2f2-bdb18874ef41")
-
-  parsed <- content_url_guid(
-    "https://connect.example.com/#/apps/ea3c1445-cb71-42df-a2f2-bdb18874ef41"
-  )
-  expect_equal(parsed$server, "https://connect.example.com")
-
-  expect_null(content_url_guid("https://connect.example.com/other"))
-  expect_null(content_url_guid("plain-string"))
+  cases <- connect_cases$content_url$cases
+  expect_gt(length(cases), 0)
+  for (case in cases) {
+    expect_identical(
+      content_url_guid(case[["url"]]),
+      case[["expected"]],
+      info = case[["name"]]
+    )
+  }
 })
 
 test_that("content_vanity_url extracts the server and search query", {
-  expect_equal(
-    content_vanity_url("https://connect.example.com/content/my-agent/"),
-    list(server = "https://connect.example.com", query = "my-agent")
-  )
-  expect_equal(
-    content_vanity_url("https://connect.example.com/rsc/content/my%20agent"),
-    list(server = "https://connect.example.com/rsc", query = "my agent")
-  )
-  expect_null(content_vanity_url("https://connect.example.com/other"))
+  cases <- connect_cases$vanity_url$cases
+  expect_gt(length(cases), 0)
+  for (case in cases) {
+    expect_identical(
+      content_vanity_url(case[["url"]]),
+      case[["expected"]],
+      info = case[["name"]]
+    )
+  }
+})
+
+test_that("connect_window_param pads and formats the window bounds", {
+  cases <- connect_cases$window_param$cases
+  expect_gt(length(cases), 0)
+  for (case in cases) {
+    expect_identical(
+      connect_window_param(.POSIXct(case[["at"]], tz = "UTC"), case[["pad"]]),
+      case[["expected"]],
+      info = case[["name"]]
+    )
+  }
 })
 
 test_that("deployment records are found in project subdirectories", {

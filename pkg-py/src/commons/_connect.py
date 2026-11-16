@@ -13,12 +13,15 @@ import re
 import warnings
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager, nullcontext
+from datetime import UTC, datetime, timedelta
 from typing import Any, Self
 
 import httpx
 
 __all__ = [
+    "FROM_PAD",
     "MINIMUM_TRACING_VERSION",
+    "TO_PAD",
     "ConnectClient",
     "ConnectError",
     "connect_content_guid",
@@ -29,12 +32,17 @@ __all__ = [
     "server_settings",
     "share_trajectory_access",
     "version_is_older",
+    "window_param",
 ]
 
 # The first Connect release that records trajectories, as Connect writes it.
 MINIMUM_TRACING_VERSION = "2026.09.0"
 
 _VERSION = re.compile(r"([0-9]+(?:\.[0-9]+){1,2})")
+
+# How far each bound of a read's window is widened before it is sent.
+FROM_PAD = timedelta(hours=-1)
+TO_PAD = timedelta(seconds=1)
 
 # Connect pages a prefix search over users; a short page is the last one.
 _USER_PAGE_SIZE = 500
@@ -180,6 +188,15 @@ def version_is_older(version: tuple[int, ...], minimum: str) -> bool:
     width = max(len(version), len(floor))
     padded = [(*parts, *([0] * (width - len(parts)))) for parts in (version, floor)]
     return padded[0] < padded[1]
+
+
+def window_param(at: datetime | None, pad: timedelta) -> str | None:
+    """A window bound as Connect's `from`, `to`, or `since` query value."""
+    # Connect ignores a timestamp it cannot parse, so send UTC with a `Z`. The
+    # pads keep the parent spans that start before the window.
+    if at is None:
+        return None
+    return (at + pad).astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def server_settings(client: ConnectClient) -> dict[str, Any]:
