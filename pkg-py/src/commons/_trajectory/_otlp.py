@@ -39,9 +39,14 @@ def _nanos(value: Any) -> int:
 
 def _number(value: Any) -> int | float | None:
     """An integer value; one that is not a number reads as None, as NA does in R."""
+    if not isinstance(value, float):
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            pass
     try:
         number = float(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return None
     return int(number) if number.is_integer() else number
 
