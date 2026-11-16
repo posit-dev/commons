@@ -11,7 +11,7 @@ import pytest
 import sqlalchemy
 
 import commons
-from commons import context_layer, data_source
+from commons import context_layer, data_source, measure, semantic_layer
 from commons._agent import Commons
 
 from . import _spans
@@ -22,6 +22,26 @@ if TYPE_CHECKING:
     from opentelemetry.sdk.trace import ReadableSpan
 
 SCENARIOS = load_shared_fixture("traces")["setup_spans"]["scenarios"]
+
+ORDERS_DICTIONARY = """
+name: shop
+description: What the shop sold.
+tables:
+  - name: orders
+    description: One row per order.
+    columns:
+      - name: id
+        type: number
+      - name: total
+        type: number
+    definitions:
+      - name: big_order
+        description: Orders over 15.
+        expr: total > 15
+      - name: small_order
+        description: Orders of 15 or less.
+        expr: total <= 15
+"""
 
 Spans = Callable[..., list["ReadableSpan"]]
 
@@ -122,6 +142,19 @@ def run_chat_server(tmp_path: Path) -> Callable[[], Any]:
     return serve
 
 
+def run_agent_create_with_measures(tmp_path: Path) -> Callable[[], Any]:
+    path = tmp_path / "data-dict.yaml"
+    path.write_text(ORDERS_DICTIONARY, encoding="utf-8")
+    source = data_source(orders=orders(), dictionary=path)
+
+    @measure(description="Count of orders.")
+    def order_count() -> int:
+        return 3
+
+    layer = semantic_layer(order_count)
+    return lambda: Commons(scripted_chat(), {"db": source}, semantic_layer=layer)
+
+
 # One runner per fixture scenario.
 RUNNERS: dict[str, Callable[[Path], Callable[[], Any]]] = {
     "frames source": run_frames_source,
@@ -131,6 +164,7 @@ RUNNERS: dict[str, Callable[[Path], Callable[[], Any]]] = {
     "context search": run_context_search,
     "context prewarm": run_context_prewarm,
     "agent create": run_agent_create,
+    "agent create with measures": run_agent_create_with_measures,
     "chat server": run_chat_server,
 }
 

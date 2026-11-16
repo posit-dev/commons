@@ -141,7 +141,9 @@ class DataSource:
         return cls._from_frames(frames, None)
 
     @classmethod
-    def _from_frames(cls, frames: dict[str, Any], dictionary: Any) -> DataSource:
+    def _from_frames(
+        cls, frames: dict[str, Any], dictionary: DataDictionary | None
+    ) -> DataSource:
         with commons_span(
             "commons_data_source_create", {"commons.data_source.kind": "frames"}
         ):

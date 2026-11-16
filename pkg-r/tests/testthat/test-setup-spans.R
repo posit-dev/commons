@@ -81,6 +81,43 @@ setup_span_runners <- list(
     )
     function() agent(test_client(), commons = state)
   },
+  "agent create with measures" = function() {
+    withr::local_options(
+      commons.allow_unsafe_fallback = TRUE,
+      .local_envir = parent.frame()
+    )
+    dictionary <- withr::local_tempfile(fileext = ".yaml")
+    writeLines(
+      c(
+        "name: shop",
+        "description: What the shop sold.",
+        "tables:",
+        "  - name: orders",
+        "    description: One row per order.",
+        "    columns:",
+        "      - name: id",
+        "        type: number",
+        "      - name: total",
+        "        type: number",
+        "    definitions:",
+        "      - name: big_order",
+        "        description: Orders over 15.",
+        "        expr: total > 15",
+        "      - name: small_order",
+        "        description: Orders of 15 or less.",
+        "        expr: total <= 15"
+      ),
+      dictionary
+    )
+    source <- data_source(orders = setup_span_orders(), dictionary = dictionary)
+    state <- commons(
+      data_sources = list(db = source),
+      semantic_layer = semantic_layer(
+        measure("order_count", "Count of orders.", function() 3L)
+      )
+    )
+    function() agent(test_client(), commons = state)
+  },
   "chat server" = function() {
     skip_if_not_installed("shiny")
     skip_if_not_installed("shinychat")
@@ -117,12 +154,13 @@ test_that("setup records the shared spans", {
   for (scenario in shared_fixture("traces")$setup_spans$scenarios) {
     run <- setup_span_runners[[scenario$name]]()
     recorded <- otelsdk::with_otel_record(run())
-    names <- vapply(recorded$traces, `[[`, character(1), "name")
+    span_names <- vapply(recorded$traces, `[[`, character(1), "name")
 
     for (expected in scenario$spans) {
       info <- paste0(scenario$name, ": ", expected$name)
-      expect_equal(sum(names == expected$name), 1L, info = info)
-      attributes <- recorded$traces[[which(names == expected$name)]]$attributes
+      expect_equal(sum(span_names == expected$name), 1L, info = info)
+      span <- recorded$traces[[which(span_names == expected$name)]]
+      attributes <- span$attributes
       expect_equal(
         attributes[sort(names(attributes))],
         expected$attributes[sort(names(expected$attributes))],
