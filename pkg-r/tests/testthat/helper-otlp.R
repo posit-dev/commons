@@ -173,12 +173,12 @@ semconv_fixture_span <- function(attributes) {
 }
 
 expect_semconv_turns <- function(turns, expected, info = NULL) {
-  expect_length(turns, length(expected))
+  expect_equal(length(turns), length(expected), info = info)
   for (i in seq_along(expected)) {
     turn <- turns[[i]]
     e <- expected[[i]]
     expect_identical(turn@role, e$role, info = info)
-    expect_length(turn@contents, length(e$contents))
+    expect_equal(length(turn@contents), length(e$contents), info = info)
     for (j in seq_along(e$contents)) {
       content <- turn@contents[[j]]
       d <- e$contents[[j]]
