@@ -955,28 +955,9 @@ test_that("connect_window_param pads and formats the window bounds", {
 })
 
 test_that("deployment records are found in project subdirectories", {
-  dir <- withr::local_tempdir()
-  record_dir <- file.path(dir, "app", "rsconnect", "connect.example.com", "me")
-  dir.create(record_dir, recursive = TRUE)
-  writeLines(
-    c(
-      "name: my-agent",
-      "hostUrl: https://connect.example.com/__api__",
-      "url: https://connect.example.com/content/ea3c1445-cb71-42df-a2f2-bdb18874ef41/"
-    ),
-    file.path(record_dir, "my-agent.dcf")
-  )
-
-  deployment <- find_rsconnect_deployment(dir)
-
-  expect_equal(deployment$guid, "ea3c1445-cb71-42df-a2f2-bdb18874ef41")
+  expect_deployment_member(connect_cases$record_search)
 })
 
 test_that("read_deployment_record skips records without a GUID", {
-  file <- withr::local_tempfile(fileext = ".dcf")
-  writeLines(
-    c("name: old-style", "url: https://connect.example.com/my-agent/"),
-    file
-  )
-  expect_null(read_deployment_record(file))
+  expect_deployment_member(connect_cases$record_fields)
 })
