@@ -12,7 +12,7 @@ import os
 import re
 import warnings
 from collections.abc import Callable, Iterator, Sequence
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager, nullcontext
 from datetime import UTC, datetime, timedelta
 from typing import Any, Self
@@ -354,16 +354,23 @@ def _job_trace_lines(
     try:
         while pending:
             futures = [pool.submit(job_page, key, offset) for key, offset in pending]
+            # Fail on the first refused or failed request, whichever job it is.
+            for future in as_completed(futures):
+                error = future.exception()
+                if not isinstance(error, ConnectError):
+                    if error is None:
+                        continue
+                    raise error
+                if error.status_code == 404:
+                    continue
+                if error.status_code in (401, 403):
+                    raise trace_access_error(error) from error
+                raise error
             unfinished: list[tuple[str, int]] = []
             for (key, offset), future in zip(pending, futures, strict=True):
-                try:
-                    page_response = future.result()
-                except ConnectError as error:
-                    if error.status_code in (401, 403):
-                        raise trace_access_error(error) from error
-                    if error.status_code == 404:
-                        continue
-                    raise
+                if future.exception() is not None:
+                    continue
+                page_response = future.result()
                 page = _page_lines(page_response)
                 lines.extend(page)
                 total = _total(page_response)
@@ -372,8 +379,9 @@ def _job_trace_lines(
                     unfinished.append((key, offset))
             pending = unfinished
     finally:
-        # A failure leaves the queued requests unsent.
-        pool.shutdown(cancel_futures=True)
+        # A failure leaves the queued requests unsent and returns without
+        # waiting for the running ones.
+        pool.shutdown(wait=False, cancel_futures=True)
     return lines
 
 

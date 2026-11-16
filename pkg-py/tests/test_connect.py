@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 import re
-import time
+import threading
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from typing import Any
@@ -530,7 +530,11 @@ def test_malformed_jobs_read_as_no_jobs(jobs: object) -> None:
 
 
 def test_a_failed_job_request_cancels_the_queued_ones() -> None:
+    # job1 fails at once while job0 and the other running requests wait for
+    # `release`, which is set only after the read has failed.
     jobs = [{"key": f"job{i}"} for i in range(100)]
+    release = threading.Event()
+    job0_answered = threading.Event()
     seen: list[httpx.Request] = []
 
     def route(request: httpx.Request) -> httpx.Response:
@@ -538,15 +542,22 @@ def test_a_failed_job_request_cancels_the_queued_ones() -> None:
         path = request.url.path
         if path.endswith("/jobs"):
             return httpx.Response(200, json=jobs)
-        if path.endswith("/jobs/job0/traces"):
+        if path.endswith("/jobs/job1/traces"):
             return httpx.Response(500)
         if "/jobs/" in path:
-            time.sleep(0.05)
+            release.wait(timeout=10)
+            if path.endswith("/jobs/job0/traces"):
+                job0_answered.set()
             return httpx.Response(200, headers={"X-Total-Count": "1"}, text="x\n")
         return httpx.Response(200, headers={"X-Total-Count": "0"}, text="")
 
-    with _trace_client(route) as client, pytest.raises(ConnectError):
-        connect_trace_lines(client, GUID)
-
-    # Only the requests already running when job0 failed are sent.
-    assert len([r for r in seen if r.url.path.endswith("/traces")]) < 60
+    try:
+        with _trace_client(route) as client, pytest.raises(ConnectError):
+            connect_trace_lines(client, GUID)
+        # The failure is reported without waiting for the earlier job.
+        assert not job0_answered.is_set()
+    finally:
+        release.set()
+    # Only the requests already running when job1 failed are sent.
+    job_requests = [r for r in seen if "/jobs/" in r.url.path]
+    assert len(job_requests) < len(jobs) // 2
