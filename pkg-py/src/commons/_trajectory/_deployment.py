@@ -23,8 +23,8 @@ SKIPPED_DIRECTORIES = frozenset(
     {"rsconnect", "rsconnect-python", "renv", "packrat", "node_modules"}
 )
 
-_GUID = r"[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}"
-_CONTENT_GUID = re.compile(r"/content/(" + _GUID + ")")
+GUID_PATTERN = r"[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}"
+_CONTENT_GUID = re.compile(r"/content/(" + GUID_PATTERN + ")")
 _DCF_FIELD = re.compile(r"^([^\s:]+):(.*)$")
 _HOSTED_DOMAINS = frozenset({"shinyapps.io", "api.shinyapps.io", "posit.cloud"})
 
@@ -156,7 +156,7 @@ def _python_record(file: Path, entry: Any) -> Deployment | None:
     if not isinstance(server, str) or not server or "#" in server:
         return None
     guid = entry.get("app_guid")
-    if not isinstance(guid, str) or re.fullmatch(_GUID, guid) is None:
+    if not isinstance(guid, str) or re.fullmatch(GUID_PATTERN, guid) is None:
         url = entry.get("app_url")
         match = _CONTENT_GUID.search(url) if isinstance(url, str) else None
         if match is None:

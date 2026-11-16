@@ -26,14 +26,14 @@ from ._build import (
     is_chat_span,
     latest_chat_spans,
 )
-from ._deployment import find_deployment, registered_connect_servers
+from ._deployment import GUID_PATTERN, find_deployment, registered_connect_servers
 from ._otlp import Span, local_traces_dir, parse_otlp_lines, read_local_spans
 from ._semconv import trajectory_turns
 
 EMPTY_READ_MESSAGE = "No traces were found for this content."
 
-_CONTENT_GUID = re.compile(r"[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}")
-_GUID = r"([0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12})"
+_CONTENT_GUID = re.compile(GUID_PATTERN)
+_GUID = "(" + GUID_PATTERN + ")"
 _CONTENT_URL = re.compile(r"(.*?)/content/" + _GUID)
 # A dashboard's path, by default /connect, is not part of the server's URL.
 _DASHBOARD_URL = re.compile(r"(.*?)(?:/connect)?/#/apps/" + _GUID)
