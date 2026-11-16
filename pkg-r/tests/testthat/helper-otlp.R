@@ -185,6 +185,26 @@ expect_semconv_turns <- function(turns, expected, info = NULL) {
       if (d$type == "text") {
         expect_true(S7::S7_inherits(content, ellmer::ContentText), info = info)
         expect_identical(content@text, d$text, info = info)
+      } else if (d$type == "tool_request") {
+        expect_true(
+          S7::S7_inherits(content, ellmer::ContentToolRequest),
+          info = info
+        )
+        expect_identical(content@id, d$id, info = info)
+        expect_identical(content@name, d$name, info = info)
+        expect_equal(content@arguments, d$arguments, info = info)
+      } else if (d$type == "tool_result") {
+        expect_true(
+          S7::S7_inherits(content, ellmer::ContentToolResult),
+          info = info
+        )
+        expect_equal(content@value, d$value, info = info)
+        if (is.null(d$request)) {
+          expect_null(content@request, info = info)
+        } else {
+          expect_identical(content@request@id, d$request$id, info = info)
+          expect_identical(content@request@name, d$request$name, info = info)
+        }
       } else {
         fail(paste0("unknown descriptor type ", d$type), info = info)
       }
