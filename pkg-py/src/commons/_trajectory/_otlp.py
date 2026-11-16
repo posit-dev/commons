@@ -37,6 +37,18 @@ def _nanos(value: Any) -> int:
         return 0
 
 
+def _number(value: Any) -> int | float | None:
+    """An integer value; one that is not a number reads as None, as NA does in R."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        pass
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _entries(parent: dict[str, Any], key: str) -> list[dict[str, Any]]:
     entries = parent.get(key)
     if not isinstance(entries, list):
@@ -51,14 +63,16 @@ def otlp_attribute_value(value: Any) -> Any:
     if value.get("stringValue") is not None:
         return value["stringValue"]
     if value.get("intValue") is not None:
-        return int(value["intValue"])
+        return _number(value["intValue"])
     if value.get("doubleValue") is not None:
         return value["doubleValue"]
     if value.get("boolValue") is not None:
         return value["boolValue"]
     if value.get("arrayValue") is not None:
         array = value["arrayValue"]
-        values = array.get("values", []) if isinstance(array, dict) else []
+        values = array.get("values") if isinstance(array, dict) else None
+        if not isinstance(values, list):
+            return []
         return [otlp_attribute_value(v) for v in values]
     return value
 
@@ -114,11 +128,11 @@ def local_traces_dir() -> Path:
     exporter_file = os.environ.get(EXPORTER_FILE_VAR, "")
     if exporter_file:
         return Path(exporter_file).parent
-    return Path(
-        os.environ.get(
-            TRACES_DIR_VAR, os.path.join(tempfile.gettempdir(), "commons-traces")
-        )
+    value = os.environ.get(
+        TRACES_DIR_VAR, os.path.join(tempfile.gettempdir(), "commons-traces")
     )
+    # Path("") is the working directory, but an empty value names no directory.
+    return Path(value) if value else Path(os.devnull)
 
 
 def read_local_spans(path: Path) -> list[Span]:
@@ -129,5 +143,7 @@ def read_local_spans(path: Path) -> list[Span]:
     files = sorted(p for p in path.iterdir() if p.is_file() and pattern.match(p.name))
     lines: list[str] = []
     for file in files:
-        lines.extend(file.read_text(encoding="utf-8", errors="replace").splitlines())
+        # Split on newlines only: splitlines() also splits on U+2028 and the like.
+        text = file.read_text(encoding="utf-8", errors="replace")
+        lines.extend(text.split("\n"))
     return parse_otlp_lines(lines)

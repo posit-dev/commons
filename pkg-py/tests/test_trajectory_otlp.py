@@ -182,3 +182,62 @@ def test_the_committed_python_trace_reads_as_its_spans() -> None:
         assert 0 < span.start_time_unix_nano <= span.end_time_unix_nano
     loads = [s for s in spans if s.name == "commons_data_source_load_frames"]
     assert all(s.attributes["commons.data_source.n_tables"] == 2 for s in loads)
+
+
+@pytest.mark.parametrize("value", ["abc", "", "1e", "9x"])
+def test_an_integer_that_is_not_a_number_decodes_to_none(value: str) -> None:
+    assert otlp_attribute_value({"intValue": value}) is None
+
+
+def test_a_bad_integer_does_not_stop_the_parse() -> None:
+    envelope = {
+        "resourceSpans": [
+            {
+                "scopeSpans": [
+                    {
+                        "spans": [
+                            {
+                                "spanId": "s1",
+                                "attributes": [
+                                    {"key": "n", "value": {"intValue": "abc"}}
+                                ],
+                            },
+                            {"spanId": "s2"},
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
+    spans = parse_otlp_lines([json.dumps(envelope)])
+    assert [s.span_id for s in spans] == ["s1", "s2"]
+    assert spans[0].attributes == {"n": None}
+
+
+def test_an_array_without_a_list_of_values_decodes_to_an_empty_list() -> None:
+    assert otlp_attribute_value({"arrayValue": {"values": "x"}}) == []
+    assert otlp_attribute_value({"arrayValue": "x"}) == []
+
+
+def test_files_are_split_on_newlines_only(tmp_path: Path) -> None:
+    envelope = {
+        "resourceSpans": [
+            {"scopeSpans": [{"spans": [{"spanId": "s1", "name": "a\u2028b"}]}]}
+        ]
+    }
+    text = json.dumps(envelope, ensure_ascii=False)
+    assert "\u2028" in text
+    (tmp_path / "trace-1.jsonl").write_text(
+        text + "\r\n" + text + "\n", encoding="utf-8", newline=""
+    )
+    spans = read_local_spans(tmp_path)
+    assert [s.name for s in spans] == ["a\u2028b", "a\u2028b"]
+
+
+def test_an_empty_traces_dir_variable_reads_as_no_spans(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _write_span(tmp_path / "trace-1.jsonl", "s1")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(TRACES_DIR_VAR, "")
+    assert read_local_spans(local_traces_dir()) == []
