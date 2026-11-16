@@ -132,6 +132,12 @@ def test_an_empty_path_reads_nothing(
     _write_conversation(tmp_path)
     monkeypatch.chdir(tmp_path)
     assert trajectory_read("") == {}
+    assert trajectory_read(_EmptyPath()) == {}
+
+
+class _EmptyPath:
+    def __fspath__(self) -> str:
+        return ""
 
 
 @pytest.mark.parametrize("member", ["contentless", "conflicting_records"])

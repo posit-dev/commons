@@ -81,6 +81,7 @@ class _Candidate:
 
     signature: list[list[dict[str, Any]]]
     record: ExchangeProvenance
+    recorded: str  # the record as written, which claims compare by
 
 
 def build_trajectories(spans: Sequence[Span]) -> dict[str, Trajectory]:
@@ -327,13 +328,27 @@ def _span_record(span: Span) -> ExchangeProvenance:
     )
 
 
-def _decisions(text: object) -> list[CitationDecision]:
+def _recorded_text(span: Span) -> str:
+    """The tag and decisions as recorded, before either is checked, as JSON text."""
+    tag = span.attributes.get(TAG_ATTRIBUTE)
+    decisions = _parsed(span.attributes.get(CANDIDATES_ATTRIBUTE))
+    return json.dumps(
+        [None if tag is None else str(tag), [] if decisions is None else decisions],
+        default=repr,
+    )
+
+
+def _parsed(text: object) -> Any:
     if not isinstance(text, str):
-        return []
+        return None
     try:
-        records = json.loads(text)
+        return json.loads(text)
     except (ValueError, RecursionError):
-        return []
+        return None
+
+
+def _decisions(text: object) -> list[CitationDecision]:
+    records = _parsed(text)
     if not isinstance(records, list):
         return []
     decisions: list[CitationDecision] = []
@@ -413,6 +428,7 @@ def _call_candidates(
             _Candidate(
                 signature=[_exchange_signature(e) for e in exchanges],
                 record=_span_record(call.record_span),
+                recorded=_recorded_text(call.record_span),
             )
         )
     return candidates
@@ -431,25 +447,24 @@ def _associate_provenance(
     """
     # Compared as JSON text, so true and 1 differ as they do in R's identical().
     canonical = [_signature_text(_exchange_signature(e)) for e in exchanges]
-    claims: list[list[ExchangeProvenance]] = [[] for _ in exchanges]
+    claims: list[list[_Candidate]] = [[] for _ in exchanges]
     for candidate in candidates:
         length = len(candidate.signature)
         if (
             0 < length <= len(canonical)
             and [_signature_text(e) for e in candidate.signature] == canonical[:length]
         ):
-            claims[length - 1].append(candidate.record)
+            claims[length - 1].append(candidate)
 
     records: list[ExchangeProvenance] = []
     conflict = False
     for claim in claims:
-        distinct: list[ExchangeProvenance] = []
-        for record in claim:
-            if record not in distinct:
-                distinct.append(record)
+        # Claims compare as recorded, so a decision dropped on reading still
+        # counts.
+        distinct = {c.recorded: c.record for c in claim}
         # A conflict fails closed: the exchange gets no record.
         if len(distinct) == 1:
-            records.append(distinct[0])
+            records.append(next(iter(distinct.values())))
         else:
             conflict = conflict or len(distinct) > 1
             records.append(ExchangeProvenance(None, []))
