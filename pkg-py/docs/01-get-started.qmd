@@ -361,7 +361,7 @@ for conversation_id, trajectory in trajectories.items():
     print(conversation_id, trajectory.last_active, len(trajectory.turns))
 ```
 
-The result is a dictionary keyed by conversation id, with the oldest conversation first. Each `Trajectory` has the conversation's `turns`, the time of its last chat activity as `last_active`, and the authenticated `user` of the session when Connect recorded one. Its `exchanges` split the turns at each question the user asked. Each `Exchange` has its `turns` (the question and the turns that answer it), the answer's provenance `tag`, and its citation `decisions`. With no directory, `trajectory_read()` reads the directory of `OTEL_EXPORTER_OTLP_TRACES_FILE` when that variable is set, and otherwise it usually reads nothing, so pass the directory.
+The result is a dictionary keyed by conversation id, with the oldest conversation first. Each `Trajectory` has the conversation's `turns`, the time of its last chat activity as `last_active`, and the authenticated `user` of the session when Connect recorded one. Its `exchanges` split the turns at each question the user asked. Each `Exchange` has its `turns` (the question and the turns that answer it), the answer's provenance `tag`, and its citation `decisions`.
 
 Use `n` to keep only the most recent conversations, and `since` and `until` to keep the chat activity in a time window. Each bound is a `datetime`, a `date`, or a string like `"2026-07-22"` or `"2026-07-22 14:30"`, and a date or a string is read in local time. A conversation that continues past `until` is returned as it was at `until`. A conversation that started before `since` is returned with the history its latest call in the window recorded, and its exchanges take provenance only from calls in the window, so an exchange answered only before `since` has no record.
 
@@ -369,7 +369,16 @@ Use `n` to keep only the most recent conversations, and `since` and `until` to k
 recent = commons.trajectory_read("traces", n=20, since="2026-07-01")
 ```
 
-Reading from Posit Connect is not supported yet. The R package's `trajectory_read()` reads Connect's trace store.
+`trajectory_read()` also reads from Posit Connect (version 2026.09.0 or later). Pass a content GUID, a content URL (`.../content/<guid>/`), a vanity URL (`.../content/<name>/`), or a dashboard URL (`.../connect/#/apps/<guid>/`). With no source, it reads the content's own traces when it runs on Connect. Off Connect, it reads the deployed content's traces when the project has a deployment record, written by rsconnect-python under `rsconnect-python/` or by the R package rsconnect under `rsconnect/`. Otherwise it reads the local trace directory: the directory of `OTEL_EXPORTER_OTLP_TRACES_FILE` when that variable is set, and otherwise `COMMONS_TRACES_DIR`.
+
+```python
+deployed = commons.trajectory_read(
+    "https://connect.example.com/content/01234567-89ab-cdef-0123-456789abcdef/",
+    n=20,
+)
+```
+
+A read from Connect needs the `CONNECT_API_KEY` environment variable. It also needs `CONNECT_SERVER` when the server is not in the URL, in the deployment record, or the only server registered with rsconnect-python. The key's user needs editor-level access to the content: they must own it or be a collaborator, which is what `share_with` grants. `n`, `since`, and `until` are sent to Connect, so a filtered read does not transfer the whole trace store. When Connect has no traces for the content, `trajectory_read()` warns if the content's or the server's tracing setting explains why.
 
 ## Example application
 
