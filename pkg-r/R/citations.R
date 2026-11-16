@@ -203,18 +203,17 @@ citation_icon_url <- function(kind) {
   commons_icon_url(file)
 }
 
-# Icons are served by the commons-chat HTML dependency (see
-# commons_theme()), so their URLs carry the dependency's version.
+# Icons are served by the commons-icons HTML dependency (see commons_theme()).
 commons_icon_url <- function(file) {
   if (is.null(commons_icon_path(file))) {
     return(NULL)
   }
-  dep <- commons_chat_dependency()
+  dep <- commons_icons_dependency()
   paste0(
     dep$name,
     "-",
     dep$version,
-    "/figs/",
+    "/",
     utils::URLencode(file, reserved = TRUE)
   )
 }

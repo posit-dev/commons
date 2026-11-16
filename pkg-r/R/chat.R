@@ -222,3 +222,16 @@ commons_chat_dependency <- function() {
     all_files = TRUE
   )
 }
+
+# Icon URLs are written into answers, which saved conversations replay after
+# a reinstall or redeploy, so unlike commons-chat's, this version never changes.
+commons_icons_dependency <- function() {
+  htmltools::htmlDependency(
+    name = "commons-icons",
+    version = "1.0",
+    src = c(
+      file = system.file("www", "commons-chat", "figs", package = "commons")
+    ),
+    all_files = TRUE
+  )
+}
