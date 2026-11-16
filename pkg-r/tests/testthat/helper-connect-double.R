@@ -126,3 +126,39 @@ expect_trace_lines_member <- function(member, spec) {
     )
   }
 }
+
+# Write a case's `files` into `dir`, then set each `mtime`.
+write_fixture_files <- function(dir, case) {
+  for (name in names(case[["files"]])) {
+    path <- file.path(dir, name)
+    dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
+    writeLines(unlist(case[["files"]][[name]]), path)
+  }
+  for (name in names(case[["mtime"]])) {
+    Sys.setFileTime(file.path(dir, name), .POSIXct(case[["mtime"]][[name]], tz = "UTC"))
+  }
+}
+
+expect_deployment_member <- function(member) {
+  expect_gt(length(member[["cases"]]), 0)
+  for (case in member[["cases"]]) {
+    info <- case[["name"]]
+    dir <- withr::local_tempdir()
+    write_fixture_files(dir, case)
+    notices <- character()
+    found <- withCallingHandlers(
+      find_rsconnect_deployment(dir),
+      message = function(cnd) {
+        notices <<- c(notices, "message")
+        invokeRestart("muffleMessage")
+      }
+    )
+    actual <- if (is.null(found)) {
+      NULL
+    } else {
+      list(guid = found$guid, server = sub("/+(__api__/*)?$", "", found$server))
+    }
+    expect_identical(actual, case[["expected"]], info = info)
+    expect_identical(notices, unlist(case[["notice"]]) %||% character(), info = info)
+  }
+}
