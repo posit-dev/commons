@@ -74,13 +74,16 @@ def trajectory_read(
     traces outside the window. The per-job trace stores that older
     content can have are filtered by `since` only. When `since` is set
     and a chat span in the window has its ancestry cut off, the read is
-    repeated once without `since`, and
-    the job stores are then read unfiltered. `n` is not sent, and is
-    applied after the read.
+    repeated once without `since`, and the job stores are then read
+    unfiltered. `n` is not sent, and is applied after the read.
 
     Conversations whose spans record no message content are dropped. The
     result is keyed by conversation id, with the oldest conversation
     first.
+
+    Raises `ValueError` when there is no Connect server or API key, a URL
+    is not recognised, or a bound is invalid; `LookupError` when a vanity
+    URL is not found; and a `RuntimeError` when Connect refuses access.
     """
     keep = _check_n(n)
     low = window_bound(since, "since")
