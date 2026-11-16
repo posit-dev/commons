@@ -35,16 +35,20 @@ def resolve_trajectory_source(source: str | os.PathLike[str] | None) -> LocalSou
         # A GUID or URL names Connect content, never a local directory.
         if is_content_guid(source) or source.startswith(("http://", "https://")):
             raise NotImplementedError(CONNECT_NOT_SUPPORTED)
-        # Path("") is the working directory, but an empty value names no directory.
-        return LocalSource(Path(source) if source else Path(os.devnull))
+        return LocalSource(_directory(source))
     if isinstance(source, os.PathLike):
         path = os.fspath(source)
         if isinstance(path, str):
-            return LocalSource(Path(path))
+            return LocalSource(_directory(path))
     raise TypeError(
         "source must be None, a directory path, a Connect content GUID, or a "
         "Connect content URL."
     )
+
+
+def _directory(path: str) -> Path:
+    # Path("") is the working directory, but an empty value names no directory.
+    return Path(path) if path else Path(os.devnull)
 
 
 def read_source_spans(source: LocalSource) -> list[Span]:
