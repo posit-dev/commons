@@ -125,6 +125,15 @@ def test_no_source_reads_the_traces_directory(
     assert list(trajectory_read()) == ["lonetrace"]
 
 
+def test_an_empty_path_reads_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # R's dir.exists("") is FALSE; Path("") would be the working directory.
+    _write_conversation(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    assert trajectory_read("") == {}
+
+
 def test_a_source_of_another_type_is_rejected() -> None:
     with pytest.raises(TypeError, match="source must be"):
         trajectory_read(3)  # type: ignore[arg-type]

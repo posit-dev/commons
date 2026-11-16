@@ -343,13 +343,14 @@ def _decisions(text: object) -> list[CitationDecision]:
         fields: dict[str, Any] = record
         quote = fields.get("quote")
         status: Any = fields.get("status")
-        if quote is not None and not isinstance(quote, str):
+        label = fields.get("label")
+        if any(v is not None and not isinstance(v, str) for v in (quote, label)):
             continue
         try:
             decision = CitationDecision(
                 quote=quote,
                 status=status,
-                label=fields.get("label"),
+                label=label,
                 kind=fields.get("kind"),
             )
         except (ValueError, TypeError):

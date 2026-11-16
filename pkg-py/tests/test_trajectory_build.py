@@ -108,6 +108,7 @@ def test_a_decision_that_does_not_validate_is_dropped() -> None:
         {"quote": "Q", "status": "unknown"},
         "text",
         {"quote": 3, "status": "rejected"},
+        {"quote": "Q", "status": "accepted", "label": 3, "kind": "prose"},
         {"quote": "Kept.", "status": "rejected"},
     ]
     trajectory = _recorded({"commons.citation.candidates": candidates})

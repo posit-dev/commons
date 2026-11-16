@@ -35,7 +35,8 @@ def resolve_trajectory_source(source: str | os.PathLike[str] | None) -> LocalSou
         # A GUID or URL names Connect content, never a local directory.
         if is_content_guid(source) or source.startswith(("http://", "https://")):
             raise NotImplementedError(CONNECT_NOT_SUPPORTED)
-        return LocalSource(Path(source))
+        # Path("") is the working directory, but an empty value names no directory.
+        return LocalSource(Path(source) if source else Path(os.devnull))
     if isinstance(source, os.PathLike):
         path = os.fspath(source)
         if isinstance(path, str):
