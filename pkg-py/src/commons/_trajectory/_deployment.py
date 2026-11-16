@@ -108,9 +108,16 @@ def _dcf_files(directory: Path) -> list[Path]:
             for name in sorted(names)
             if name.endswith(".dcf")
             and not name.startswith(".")
-            and (Path(root) / name).is_file()
+            and _is_regular_file(Path(root) / name)
         )
     return files
+
+
+def _is_regular_file(path: Path) -> bool:
+    try:
+        return path.is_file()
+    except OSError:
+        return False
 
 
 def read_deployment_records(file: Path) -> list[Deployment]:

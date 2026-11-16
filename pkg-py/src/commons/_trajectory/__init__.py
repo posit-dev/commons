@@ -75,9 +75,10 @@ def trajectory_read(
     record. `n` then keeps the `n` most recent conversations. On Connect,
     `since` and `until` are sent with the request, so Connect leaves out
     most traces outside the window. The per-job trace stores that older
-    content can have are filtered by `since` only. When a chat span's
-    ancestry is cut off, the read is repeated once without `since`, and the
-    job stores are then read unfiltered. `n` is not sent, and is
+    content can have are filtered by `since` only. When `since` is set and a
+    chat span in the window has its ancestry cut off, the read is repeated
+    once without `since`, and the job stores are then read unfiltered. `n`
+    is not sent, and is
     applied after the read.
 
     Conversations whose spans record no message content are dropped. The
