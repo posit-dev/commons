@@ -31,8 +31,8 @@ __all__ = [
     "version_is_older",
 ]
 
-# The first Connect release that records trajectories.
-MINIMUM_TRACING_VERSION = (2026, 9, 0)
+# The first Connect release that records trajectories, as Connect writes it.
+MINIMUM_TRACING_VERSION = "2026.09.0"
 
 _VERSION = re.compile(r"([0-9]+(?:\.[0-9]+){1,2})")
 
@@ -170,10 +170,14 @@ def parse_connect_version(text: object) -> tuple[int, ...] | None:
     return tuple(int(part) for part in match.group(1).split("."))
 
 
-def version_is_older(version: tuple[int, ...], minimum: tuple[int, ...]) -> bool:
-    """Is `version` older than `minimum`? A missing part counts as zero."""
-    width = max(len(version), len(minimum))
-    padded = [(*parts, *([0] * (width - len(parts)))) for parts in (version, minimum)]
+def version_is_older(version: tuple[int, ...], minimum: str) -> bool:
+    """Is `version` older than the version string `minimum`?
+
+    A missing part counts as zero.
+    """
+    floor = tuple(int(part) for part in minimum.split("."))
+    width = max(len(version), len(floor))
+    padded = [(*parts, *([0] * (width - len(parts)))) for parts in (version, floor)]
     return padded[0] < padded[1]
 
 

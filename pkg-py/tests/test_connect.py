@@ -275,9 +275,7 @@ def test_closing_leaves_a_caller_supplied_client_open() -> None:
 
 
 def test_the_minimum_tracing_version_matches_the_shared_fixture() -> None:
-    minimum = parse_connect_version(OBSERVABILITY["minimum_version"])
-
-    assert minimum == MINIMUM_TRACING_VERSION
+    assert OBSERVABILITY["minimum_version"] == MINIMUM_TRACING_VERSION
 
 
 def test_server_settings_requests_the_unversioned_url_from_the_shared_fixture() -> None:
