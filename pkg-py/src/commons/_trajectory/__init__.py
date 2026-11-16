@@ -37,7 +37,9 @@ def trajectory_read(
 ) -> dict[str, Trajectory]:
     """Read the conversations an agent logged with `log=True`.
 
-    `source` is a directory of OTLP JSON trace files. With none, the
+    `source` is a directory of OTLP JSON trace files: `trace.jsonl`,
+    `trace-<n>.jsonl`, and files named from the
+    `OTEL_EXPORTER_OTLP_TRACES_FILE` template. With none, the
     directory the file exporter writes to is read: the directory of
     `OTEL_EXPORTER_OTLP_TRACES_FILE` when it is set, and otherwise
     `COMMONS_TRACES_DIR`, or `commons-traces` under the temporary

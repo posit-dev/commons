@@ -351,7 +351,7 @@ Read the files back with `commons.trajectory_read()`, as the next section descri
 
 ## Reading logged conversations
 
-`commons.trajectory_read()` reads logged conversations back as chatlas turns. Pass it the directory of trace files:
+`commons.trajectory_read()` reads logged conversations back as chatlas turns. Pass it the directory of trace files. It reads the files named `trace.jsonl` and `trace-<n>.jsonl`, and files named from the `OTEL_EXPORTER_OTLP_TRACES_FILE` template. The `BatchSpanProcessor` exports spans in batches, so to read in the process that logged them, call `provider.force_flush()` first.
 
 ```python
 import commons
