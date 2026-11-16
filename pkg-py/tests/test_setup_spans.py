@@ -122,6 +122,12 @@ def run_context_prewarm(tmp_path: Path) -> Callable[[], Any]:
     return agent(context_layer=documents(tmp_path)).prewarm
 
 
+def run_context_prewarm_cache_hit(tmp_path: Path) -> Callable[[], Any]:
+    warmed = agent(context_layer=documents(tmp_path))
+    warmed.prewarm()
+    return warmed.prewarm
+
+
 def run_agent_create(tmp_path: Path) -> Callable[[], Any]:
     layer = documents(tmp_path)
     return lambda: agent(context_layer=layer)
@@ -163,6 +169,7 @@ RUNNERS: dict[str, Callable[[Path], Callable[[], Any]]] = {
     "board read": run_board_read,
     "context search": run_context_search,
     "context prewarm": run_context_prewarm,
+    "context prewarm cache hit": run_context_prewarm_cache_hit,
     "agent create": run_agent_create,
     "agent create with measures": run_agent_create_with_measures,
     "chat server": run_chat_server,
@@ -187,3 +194,5 @@ def test_setup_records_the_shared_spans(
         recorded = spans(expected["name"])
         assert len(recorded) == 1, expected["name"]
         assert dict(recorded[0].attributes or {}) == expected["attributes"]
+    for name in scenario.get("absent", []):
+        assert spans(name) == [], name

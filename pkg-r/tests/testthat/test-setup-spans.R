@@ -70,6 +70,14 @@ setup_span_runners <- list(
     )
     function() agent$prewarm()
   },
+  "context prewarm cache hit" = function() {
+    agent <- test_agent(
+      context_layer = setup_span_context_layer(),
+      data_sources = list(db = data_source(orders = setup_span_orders()))
+    )
+    agent$prewarm()
+    function() agent$prewarm()
+  },
   "agent create" = function() {
     withr::local_options(
       commons.allow_unsafe_fallback = TRUE,
@@ -166,6 +174,10 @@ test_that("setup records the shared spans", {
         expected$attributes[sort(names(expected$attributes))],
         info = info
       )
+    }
+    for (name in unlist(scenario$absent)) {
+      info <- paste0(scenario$name, ": ", name)
+      expect_false(name %in% span_names, info = info)
     }
   }
 })
