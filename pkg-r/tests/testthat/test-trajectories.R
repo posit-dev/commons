@@ -1,33 +1,24 @@
 test_that("parse_otlp_lines unwraps envelopes and flattens attributes", {
-  line <- otlp_test_line(list(
-    otlp_test_span(
-      "t1",
-      "s1",
-      name = "demo",
-      attributes = list(otlp_test_attr("gen_ai.operation.name", "chat"))
-    )
-  ))
+  cases <- shared_fixture(file.path("trajectories", "otlp"))$lines$cases
+  expect_gt(length(cases), 0)
 
-  spans <- parse_otlp_lines(c(line, "not json", ""))
-
-  expect_length(spans, 1)
-  expect_equal(spans[[1]]$trace_id, "t1")
-  expect_equal(spans[[1]]$span_id, "s1")
-  expect_equal(spans[[1]]$name, "demo")
-  expect_equal(spans[[1]]$attributes[["gen_ai.operation.name"]], "chat")
+  for (case in cases) {
+    lines <- vapply(case$lines, otlp_fixture_line, character(1))
+    spans <- parse_otlp_lines(lines)
+    expect_length(spans, length(case$spans))
+    for (i in seq_along(case$spans)) {
+      expect_otlp_span(spans[[i]], case$spans[[i]], info = case$name)
+    }
+  }
 })
 
 test_that("otlp_attribute_value handles OTLP value encodings", {
-  expect_equal(otlp_attribute_value(list(stringValue = "x")), "x")
-  expect_equal(otlp_attribute_value(list(intValue = "42")), 42)
-  expect_equal(otlp_attribute_value(list(doubleValue = 1.5)), 1.5)
-  expect_true(otlp_attribute_value(list(boolValue = TRUE)))
-  expect_equal(
-    otlp_attribute_value(
-      list(arrayValue = list(values = list(list(stringValue = "a"))))
-    ),
-    list("a")
-  )
+  cases <- shared_fixture(file.path("trajectories", "otlp"))$attribute_values$cases
+  expect_gt(length(cases), 0)
+
+  for (case in cases) {
+    expect_equal(otlp_attribute_value(case$value), case$expected, info = case$name)
+  }
 })
 
 test_that("trajectories rebuild ellmer turns from semconv messages", {
