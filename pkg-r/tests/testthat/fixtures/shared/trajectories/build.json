@@ -809,7 +809,16 @@
             ],
             "output": [{"role": "assistant", "parts": [{"type": "text", "content": "You rolled a 4."}]}]}
         ],
-        "trajectories": [{"id": "conv-a", "provenance": [
+        "trajectories": [{"id": "conv-a",
+          "turns": [
+            {"role": "user", "contents": [{"type": "text", "text": "What is the weather?"}]},
+            {"role": "assistant", "contents": [{"type": "text", "text": "It's sunny."}]},
+            {"role": "user", "contents": [{"type": "text", "text": "Roll a die."}]},
+            {"role": "assistant", "contents": [{"type": "tool_request", "id": "c1", "name": "roll_die", "arguments": {"sides": 6}}]},
+            {"role": "user", "contents": [{"type": "tool_result", "value": 4, "request": {"id": "c1", "name": "roll_die"}}]},
+            {"role": "assistant", "contents": [{"type": "text", "text": "You rolled a 4."}]}
+          ],
+          "provenance": [
           {"tag": "A", "decisions": []},
           {"tag": "B", "decisions": [{"quote": "Canopy cover is measured in June.", "status": "accepted", "label": "documentation", "kind": "prose"}]}
         ]}]
@@ -998,6 +1007,18 @@
         "spans": [
           {"trace": "t1", "span": "root", "name": "commons_conversation_turn"},
           {"trace": "t1", "span": "chat1", "parent": "root", "chat": true, "conversation": "conv-a", "end": "10", "input": "null",
+            "output": [{"role": "assistant", "parts": [{"type": "text", "content": "A1"}]}]}
+        ],
+        "trajectories": [{"id": "conv-a", "turns": [
+          {"role": "user", "contents": [{"type": "text", "text": "(Input content was not captured.)"}]},
+          {"role": "assistant", "contents": [{"type": "text", "text": "A1"}]}
+        ]}]
+      },
+      {
+        "name": "empty input is missing",
+        "spans": [
+          {"trace": "t1", "span": "root", "name": "commons_conversation_turn"},
+          {"trace": "t1", "span": "chat1", "parent": "root", "chat": true, "conversation": "conv-a", "end": "10", "input": "",
             "output": [{"role": "assistant", "parts": [{"type": "text", "content": "A1"}]}]}
         ],
         "trajectories": [{"id": "conv-a", "turns": [
