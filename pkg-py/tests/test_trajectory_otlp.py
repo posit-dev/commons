@@ -184,6 +184,26 @@ def test_the_committed_python_trace_reads_as_its_spans() -> None:
     assert all(s.attributes["commons.data_source.n_tables"] == 2 for s in loads)
 
 
+def test_a_timestamp_too_large_for_an_integer_reads_as_zero() -> None:
+    envelope = {
+        "resourceSpans": [
+            {
+                "scopeSpans": [
+                    {
+                        "spans": [
+                            {"spanId": "s1", "startTimeUnixNano": 1e309},
+                            {"spanId": "s2"},
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
+    spans = parse_otlp_lines([json.dumps(envelope)])
+    assert [s.span_id for s in spans] == ["s1", "s2"]
+    assert spans[0].start_time_unix_nano == 0
+
+
 @pytest.mark.parametrize("value", ["abc", "", "1e", "9x"])
 def test_an_integer_that_is_not_a_number_decodes_to_none(value: str) -> None:
     assert otlp_attribute_value({"intValue": value}) is None
