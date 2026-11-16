@@ -32,6 +32,12 @@ BUILD_MEMBERS = (
     "last_active",
     "session_users",
     "earliest_user",
+    "exchanges",
+    "provenance",
+    "no_provenance",
+    "duplicate_records",
+    "conflicting_records",
+    "incomplete_call",
 )
 
 

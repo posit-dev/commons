@@ -273,11 +273,37 @@ expect_trajectories <- function(trajectories, expected, info = NULL) {
     if (!is.null(e[["turns"]])) {
       expect_semconv_turns(t[["turns"]], e[["turns"]], info)
     }
+    if (!is.null(e[["provenance"]])) {
+      records <- attr(t[["turns"]], "provenance")
+      expect_equal(length(records), length(e[["provenance"]]), info = info)
+      for (i in seq_along(e[["provenance"]])) {
+        r <- records[[i]]
+        p <- e[["provenance"]][[i]]
+        expect_identical(
+          r[["provenance_tag"]],
+          p[["tag"]] %||% NA_character_,
+          info = info
+        )
+        expect_equal(
+          r[["citation_decisions"]],
+          p[["decisions"]],
+          info = info
+        )
+      }
+    }
     if ("user" %in% names(e)) {
-      expect_identical(t[["user"]], e[["user"]] %||% NA_character_, info = info)
+      expect_identical(
+        t[["user"]],
+        e[["user"]] %||% NA_character_,
+        info = info
+      )
     }
     if (!is.null(e[["last_active"]])) {
-      expect_equal(as.numeric(t[["last_active"]]), e[["last_active"]], info = info)
+      expect_equal(
+        as.numeric(t[["last_active"]]),
+        e[["last_active"]],
+        info = info
+      )
     }
   }
 }

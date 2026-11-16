@@ -3,17 +3,26 @@
 ``pkg-r/R/trajectory-read.R`` holds the R counterpart.
 """
 
+import json
 import re
+import warnings
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from chatlas import Turn
-from chatlas.types import ContentText, ContentToolResult
+from chatlas.types import ContentText, ContentToolRequest, ContentToolResult
 
 from .._citations import CitationDecision
 from .._provenance import Tag
-from .._tracing import TURN_SPAN, USER_ATTRIBUTE
+from .._tracing import (
+    CANDIDATES_ATTRIBUTE,
+    PROVENANCE_SPAN,
+    TAG_ATTRIBUTE,
+    TURN_SPAN,
+    USER_ATTRIBUTE,
+)
 from ._otlp import Span
 from ._semconv import SYSTEM_INSTRUCTIONS, system_turns, trajectory_turns
 
@@ -54,6 +63,23 @@ class Trajectory:
     provenance: list[ExchangeProvenance]
 
 
+@dataclass(frozen=True)
+class _RecordedCall:
+    """A turn span's latest chat span, and the span that records its provenance."""
+
+    conversation_id: str
+    record_span: Span
+    chat_span: Span
+
+
+@dataclass(frozen=True)
+class _Candidate:
+    """A recorded call's exchange signatures and the record it claims for the last."""
+
+    signature: list[list[dict[str, Any]]]
+    record: ExchangeProvenance
+
+
 def build_trajectories(spans: Sequence[Span]) -> dict[str, Trajectory]:
     """The conversations the chat spans record, keyed by conversation id, oldest first."""
     index = _span_index(spans)
@@ -62,7 +88,10 @@ def build_trajectories(spans: Sequence[Span]) -> dict[str, Trajectory]:
     by_conversation: dict[str, list[Span]] = {}
     for span in chat_spans:
         by_conversation.setdefault(conversation_id(span), []).append(span)
+    provenance_spans = _latest_provenance_spans(spans, index)
+    calls = _recorded_calls(chat_spans, index, provenance_spans)
     cache: dict[_SpanKey, list[Turn]] = {}
+    candidates = _call_candidates(calls, cache)
 
     trajectories: dict[str, Trajectory] = {}
     for id_, span in latest.items():
@@ -71,7 +100,9 @@ def build_trajectories(spans: Sequence[Span]) -> dict[str, Trajectory]:
             turns=list(turns),
             last_active=_instant(span_time(span)),
             user=_conversation_user(by_conversation[id_], index),
-            provenance=[ExchangeProvenance(None, []) for _ in split_exchanges(turns)],
+            provenance=_associate_provenance(
+                split_exchanges(turns), candidates.get(id_, []), id_
+            ),
         )
     return trajectories
 
@@ -192,3 +223,181 @@ def _chat_span_turns(span: Span, cache: dict[_SpanKey, list[Turn]]) -> list[Turn
     if key not in cache:
         cache[key] = trajectory_turns(span)
     return cache[key]
+
+
+def _latest_provenance_spans(
+    spans: Sequence[Span], index: dict[_SpanKey, Span]
+) -> dict[_SpanKey, Span]:
+    """The latest provenance span below each turn span, keyed by the turn span."""
+    latest: dict[_SpanKey, Span] = {}
+    for span in spans:
+        if span.name != PROVENANCE_SPAN:
+            continue
+        turn = _turn_ancestor(span, index)
+        if turn is None:
+            continue
+        key = _span_key(turn)
+        current = latest.get(key)
+        if current is None or span_time(span) > span_time(current):
+            latest[key] = span
+    return latest
+
+
+def _recorded_calls(
+    chat_spans: Sequence[Span],
+    index: dict[_SpanKey, Span],
+    provenance_spans: dict[_SpanKey, Span],
+) -> dict[_SpanKey, _RecordedCall]:
+    """Each turn span's latest chat span, keyed by the turn span."""
+    calls: dict[_SpanKey, _RecordedCall] = {}
+    for span in chat_spans:
+        turn = _turn_ancestor(span, index)
+        if turn is None:
+            continue
+        key = _span_key(turn)
+        current = calls.get(key)
+        if current is None or span_time(span) > span_time(current.chat_span):
+            calls[key] = _RecordedCall(
+                conversation_id=conversation_id(span),
+                record_span=provenance_spans.get(key, turn),
+                chat_span=span,
+            )
+    return calls
+
+
+def _span_record(span: Span) -> ExchangeProvenance:
+    """The provenance a span records; what does not decode reads as absent."""
+    tag = span.attributes.get(TAG_ATTRIBUTE)
+    try:
+        tag = None if tag is None else Tag(str(tag))
+    except ValueError:
+        tag = None
+    return ExchangeProvenance(
+        tag, _decisions(span.attributes.get(CANDIDATES_ATTRIBUTE))
+    )
+
+
+def _decisions(text: object) -> list[CitationDecision]:
+    if not isinstance(text, str):
+        return []
+    try:
+        records = json.loads(text)
+    except (ValueError, RecursionError):
+        return []
+    if not isinstance(records, list):
+        return []
+    decisions: list[CitationDecision] = []
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        fields: dict[str, Any] = record
+        quote = fields.get("quote")
+        status: Any = fields.get("status")
+        if quote is not None and not isinstance(quote, str):
+            continue
+        try:
+            decision = CitationDecision(
+                quote=quote,
+                status=status,
+                label=fields.get("label"),
+                kind=fields.get("kind"),
+            )
+        except (ValueError, TypeError):
+            continue
+        decisions.append(decision)
+    return decisions
+
+
+def _exchange_signature(exchange: Sequence[Turn]) -> list[dict[str, Any]]:
+    """An exchange's turns as plain content, so two recordings of it compare equal."""
+    return [
+        {"role": turn.role, "contents": [_content_signature(c) for c in turn.contents]}
+        for turn in exchange
+    ]
+
+
+def _content_signature(content: object) -> dict[str, Any]:
+    if isinstance(content, ContentText):
+        return {"type": "text", "text": content.text}
+    if isinstance(content, ContentToolRequest):
+        return {
+            "type": "tool_request",
+            "id": content.id,
+            "name": content.name,
+            "arguments": content.arguments,
+        }
+    if isinstance(content, ContentToolResult):
+        return {
+            "type": "tool_result",
+            "id": None if content.request is None else content.request.id,
+            "value": content.value,
+        }
+    return {"type": type(content).__name__}
+
+
+def _exchange_is_complete(exchange: Sequence[Turn]) -> bool:
+    """Does the exchange end in an answer: an assistant turn with no tool request?"""
+    if len(exchange) < 2:
+        return False
+    final = exchange[-1]
+    return final.role == "assistant" and not any(
+        isinstance(c, ContentToolRequest) for c in final.contents
+    )
+
+
+def _call_candidates(
+    calls: dict[_SpanKey, _RecordedCall], cache: dict[_SpanKey, list[Turn]]
+) -> dict[str, list[_Candidate]]:
+    """The records that complete calls claim, by conversation id."""
+    candidates: dict[str, list[_Candidate]] = {}
+    for call in calls.values():
+        exchanges = split_exchanges(_chat_span_turns(call.chat_span, cache))
+        if not exchanges or not _exchange_is_complete(exchanges[-1]):
+            continue
+        candidates.setdefault(call.conversation_id, []).append(
+            _Candidate(
+                signature=[_exchange_signature(e) for e in exchanges],
+                record=_span_record(call.record_span),
+            )
+        )
+    return candidates
+
+
+def _associate_provenance(
+    exchanges: Sequence[Sequence[Turn]],
+    candidates: Sequence[_Candidate],
+    conversation_id: str,
+) -> list[ExchangeProvenance]:
+    """One record per exchange, from the calls whose history leads to it.
+
+    Records attach by matching recorded history rather than by position, so
+    an edited or restored conversation never moves a record to another
+    exchange.
+    """
+    canonical = [_exchange_signature(e) for e in exchanges]
+    claims: list[list[ExchangeProvenance]] = [[] for _ in exchanges]
+    for candidate in candidates:
+        length = len(candidate.signature)
+        if 0 < length <= len(canonical) and candidate.signature == canonical[:length]:
+            claims[length - 1].append(candidate.record)
+
+    records: list[ExchangeProvenance] = []
+    conflict = False
+    for claim in claims:
+        distinct: list[ExchangeProvenance] = []
+        for record in claim:
+            if record not in distinct:
+                distinct.append(record)
+        # A conflict fails closed: the exchange gets no record.
+        if len(distinct) == 1:
+            records.append(distinct[0])
+        else:
+            conflict = conflict or len(distinct) > 1
+            records.append(ExchangeProvenance(None, []))
+    if conflict:
+        warnings.warn(
+            f"Ignoring conflicting audit records in conversation '{conversation_id}'.",
+            UserWarning,
+            stacklevel=2,
+        )
+    return records
