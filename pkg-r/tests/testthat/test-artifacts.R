@@ -191,6 +191,19 @@ test_that("an edit that breaks the frontmatter makes no version", {
   expect_error(artifact_edit(store, "other", "a", "b"), "no document")
 })
 
+test_that("a restored document is running until it renders", {
+  store <- new_artifact_store(resolve_input = function(method, args) NULL)
+  artifact_store_restore(store, list(
+    doc = list(title = "Doc", sources = list("---\ntitle: Doc\n---\nBody.\n"))
+  ))
+
+  artifact <- artifact_get(store, "doc")
+  expect_identical(artifact_select_event(artifact)$status, "running")
+
+  wait_for_promise(artifact$rendered)
+  expect_identical(artifact_select_event(artifact)$status, "ready")
+})
+
 test_that("restoring or clearing a conversation drops its artifacts", {
   agent <- test_agent()
   store <- agent$artifact_store()
