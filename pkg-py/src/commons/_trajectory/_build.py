@@ -121,7 +121,7 @@ def drop_contentless(trajectories: dict[str, Trajectory]) -> dict[str, Trajector
             "active. On Posit Connect, check the app's startup log for warnings "
             "from commons.",
             UserWarning,
-            stacklevel=2,
+            stacklevel=3,  # the caller of trajectory_read()
         )
     elif empty:
         _logger.info(
@@ -457,6 +457,6 @@ def _associate_provenance(
         warnings.warn(
             f"Ignoring conflicting audit records in conversation '{conversation_id}'.",
             UserWarning,
-            stacklevel=2,
+            stacklevel=4,  # the caller of trajectory_read(), via build_trajectories()
         )
     return records
