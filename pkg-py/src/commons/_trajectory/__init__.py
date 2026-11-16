@@ -61,8 +61,8 @@ def trajectory_read(
     record, or the one server registered with rsconnect-python. The key's
     user needs editor-level access to the content: they must own it or be
     a collaborator (see `share_with` on `Commons`). When Connect finds no
-    traces and the content's or the server's tracing setting is off, a
-    warning names that setting.
+    traces, a warning names the content's or the server's tracing setting
+    when it can tell that one is off.
 
     `since` and `until` keep the chat activity at or after `since` and
     before `until`. Each is a datetime, a date, or a string like
@@ -75,7 +75,9 @@ def trajectory_read(
     record. `n` then keeps the `n` most recent conversations. On Connect,
     `since` and `until` are sent with the request, so Connect leaves out
     most traces outside the window. The per-job trace stores that older
-    content can have are filtered by `since` only. `n` is not sent, and is
+    content can have are filtered by `since` only. When a chat span's
+    ancestry is cut off, the read is repeated once without `since`, and the
+    job stores are then read unfiltered. `n` is not sent, and is
     applied after the read.
 
     Conversations whose spans record no message content are dropped. The
