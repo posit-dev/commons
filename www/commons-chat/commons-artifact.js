@@ -105,18 +105,29 @@
 
   // The document is model-written HTML, so it lives in a sandboxed frame with
   // an opaque origin, and its policy lets only the frame's own script run and
-  // nothing but the stylesheet load from the network. The frame patches the
+  // nothing load from the network. The frame patches the
   // pieces it is sent rather than reloading, so streaming text and finished
   // cells don't flicker.
   //
   // The sandbox still lets the frame navigate itself, so the frame opens links
   // through the parent, drops the elements that navigate on their own, and
   // takes the document over a port that dies with it if it navigates anyway.
+  //
+  // The stylesheet is inlined because the frame's opaque origin makes its
+  // requests cross-site, so they go without the cookie a login-gated host
+  // like Connect needs.
   const nonce = crypto.randomUUID();
-  const frameSource = `<!doctype html>
+  let documentCss = null;
+  const loadDocumentCss = () => {
+    documentCss ??= fetch(new URL("commons-document.css", assetRoot))
+      .then((response) => (response.ok ? response.text() : ""))
+      .catch(() => "");
+    return documentCss;
+  };
+  const frameSource = (css) => `<!doctype html>
 <html><head><meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-${nonce}'; style-src ${assetRoot.origin} 'unsafe-inline'; img-src data:; form-action 'none'; base-uri 'none'">
-<link rel="stylesheet" href="${new URL("commons-document.css", assetRoot)}">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-${nonce}'; style-src 'unsafe-inline'; img-src data:; form-action 'none'; base-uri 'none'">
+<style>${css}</style>
 </head><body><main id="doc"></main><script nonce="${nonce}">
 const doc = document.getElementById("doc");
 let port = null;
@@ -207,7 +218,9 @@ parent.postMessage("ready", "*");
           this.render();
         };
         window.addEventListener("message", onReady);
-        frame.srcdoc = frameSource;
+        loadDocumentCss().then((css) => {
+          frame.srcdoc = frameSource(css);
+        });
         body.replaceChildren(frame);
       }
       return frame;
