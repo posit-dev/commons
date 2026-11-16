@@ -11,6 +11,10 @@ test_that("the shared fixture carries the cases it promises", {
   expect_setequal(detection, c(TRUE, FALSE))
   expect_gte(length(connect_spec$server_normalization$cases), 2)
   expect_gte(length(connect_spec$api_request$cases), 1)
+  for (group in c("pages", "stores", "fallback", "access")) {
+    expect_gt(length(connect_spec$traces[[group]]$cases), 0, label = group)
+  }
+  expect_gt(length(connect_spec$vanity_search$cases), 0)
 })
 
 test_that("connect_client normalizes the server URL", {
@@ -54,43 +58,46 @@ test_that("connect_req addresses the versioned API root", {
 })
 
 test_that("connect_vanity_guid matches the full vanity URL", {
-  httr2::local_mocked_responses(function(req) {
-    url <- httr2::url_parse(req$url)
-    expect_equal(url$path, "/__api__/v1/search/content")
-    expect_equal(url$query$q, "my-agent")
-    expect_equal(url$query$include, "vanity_url")
-    httr2::new_response(
-      "GET",
-      req$url,
-      200L,
-      list(`Content-Type` = "application/json"),
-      charToRaw(jsonlite::toJSON(
-        list(
-          results = list(
-            list(
-              guid = "wrong-guid",
-              vanity_url = "https://connect.example.com/my-agent-test/"
-            ),
-            list(
-              guid = "right-guid",
-              vanity_url = "https://connect.example.com/my-agent/"
-            )
-          ),
-          total = 1L
-        ),
-        auto_unbox = TRUE
-      )),
-      request = req
+  search <- connect_spec$vanity_search
+  for (case in search$cases) {
+    info <- case[["name"]]
+    state <- new.env()
+    httr2::local_mocked_responses(
+      connect_fixture_responses(list(), state, search = case[["pages"]])
     )
-  })
-
-  guid <- connect_vanity_guid(
-    list(server = "https://connect.example.com", api_key = "key"),
-    "https://connect.example.com/content/my-agent",
-    "my-agent"
-  )
-
-  expect_equal(guid, "right-guid")
+    read <- function() {
+      connect_vanity_guid(
+        list(server = case[["server"]], api_key = "key"),
+        paste0(case[["server"]], "/content/", case[["query"]]),
+        case[["query"]]
+      )
+    }
+    if (is.null(case[["expected"]])) {
+      expect_error(read(), info = info)
+    } else {
+      expect_identical(read(), case[["expected"]], info = info)
+    }
+    queries <- lapply(state$requests, function(request) request[["query"]])
+    expect_identical(
+      vapply(queries, function(q) as.integer(q[["page_number"]]), integer(1)),
+      as.integer(unlist(case[["page_numbers"]])),
+      info = info
+    )
+    expect_identical(
+      state$requests[[1]][["path"]],
+      paste0(
+        sub("/+$", "", httr2::url_parse(case[["server"]])$path %||% ""),
+        "/__api__/v1/",
+        paste(unlist(search$request$path), collapse = "/")
+      ),
+      info = info
+    )
+    first <- queries[[1]]
+    expect_identical(first[["q"]], case[["query"]], info = info)
+    for (key in names(search$request$query)) {
+      expect_identical(first[[key]], search$request$query[[key]], info = info)
+    }
+  }
 })
 
 test_that("connect_vanity_guid explains an inaccessible URL", {
@@ -122,83 +129,15 @@ test_that("connect_vanity_guid explains an inaccessible URL", {
 })
 
 test_that("connect_trace_lines pages until the total is exhausted", {
-  pages <- list(
-    c("line1", "line2"),
-    "line3"
-  )
-  state <- new.env()
-  state$calls <- 0
-  local_mocked_bindings(
-    connect_req = function(client, ...) structure(list(), class = "fake_req")
-  )
-  local_mocked_bindings(
-    req_url_query = function(req, ...) req,
-    req_perform = function(req, ...) {
-      state$calls <- state$calls + 1
-      state$calls
-    },
-    resp_has_body = function(resp) TRUE,
-    resp_body_string = function(resp) {
-      paste(pages[[resp]], collapse = "\n")
-    },
-    resp_header = function(resp, name) {
-      if (name == "Server") "Posit Connect v2026.06.1" else "3"
-    },
-    .package = "httr2"
-  )
-
-  lines <- connect_trace_lines(list(server = "s", api_key = "k"), "guid")
-
-  expect_equal(lines, c("line1", "line2", "line3"))
-  expect_equal(state$calls, 2)
+  expect_trace_lines_member(connect_spec$traces$pages, connect_spec$traces)
 })
 
 test_that("connect_trace_lines reads collector and legacy stores", {
-  httr2::local_mocked_responses(function(req) {
-    url <- req$url
-    if (grepl("/jobs/job/traces", url, fixed = TRUE)) {
-      return(httr2::new_response(
-        "GET", url, 200L,
-        list(`X-Total-Count` = "1"), charToRaw("legacy"), request = req
-      ))
-    }
-    if (grepl("/jobs", url, fixed = TRUE)) {
-      return(httr2::new_response(
-        "GET", url, 200L,
-        list(`Content-Type` = "application/json"),
-        charToRaw('[{"key":"job"}]'),
-        request = req
-      ))
-    }
-    httr2::new_response(
-      "GET", url, 200L,
-      list(Server = "Posit Connect v2026.07.0", `X-Total-Count` = "1"),
-      charToRaw("current"), request = req
-    )
-  })
-
-  lines <- connect_trace_lines(
-    list(server = "https://connect.example.com", api_key = "k"),
-    "guid",
-    enough = function(lines) TRUE
-  )
-
-  expect_equal(lines, c("current", "legacy"))
+  expect_trace_lines_member(connect_spec$traces$stores, connect_spec$traces)
 })
 
 test_that("connect_trace_lines falls back when the content endpoint is absent", {
-  local_mocked_bindings(connect_job_trace_lines = function(...) "legacy")
-  httr2::local_mocked_responses(function(req) {
-    httr2::new_response(
-      "GET", req$url, 404L, list(), raw(), request = req
-    )
-  })
-
-  lines <- connect_trace_lines(
-    list(server = "https://connect.example.com", api_key = "k"), "guid"
-  )
-
-  expect_equal(lines, "legacy")
+  expect_trace_lines_member(connect_spec$traces$fallback, connect_spec$traces)
 })
 
 test_that("parse_connect_version parses Connect version strings", {
@@ -215,19 +154,16 @@ test_that("parse_connect_version parses Connect version strings", {
 })
 
 test_that("connect_trace_lines explains auth failures on the traces endpoint", {
-  local_mocked_bindings(
-    connect_req = function(client, ...) structure(list(), class = "fake_req")
-  )
-  local_mocked_bindings(
-    req_url_query = function(req, ...) req,
-    req_perform = function(req, ...) {
-      rlang::abort("HTTP 403 Forbidden.", class = "httr2_http_403")
-    },
-    .package = "httr2"
-  )
+  expect_trace_lines_member(connect_spec$traces$access, connect_spec$traces)
 
+  httr2::local_mocked_responses(
+    connect_fixture_responses(list(traces = list(status = 403)), new.env())
+  )
   expect_snapshot(
-    connect_trace_lines(list(server = "s", api_key = "k"), "guid"),
+    connect_trace_lines(
+      list(server = "https://connect.example.com", api_key = "k"),
+      "guid"
+    ),
     error = TRUE
   )
 })
