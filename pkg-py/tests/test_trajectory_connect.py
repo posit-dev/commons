@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import sys
+import warnings
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
@@ -17,20 +18,26 @@ from typing import Any
 import pytest
 
 from commons._connect import FROM_PAD, TO_PAD, normalize_server, window_param
+from commons._tracing import CONTENT_TRACING_HINT, SERVER_TRACING_HINT
+from commons._trajectory import trajectory_read
+from commons._trajectory._build import has_severed_ancestry
 from commons._trajectory._deployment import (
     find_deployment,
     registered_connect_servers,
 )
+from commons._trajectory._otlp import parse_otlp_lines
 from commons._trajectory._source import (
     ConnectSource,
     LocalSource,
     content_url_guid,
     content_vanity_url,
+    enough_trace_lines,
     is_content_guid,
     resolve_trajectory_source,
 )
 from tests._connect_fake import connect_fixture_server, serve_connect
 from tests._shared import load_shared_fixture
+from tests._trajectories import _instant, assert_trajectories, fixture_line, read_case
 
 CONNECT = load_shared_fixture("trajectories/connect")
 GUID = "ea3c1445-cb71-42df-a2f2-bdb18874ef41"
@@ -47,6 +54,8 @@ SOURCE_MEMBERS = (
     "null_deployment",
     "null_local",
 )
+CHECK_MEMBERS = ("enough", "enough_ancestry", "severed")
+READ_MEMBERS = ("refetch", "fetch_once", "early_stop", "empty_read")
 _CLEARED = (
     "POSIT_PRODUCT",
     "CONNECT_CONTENT_GUID",
@@ -105,6 +114,8 @@ def test_every_member_is_run() -> None:
         *PARSE_MEMBERS,
         *RECORD_MEMBERS,
         *SOURCE_MEMBERS,
+        *CHECK_MEMBERS,
+        *READ_MEMBERS,
     }
 
 
@@ -406,3 +417,112 @@ def test_a_guid_source_uses_the_one_registered_server(
     assert isinstance(resolved, ConnectSource)
     assert resolved.client.server == "https://one.example.com"
     resolved.client.close()
+
+
+@pytest.mark.parametrize(("member", "case"), cases(("enough", "enough_ancestry")))
+def test_paging_stops_as_the_shared_fixture_pins(
+    member: dict[str, Any], case: dict[str, Any]
+) -> None:
+    enough = enough_trace_lines(
+        case["n"], _instant(case.get("since")), _instant(case.get("until"))
+    )
+    lines: list[str] = []
+    answers = []
+    for line in case["lines"]:
+        lines.append(line if isinstance(line, str) else fixture_line(line))
+        answers.append(enough(lines))
+    assert answers == case["expected"]
+
+
+@_named("severed")
+def test_severed_ancestry_matches_the_shared_fixture(case: dict[str, Any]) -> None:
+    spans = parse_otlp_lines([fixture_line(case["spans"])])
+    assert has_severed_ancestry(spans) is case["expected"]
+
+
+def _trace_queries(seen: list[Any]) -> list[dict[str, str]]:
+    return [
+        dict(r.url.params)
+        for r in seen
+        if r.url.path.endswith(f"/content/{GUID}/traces")
+    ]
+
+
+@pytest.mark.parametrize(
+    ("member", "case"), cases(("refetch", "fetch_once", "early_stop"))
+)
+def test_connect_reads_match_the_shared_fixture(
+    member: dict[str, Any], case: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    connect_env(monkeypatch, {"CONNECT_SERVER": "https://connect.example.com"})
+    route, seen = connect_fixture_server(case["server"])
+    serve_connect(monkeypatch, route)
+
+    result, notices = read_case(
+        lambda: trajectory_read(
+            GUID,
+            n=case.get("n"),
+            since=_instant(case.get("since")),
+            until=_instant(case.get("until")),
+        )
+    )
+
+    assert _trace_queries(seen) == case["trace_queries"]
+    assert notices == case.get("notice", [])
+    assert_trajectories(result, case["trajectories"])
+
+
+_EMPTY = {"version": "2026.09.0", "traces": [], "jobs": []}
+_HINTS = {"content": CONTENT_TRACING_HINT, "server": SERVER_TRACING_HINT}
+
+
+def _serve_empty_read(monkeypatch: pytest.MonkeyPatch, case: dict[str, Any]) -> None:
+    connect_env(monkeypatch, {"CONNECT_SERVER": "https://connect.example.com"})
+    route, _ = connect_fixture_server(
+        _EMPTY, content=case["content"], settings=case["settings"]
+    )
+    serve_connect(monkeypatch, route)
+
+
+@_named("empty_read")
+def test_an_empty_read_reports_as_the_shared_fixture_pins(
+    case: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _serve_empty_read(monkeypatch, case)
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        result = trajectory_read(GUID)
+
+    message = CONNECT["empty_read"]["message"]
+    hints = [_HINTS[hint] for hint in case["hints"]]
+    expected = [" ".join([message, *hints])] if hints else []
+    assert [str(w.message) for w in caught] == expected
+    assert result == {}
+
+
+def test_an_empty_read_warning_points_at_the_caller(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (case,) = [
+        c for c in CONNECT["empty_read"]["cases"] if c["name"] == "content tracing off"
+    ]
+    _serve_empty_read(monkeypatch, case)
+
+    with pytest.warns(UserWarning) as caught:
+        trajectory_read(GUID)
+
+    assert [w.filename for w in caught] == [__file__]
+
+
+def test_a_connect_read_closes_its_client(monkeypatch: pytest.MonkeyPatch) -> None:
+    connect_env(monkeypatch, {"CONNECT_SERVER": "https://connect.example.com"})
+    route, _ = connect_fixture_server(_EMPTY, search=[{"results": [], "total": 1}])
+    clients = serve_connect(monkeypatch, route)
+
+    trajectory_read(GUID)
+    with pytest.raises(LookupError):
+        trajectory_read("https://connect.example.com/content/missing")
+
+    assert len(clients) == 2
+    assert all(client.is_closed for client in clients)

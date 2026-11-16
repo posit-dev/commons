@@ -7,10 +7,10 @@ The R suite's runner is ``trajectory_fixture_run()`` in
 import json
 import logging
 import warnings
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 import pytest
 from chatlas import Turn
@@ -24,6 +24,8 @@ from commons._trajectory._build import (
 )
 from commons._trajectory._otlp import parse_otlp_lines
 from tests._shared import load_shared_fixture
+
+T = TypeVar("T")
 
 BUILD = load_shared_fixture("trajectories/build")
 BUILD_MEMBERS = (
@@ -159,10 +161,8 @@ def _instant(seconds: float | None) -> datetime | None:
     return None if seconds is None else datetime.fromtimestamp(seconds, UTC)
 
 
-def run_case(
-    member: dict[str, Any], case: dict[str, Any], directory: Path | None = None
-) -> tuple[dict[str, Trajectory], list[str]]:
-    spans: list[dict[str, Any]] = case.get("spans", member.get("spans")) or []
+def read_case(read: Callable[[], T]) -> tuple[T, list[str]]:
+    """`read()`, with its warnings and log messages recorded in order."""
     notices: list[str] = []
     logger = logging.getLogger("commons._trajectory")
     level = logger.level
@@ -174,21 +174,31 @@ def run_case(
             warnings.simplefilter("always")
             # Record each warning as it is shown, in order with the log messages.
             warnings.showwarning = lambda *_args, **_kwargs: notices.append("warning")
-            if directory is None:
-                result = build_trajectories(parse_otlp_lines([fixture_line(spans)]))
-            else:
-                trace = directory / "trace-1.jsonl"
-                trace.write_text(fixture_line(spans) + "\n", encoding="utf-8")
-                result = trajectory_read(
-                    directory,
-                    n=case.get("n"),
-                    since=_instant(case.get("since")),
-                    until=_instant(case.get("until")),
-                )
+            result = read()
     finally:
         logger.removeHandler(handler)
         logger.setLevel(level)
     return result, notices
+
+
+def run_case(
+    member: dict[str, Any], case: dict[str, Any], directory: Path | None = None
+) -> tuple[dict[str, Trajectory], list[str]]:
+    spans: list[dict[str, Any]] = case.get("spans", member.get("spans")) or []
+
+    def read() -> dict[str, Trajectory]:
+        if directory is None:
+            return build_trajectories(parse_otlp_lines([fixture_line(spans)]))
+        trace = directory / "trace-1.jsonl"
+        trace.write_text(fixture_line(spans) + "\n", encoding="utf-8")
+        return trajectory_read(
+            directory,
+            n=case.get("n"),
+            since=_instant(case.get("since")),
+            until=_instant(case.get("until")),
+        )
+
+    return read_case(read)
 
 
 def assert_trajectories(

@@ -269,6 +269,26 @@ def _turn_ancestor(span: Span, index: dict[_SpanKey, Span]) -> Span | None:
     return None
 
 
+def has_severed_ancestry(spans: Sequence[Span]) -> bool:
+    """Has a chat span lost a parent between it and its turn span?"""
+    index = _span_index(spans)
+    return any(_ancestry_severed(span, index) for span in spans if is_chat_span(span))
+
+
+def _ancestry_severed(span: Span, index: dict[_SpanKey, Span]) -> bool:
+    # A missing parent means a partial fetch, which a wider fetch can fix; a
+    # root does not. The step limit ends a cycle.
+    current = span
+    for _ in range(len(index)):
+        if current.name == TURN_SPAN or not current.parent_span_id:
+            return False
+        parent = index.get((span.trace_id, current.parent_span_id))
+        if parent is None:
+            return True
+        current = parent
+    return False
+
+
 def _conversation_user(
     chat_spans: Sequence[Span], index: dict[_SpanKey, Span]
 ) -> str | None:

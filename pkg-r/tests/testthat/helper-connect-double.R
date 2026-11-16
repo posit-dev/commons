@@ -209,3 +209,108 @@ expect_source_member <- function(member) {
     })
   }
 }
+
+connect_fixture_lines <- function(lines) {
+  vapply(lines, connect_fixture_line, character(1))
+}
+
+# One enough_trace_lines() checker per case, called after each line with all
+# the lines so far.
+expect_enough_member <- function(member) {
+  expect_gt(length(member[["cases"]]), 0)
+  for (case in member[["cases"]]) {
+    enough <- enough_trace_lines(
+      case[["n"]],
+      fixture_instant(case[["since"]]),
+      fixture_instant(case[["until"]])
+    )
+    lines <- connect_fixture_lines(case[["lines"]])
+    answers <- vapply(
+      seq_along(lines),
+      function(i) enough(lines[seq_len(i)]),
+      logical(1)
+    )
+    expect_identical(answers, unlist(case[["expected"]]), info = case[["name"]])
+  }
+}
+
+expect_connect_read_member <- function(member) {
+  guid <- "ea3c1445-cb71-42df-a2f2-bdb18874ef41"
+  expect_gt(length(member[["cases"]]), 0)
+  for (case in member[["cases"]]) {
+    local({
+      info <- case[["name"]]
+      withr::local_dir(withr::local_tempdir())
+      withr::local_envvar(
+        connect_fixture_env(list(CONNECT_SERVER = "https://connect.example.com"))
+      )
+      state <- new.env()
+      empty_read <- !is.null(case[["hints"]])
+      httr2::local_mocked_responses(if (empty_read) {
+        connect_fixture_responses(
+          list(version = "2026.09.0", traces = list(), jobs = list()),
+          state,
+          content = case[["content"]],
+          settings = case[["settings"]]
+        )
+      } else {
+        connect_fixture_responses(case[["server"]], state)
+      })
+      notices <- character()
+      warnings <- character()
+      trajectories <- withCallingHandlers(
+        trajectory_read(
+          guid,
+          n = case[["n"]],
+          from = fixture_instant(case[["since"]]),
+          to = fixture_instant(case[["until"]])
+        ),
+        warning = function(cnd) {
+          notices <<- c(notices, "warning")
+          warnings <<- c(warnings, conditionMessage(cnd))
+          invokeRestart("muffleWarning")
+        },
+        message = function(cnd) {
+          notices <<- c(notices, "message")
+          invokeRestart("muffleMessage")
+        }
+      )
+
+      if (empty_read) {
+        hints <- unlist(case[["hints"]]) %||% character()
+        expect_equal(length(trajectories), 0, info = info)
+        if (length(hints) == 0) {
+          expect_identical(warnings, character(), info = info)
+          return()
+        }
+        expect_equal(length(warnings), 1, info = info)
+        text <- gsub("\\s+", " ", warnings[[1]])
+        expect_true(startsWith(text, member[["message"]]), info = info)
+        expect_identical(
+          grepl("Settings > Monitoring", text, fixed = TRUE),
+          "content" %in% hints,
+          info = info
+        )
+        expect_identical(
+          grepl("AllowContentInstrumentation", text, fixed = TRUE),
+          "server" %in% hints,
+          info = info
+        )
+        return()
+      }
+
+      traces_path <- paste0("/content/", guid, "/traces")
+      queries <- lapply(
+        Filter(function(r) endsWith(r[["path"]], traces_path), state$requests),
+        function(r) r[["query"]]
+      )
+      expect_identical(queries, case[["trace_queries"]], info = info)
+      expect_identical(
+        notices,
+        unlist(case[["notice"]]) %||% character(),
+        info = info
+      )
+      expect_trajectories(trajectories, case[["trajectories"]], info)
+    })
+  }
+}
