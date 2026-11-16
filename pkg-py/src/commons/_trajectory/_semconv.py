@@ -39,7 +39,7 @@ def _parse(text: object) -> list[Any] | None:
         return None
     try:
         parsed = json.loads(text)
-    except ValueError:
+    except (ValueError, RecursionError):
         return None
     return parsed if isinstance(parsed, list) else None
 
