@@ -6,7 +6,6 @@ While both Python and R packages are first-class implementations of `commons`, t
 
 | R-only feature | What a Python agent does instead |
 |---|---|
-| Reading logged conversations from Posit Connect with `trajectory_read()` | Reads local trace files only |
 | The commons agent skill for coding agents | Ships with the R package only |
 | Reports written as Quarto documents, shown in the chat's drawer and revised with `edit_artifact` | Answers in the chat only |
 | Sharing a conversation, document, plot, or table to Posit Connect | No equivalent yet ([#517](https://github.com/posit-dev/commons/issues/517)) |
