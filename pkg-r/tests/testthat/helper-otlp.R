@@ -211,3 +211,91 @@ expect_semconv_turns <- function(turns, expected, info = NULL) {
     }
   }
 }
+
+trajectory_fixture_span <- function(span) {
+  attributes <- list()
+  if (isTRUE(span[["chat"]])) {
+    attributes[["gen_ai.operation.name"]] <- "chat"
+  }
+  shorthand <- c(
+    conversation = "gen_ai.conversation.id",
+    system = "gen_ai.system_instructions",
+    input = "gen_ai.input.messages",
+    output = "gen_ai.output.messages"
+  )
+  for (field in names(shorthand)) {
+    if (!is.null(span[[field]])) {
+      attributes[[shorthand[[field]]]] <- span[[field]]
+    }
+  }
+  for (key in names(span[["attributes"]])) {
+    attributes[key] <- list(span[["attributes"]][[key]])
+  }
+  otlp_test_span(
+    span[["trace"]],
+    span[["span"]],
+    parent_span_id = span[["parent"]],
+    name = if (isTRUE(span[["chat"]])) "chat test-model" else span[["name"]],
+    attributes = lapply(names(attributes), function(key) {
+      otlp_test_attr(key, otlp_fixture_line(attributes[[key]]))
+    }),
+    start_time = span[["start"]] %||% "1",
+    end_time = span[["end"]] %||% "2"
+  )
+}
+
+trajectory_fixture_run <- function(member, case, read = FALSE) {
+  spans <- case[["spans"]] %||% member[["spans"]]
+  line <- otlp_test_line(lapply(spans, trajectory_fixture_span))
+  notices <- character()
+  trajectories <- withCallingHandlers(
+    build_trajectories(parse_otlp_lines(line)),
+    warning = function(cnd) {
+      notices <<- c(notices, "warning")
+      invokeRestart("muffleWarning")
+    },
+    message = function(cnd) {
+      notices <<- c(notices, "message")
+      invokeRestart("muffleMessage")
+    }
+  )
+  list(trajectories = trajectories, notices = notices)
+}
+
+expect_trajectories <- function(trajectories, expected, info = NULL) {
+  expect_identical(
+    names(trajectories) %||% character(),
+    vapply(expected, function(e) e[["id"]], character(1)),
+    info = info
+  )
+  for (e in expected) {
+    t <- trajectories[[e[["id"]]]]
+    if (!is.null(e[["turns"]])) {
+      expect_semconv_turns(t[["turns"]], e[["turns"]], info)
+    }
+    if ("user" %in% names(e)) {
+      expect_identical(t[["user"]], e[["user"]] %||% NA_character_, info = info)
+    }
+    if (!is.null(e[["last_active"]])) {
+      expect_equal(as.numeric(t[["last_active"]]), e[["last_active"]], info = info)
+    }
+  }
+}
+
+expect_trajectory_member <- function(member, read = FALSE) {
+  expect_gt(length(member[["cases"]]), 0)
+  for (case in member[["cases"]]) {
+    info <- case[["name"]]
+    if (isTRUE(case[["error"]])) {
+      expect_error(trajectory_fixture_run(member, case, read), info = info)
+      next
+    }
+    result <- trajectory_fixture_run(member, case, read)
+    expect_identical(
+      result[["notices"]],
+      if (is.null(case[["notice"]])) character() else case[["notice"]],
+      info = info
+    )
+    expect_trajectories(result[["trajectories"]], case[["trajectories"]], info)
+  }
+}

@@ -1,4 +1,5 @@
 semconv <- shared_fixture(file.path("trajectories", "semconv"))
+build <- shared_fixture(file.path("trajectories", "build"))
 
 test_that("parse_otlp_lines unwraps envelopes and flattens attributes", {
   cases <- shared_fixture(file.path("trajectories", "otlp"))$lines$cases
@@ -137,149 +138,19 @@ test_that("only a completed final assistant response is attachable", {
 })
 
 test_that("conversations carry their last chat activity time", {
-  trajectories <- build_trajectories(parse_otlp_lines(staggered_test_line()))
-
-  last_active <- trajectories[[1]]$last_active
-  expect_s3_class(last_active, "POSIXct")
-  expect_equal(as.numeric(last_active), 101)
+  expect_trajectory_member(build$last_active)
 })
 
 test_that("trajectory_read associates session users with their conversations", {
-  path <- withr::local_tempdir()
-  json <- test_turn_json()
-  spans <- list(
-    otlp_test_span(
-      "t1",
-      "turn",
-      name = "commons_conversation_turn",
-      attributes = list(otlp_test_attr("commons.connect.user", "alice"))
-    ),
-    otlp_test_span(
-      "t2",
-      "turn",
-      name = "commons_conversation_turn",
-      attributes = list(otlp_test_attr("commons.connect.user", "bob"))
-    ),
-    chat_test_span(
-      "t2",
-      "chat",
-      parent_span_id = "turn",
-      conversation_id = "conv-b",
-      input_messages = json$input
-    ),
-    chat_test_span(
-      "t1",
-      "chat",
-      parent_span_id = "turn",
-      conversation_id = "conv-a",
-      input_messages = json$input
-    ),
-    conversation_test_span("t3", "turn"),
-    chat_test_span(
-      "t3",
-      "chat",
-      parent_span_id = "turn",
-      conversation_id = "anonymous",
-      input_messages = json$input
-    )
-  )
-  writeLines(otlp_test_line(spans), file.path(path, "trace-0.jsonl"))
-
-  trajectories <- trajectory_read(path)
-
-  expect_identical(trajectories[["conv-a"]]$user, "alice")
-  expect_identical(trajectories[["conv-b"]]$user, "bob")
-  expect_identical(trajectories[["anonymous"]]$user, NA_character_)
+  expect_trajectory_member(build$session_users)
 })
 
 test_that("conversation users come from the earliest recorded non-title chat", {
-  json <- test_turn_json()
-  spans <- list(
-    otlp_test_span(
-      "t2",
-      "turn",
-      name = "commons_conversation_turn",
-      attributes = list(otlp_test_attr("commons.connect.user", "bob"))
-    ),
-    chat_test_span(
-      "t2",
-      "chat",
-      parent_span_id = "turn",
-      conversation_id = "conv-a",
-      input_messages = json$input,
-      end_time = "20"
-    ),
-    otlp_test_span(
-      "t0",
-      "turn",
-      name = "commons_conversation_turn",
-      attributes = list(otlp_test_attr("commons.connect.user", "title-user"))
-    ),
-    chat_test_span(
-      "t0",
-      "chat",
-      parent_span_id = "turn",
-      conversation_id = "conv-a",
-      system_instructions = jsonlite::toJSON(
-        list(list(type = "text", content = shinychat_title_prompt)),
-        auto_unbox = TRUE
-      ),
-      input_messages = json$input,
-      end_time = "5"
-    ),
-    otlp_test_span(
-      "t1",
-      "turn",
-      name = "commons_conversation_turn",
-      attributes = list(otlp_test_attr("commons.connect.user", "alice"))
-    ),
-    chat_test_span(
-      "t1",
-      "chat",
-      parent_span_id = "turn",
-      conversation_id = "conv-a",
-      input_messages = json$input,
-      end_time = "10"
-    )
-  )
-
-  trajectories <- build_trajectories(parse_otlp_lines(otlp_test_line(spans)))
-
-  expect_identical(trajectories[["conv-a"]]$user, "alice")
-
-  spans[[5]]$attributes <- list()
-  trajectories <- build_trajectories(parse_otlp_lines(otlp_test_line(spans)))
-  expect_identical(trajectories[["conv-a"]]$user, NA_character_)
+  expect_trajectory_member(build$earliest_user)
 })
 
 test_that("chat spans group by their conversation id across traces", {
-  json <- test_turn_json()
-  lines <- c(
-    otlp_test_line(list(
-      chat_test_span(
-        "t1",
-        "chat1",
-        conversation_id = "conv-a",
-        input_messages = '[{"role":"user","parts":[{"type":"text","content":"One."}]}]',
-        end_time = "10"
-      )
-    )),
-    otlp_test_line(list(
-      chat_test_span(
-        "t2",
-        "chat2",
-        conversation_id = "conv-a",
-        input_messages = json$input,
-        end_time = "20"
-      )
-    ))
-  )
-
-  trajectories <- build_trajectories(parse_otlp_lines(lines))
-
-  expect_named(trajectories, "conv-a")
-  expect_length(trajectories[[1]]$turns, 3)
-  expect_equal(trajectories[[1]]$turns[[1]]@text, "Roll a die.")
+  expect_trajectory_member(build$conversation_id)
 })
 
 text_semconv_message <- function(role, text) {
@@ -291,64 +162,7 @@ semconv_messages_json <- function(messages) {
 }
 
 test_that("title generation does not replace the conversation it titles", {
-  image_question <- list(
-    role = "user",
-    parts = list(
-      list(type = "text", content = "What do you see?"),
-      list(type = "generic", class = "ContentImageInline")
-    )
-  )
-  first_answer <- text_semconv_message("assistant", "I see a chart.")
-  followup <- text_semconv_message("user", "Can you verify it?")
-  final_answer <- text_semconv_message("assistant", "Yes, it is accurate.")
-  title_prompt <- semconv_messages_json(list(list(
-    type = "text",
-    content = paste(shinychat_title_prompt, "Reply with ONLY a title.")
-  )))
-  spans <- parse_otlp_lines(otlp_test_line(list(
-    chat_test_span(
-      "first-trace",
-      "chat1",
-      conversation_id = "conv-a",
-      input_messages = semconv_messages_json(list(image_question)),
-      output_messages = semconv_messages_json(list(first_answer)),
-      end_time = "10"
-    ),
-    chat_test_span(
-      "second-trace",
-      "chat2",
-      conversation_id = "conv-a",
-      input_messages = semconv_messages_json(list(
-        image_question,
-        first_answer,
-        followup
-      )),
-      output_messages = semconv_messages_json(list(final_answer)),
-      end_time = "20"
-    ),
-    chat_test_span(
-      "second-trace",
-      "title",
-      conversation_id = "conv-a",
-      system_instructions = title_prompt,
-      input_messages = semconv_messages_json(list(
-        text_semconv_message("user", "user: What do you see?")
-      )),
-      output_messages = semconv_messages_json(list(
-        text_semconv_message("assistant", "Chart verification")
-      )),
-      end_time = "30"
-    )
-  )))
-
-  turns <- build_trajectories(spans)[["conv-a"]]$turns
-
-  expect_identical(
-    vapply(turns, function(turn) turn@role, character(1)),
-    c("user", "assistant", "user", "assistant")
-  )
-  expect_equal(turns[[1]]@text, "What do you see?")
-  expect_equal(turns[[4]]@text, "Yes, it is accurate.")
+  expect_trajectory_member(build$title_spans)
 })
 
 test_that("missing latest input recovers history and subsequent outputs", {
@@ -1045,17 +859,7 @@ test_that("provenance defaults to NA/empty with no commons_conversation_turn anc
 })
 
 test_that("chat spans without a wrapper fall back to their trace id", {
-  spans <- parse_otlp_lines(otlp_test_line(list(
-    chat_test_span(
-      "lonetrace",
-      "chat1",
-      input_messages = '[{"role":"user","parts":[{"type":"text","content":"Hi."}]}]'
-    )
-  )))
-
-  trajectories <- build_trajectories(spans)
-
-  expect_named(trajectories, "lonetrace")
+  expect_trajectory_member(build$trace_id_fallback)
 })
 
 test_that("generic parts and empty messages are dropped", {
@@ -1132,29 +936,7 @@ test_that("local trace files can follow a custom exporter template", {
 })
 
 test_that("the latest chat span wins across timestamp digit counts", {
-  json <- test_turn_json()
-  early <- chat_test_span(
-    "t1",
-    "s1",
-    input_messages = json$input,
-    end_time = "999"
-  )
-  late <- chat_test_span(
-    "t1",
-    "s2",
-    input_messages = json$input,
-    output_messages = json$output,
-    end_time = "1000"
-  )
-  spans <- parse_otlp_lines(otlp_test_line(list(early, late)))
-
-  trajectories <- build_trajectories(spans)
-
-  expect_length(trajectories, 1)
-  turns <- trajectories[[1]]$turns
-  final <- turns[[length(turns)]]
-  expect_s7_class(final, ellmer::AssistantTurn)
-  expect_equal(final@text, "You rolled a 4.")
+  expect_trajectory_member(build$latest_span)
 })
 
 test_that("trajectory_read hints when no conversation carries content", {

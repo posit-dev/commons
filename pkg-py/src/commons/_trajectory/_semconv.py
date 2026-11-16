@@ -27,7 +27,7 @@ def trajectory_turns(span: Span) -> list[Turn]:
     attributes = span.attributes
     requests: dict[str, ContentToolRequest] = {}
     return [
-        *_system_turns(attributes.get(SYSTEM_INSTRUCTIONS)),
+        *system_turns(attributes.get(SYSTEM_INSTRUCTIONS)),
         *_message_turns(attributes.get(INPUT_MESSAGES), requests),
         *_message_turns(attributes.get(OUTPUT_MESSAGES), requests),
     ]
@@ -44,7 +44,8 @@ def _parse(text: object) -> list[Any] | None:
     return parsed if isinstance(parsed, list) else None
 
 
-def _system_turns(text: object) -> list[Turn]:
+def system_turns(text: object) -> list[Turn]:
+    """The system turn a system-instructions attribute records, if any."""
     parts = _parse(text)
     if parts is None:
         return []
