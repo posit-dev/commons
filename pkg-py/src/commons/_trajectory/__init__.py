@@ -61,20 +61,22 @@ def trajectory_read(
     record, or the one server registered with rsconnect-python. The key's
     user needs editor-level access to the content: they must own it or be
     a collaborator (see `share_with` on `Commons`). When Connect finds no
-    traces, a warning names the content or server setting that explains
-    it.
+    traces and the content's or the server's tracing setting is off, a
+    warning names that setting.
 
     `since` and `until` keep the chat activity at or after `since` and
     before `until`. Each is a datetime, a date, or a string like
-    "2026-07-22" or "2026-07-22 14:30:00". A date, a string, or a
-    datetime without a time zone is read in local time. A conversation
-    that continues past `until` is returned as it was at `until`. A
-    conversation that started before `since` is returned with the history
-    its latest call in the window recorded, and its exchanges take
-    provenance only from calls in the window, so an exchange answered only
-    before `since` has no record. `n` then keeps the `n` most recent
-    conversations. On Connect, they are sent with the request, so a
-    filtered read does not transfer the whole trace store.
+    "2026-07-22" or "2026-07-22 14:30:00". A date, a string, or a datetime
+    without a time zone is read in local time. A conversation that continues
+    past `until` is returned as it was at `until`. A conversation that
+    started before `since` is returned with the history its latest call in
+    the window recorded, and its exchanges take provenance only from calls
+    in the window, so an exchange answered only before `since` has no
+    record. `n` then keeps the `n` most recent conversations. On Connect,
+    `since` and `until` are sent with the request, so Connect leaves out
+    most traces outside the window. The per-job trace stores that older
+    content can have are filtered by `since` only. `n` is not sent, and is
+    applied after the read.
 
     Conversations whose spans record no message content are dropped. The
     result is keyed by conversation id, with the oldest conversation
