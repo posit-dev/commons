@@ -105,7 +105,7 @@
 
   // The document is model-written HTML, so it lives in a sandboxed frame with
   // an opaque origin, and its policy lets only the frame's own script run and
-  // nothing but the stylesheet load from the network. The frame patches the
+  // nothing load from the network. The frame patches the
   // pieces it is sent rather than reloading, so streaming text and finished
   // cells don't flicker.
   //
