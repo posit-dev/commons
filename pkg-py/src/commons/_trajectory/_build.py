@@ -4,6 +4,7 @@
 """
 
 import json
+import logging
 import re
 import warnings
 from collections.abc import Sequence
@@ -27,6 +28,8 @@ from ._otlp import Span
 from ._semconv import SYSTEM_INSTRUCTIONS, system_turns, trajectory_turns
 
 TITLE_PROMPT = "You title chat conversations."
+
+_logger = logging.getLogger(__name__)
 
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 _REMINDER = re.compile(r"^<(system-instruction|reminder)>.*</\1>$", re.DOTALL)
@@ -105,6 +108,32 @@ def build_trajectories(spans: Sequence[Span]) -> dict[str, Trajectory]:
             ),
         )
     return trajectories
+
+
+def drop_contentless(trajectories: dict[str, Trajectory]) -> dict[str, Trajectory]:
+    """Drop the conversations with no turns, saying why when that is all of them."""
+    empty = sum(1 for trajectory in trajectories.values() if not trajectory.turns)
+    if trajectories and empty == len(trajectories):
+        warnings.warn(
+            f"Found {empty} {_conversations(empty)} of spans, but none record "
+            "message content; returning none. Message content is captured only "
+            "when the agent runs with log=True while OpenTelemetry tracing is "
+            "active. On Posit Connect, check the app's startup log for warnings "
+            "from commons.",
+            UserWarning,
+            stacklevel=2,
+        )
+    elif empty:
+        _logger.info(
+            "Dropping %d %s whose spans record no message content.",
+            empty,
+            _conversations(empty),
+        )
+    return {id_: t for id_, t in trajectories.items() if t.turns}
+
+
+def _conversations(count: int) -> str:
+    return "conversation" if count == 1 else "conversations"
 
 
 def is_chat_span(span: Span) -> bool:

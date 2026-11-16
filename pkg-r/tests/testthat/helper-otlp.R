@@ -244,12 +244,27 @@ trajectory_fixture_span <- function(span) {
   )
 }
 
+fixture_instant <- function(x) {
+  if (is.null(x)) NULL else .POSIXct(x, tz = "UTC")
+}
+
 trajectory_fixture_run <- function(member, case, read = FALSE) {
   spans <- case[["spans"]] %||% member[["spans"]]
   line <- otlp_test_line(lapply(spans, trajectory_fixture_span))
   notices <- character()
   trajectories <- withCallingHandlers(
-    build_trajectories(parse_otlp_lines(line)),
+    if (read) {
+      path <- withr::local_tempdir()
+      writeLines(line, file.path(path, "trace-1.jsonl"))
+      trajectory_read(
+        path,
+        n = case[["n"]],
+        from = fixture_instant(case[["since"]]),
+        to = fixture_instant(case[["until"]])
+      )
+    } else {
+      build_trajectories(parse_otlp_lines(line))
+    },
     warning = function(cnd) {
       notices <<- c(notices, "warning")
       invokeRestart("muffleWarning")
