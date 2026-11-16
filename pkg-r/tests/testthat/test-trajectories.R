@@ -707,18 +707,7 @@ test_that("trajectory_read validates source", {
 })
 
 test_that("a GUID source resolves to a Connect read", {
-  withr::local_envvar(
-    CONNECT_SERVER = "https://connect.example.com",
-    CONNECT_API_KEY = "key"
-  )
-
-  resolved <- resolve_trajectory_source(
-    "ea3c1445-cb71-42df-a2f2-bdb18874ef41"
-  )
-
-  expect_equal(resolved$kind, "connect")
-  expect_equal(resolved$guid, "ea3c1445-cb71-42df-a2f2-bdb18874ef41")
-  expect_equal(resolved$client$server, "https://connect.example.com")
+  expect_source_member(connect_cases$guid_source)
 })
 
 test_that("a GUID source infers its server from rsconnect", {
@@ -736,24 +725,7 @@ test_that("a GUID source infers its server from rsconnect", {
 })
 
 test_that("a GUID source prefers its environment and project deployment", {
-  withr::local_envvar(CONNECT_SERVER = "https://env.example.com")
-  expect_equal(trajectory_guid_server(), "https://env.example.com")
-
-  withr::local_envvar(CONNECT_SERVER = NA)
-  dir <- withr::local_tempdir()
-  record_dir <- file.path(dir, "rsconnect", "documents", "app.R", "server")
-  dir.create(record_dir, recursive = TRUE)
-  writeLines(
-    c(
-      "name: my-agent",
-      "hostUrl: https://project.example.com/__api__",
-      "url: https://project.example.com/content/ea3c1445-cb71-42df-a2f2-bdb18874ef41/"
-    ),
-    file.path(record_dir, "my-agent.dcf")
-  )
-  withr::local_dir(dir)
-
-  expect_equal(trajectory_guid_server(), "https://project.example.com")
+  expect_source_member(connect_cases$guid_server)
 })
 
 test_that("a GUID source requires an unambiguous server", {
@@ -772,48 +744,15 @@ test_that("a GUID source requires an unambiguous server", {
 })
 
 test_that("a content URL source carries its own server", {
-  withr::local_envvar(CONNECT_SERVER = NA, CONNECT_API_KEY = "key")
-
-  resolved <- resolve_trajectory_source(
-    "https://connect.example.com/content/ea3c1445-cb71-42df-a2f2-bdb18874ef41/"
-  )
-
-  expect_equal(resolved$kind, "connect")
-  expect_equal(resolved$guid, "ea3c1445-cb71-42df-a2f2-bdb18874ef41")
-  expect_equal(resolved$client$server, "https://connect.example.com")
+  expect_source_member(connect_cases$content_url_source)
 })
 
 test_that("a dashboard URL source carries its own server", {
-  withr::local_envvar(CONNECT_SERVER = NA, CONNECT_API_KEY = "key")
-
-  resolved <- resolve_trajectory_source(
-    "https://connect.example.com/connect/#/apps/ea3c1445-cb71-42df-a2f2-bdb18874ef41/access"
-  )
-
-  expect_equal(resolved$kind, "connect")
-  expect_equal(resolved$guid, "ea3c1445-cb71-42df-a2f2-bdb18874ef41")
-  expect_equal(resolved$client$server, "https://connect.example.com")
+  expect_source_member(connect_cases$dashboard_url_source)
 })
 
 test_that("a vanity URL is resolved through Connect", {
-  withr::local_envvar(CONNECT_SERVER = NA, CONNECT_API_KEY = "key")
-  state <- new.env()
-  local_mocked_bindings(
-    connect_vanity_guid = function(client, url, query, ...) {
-      state$client <- client
-      state$url <- url
-      state$query <- query
-      "ea3c1445-cb71-42df-a2f2-bdb18874ef41"
-    }
-  )
-
-  url <- "https://connect.example.com/content/my-agent"
-  resolved <- resolve_trajectory_source(url)
-
-  expect_equal(resolved$guid, "ea3c1445-cb71-42df-a2f2-bdb18874ef41")
-  expect_equal(state$client$server, "https://connect.example.com")
-  expect_equal(state$url, url)
-  expect_equal(state$query, "my-agent")
+  expect_source_member(connect_cases$vanity_source)
 })
 
 test_that("a vanity URL resolves against a configured Connect server", {
@@ -832,6 +771,8 @@ test_that("a vanity URL resolves against a configured Connect server", {
 })
 
 test_that("a URL without a recognizable GUID errors rather than reading locally", {
+  expect_source_member(connect_cases$unrecognized_url)
+
   expect_snapshot(
     resolve_trajectory_source("https://connect.example.com/other"),
     error = TRUE
@@ -839,46 +780,16 @@ test_that("a URL without a recognizable GUID errors rather than reading locally"
 })
 
 test_that("NULL source on Connect reads this content's traces", {
-  withr::local_envvar(
-    CONNECT_CONTENT_GUID = "ea3c1445-cb71-42df-a2f2-bdb18874ef41",
-    CONNECT_SERVER = "https://connect.example.com",
-    CONNECT_API_KEY = "key"
-  )
-
-  resolved <- resolve_trajectory_source(NULL)
-
-  expect_equal(resolved$kind, "connect")
-  expect_equal(resolved$guid, "ea3c1445-cb71-42df-a2f2-bdb18874ef41")
+  expect_source_member(connect_cases$null_on_connect)
 })
 
 test_that("NULL source uses the project deployment record", {
-  withr::local_envvar(
-    POSIT_PRODUCT = NA,
-    CONNECT_CONTENT_GUID = NA,
-    CONNECT_SERVER = NA,
-    CONNECT_API_KEY = "key"
-  )
-  dir <- withr::local_tempdir()
-  record_dir <- file.path(dir, "rsconnect", "documents", "app.R", "server")
-  dir.create(record_dir, recursive = TRUE)
-  writeLines(
-    c(
-      "name: my-agent",
-      "hostUrl: https://connect.example.com/__api__",
-      "url: https://connect.example.com/content/ea3c1445-cb71-42df-a2f2-bdb18874ef41/"
-    ),
-    file.path(record_dir, "my-agent.dcf")
-  )
-  withr::local_dir(dir)
-
-  resolved <- resolve_trajectory_source(NULL)
-
-  expect_equal(resolved$kind, "connect")
-  expect_equal(resolved$guid, "ea3c1445-cb71-42df-a2f2-bdb18874ef41")
-  expect_equal(resolved$client$server, "https://connect.example.com")
+  expect_source_member(connect_cases$null_deployment)
 })
 
 test_that("NULL source falls back to the local traces directory", {
+  expect_source_member(connect_cases$null_local)
+
   withr::local_envvar(
     POSIT_PRODUCT = NA,
     CONNECT_CONTENT_GUID = NA,

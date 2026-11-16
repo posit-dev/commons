@@ -162,3 +162,50 @@ expect_deployment_member <- function(member) {
     expect_identical(notices, unlist(case[["notice"]]) %||% character(), info = info)
   }
 }
+
+# The environment trajectories/connect.json starts each case with, then `env`.
+connect_fixture_env <- function(env = list()) {
+  values <- c(
+    POSIT_PRODUCT = NA,
+    CONNECT_CONTENT_GUID = NA,
+    CONNECT_SERVER = NA,
+    OTEL_EXPORTER_OTLP_TRACES_FILE = NA,
+    COMMONS_TRACES_DIR = NA,
+    CONNECT_API_KEY = "key"
+  )
+  for (name in names(env)) {
+    values[[name]] <- env[[name]] %||% NA
+  }
+  values
+}
+
+expect_source_member <- function(member) {
+  expect_gt(length(member[["cases"]]), 0)
+  for (case in member[["cases"]]) {
+    local({
+      info <- case[["name"]]
+      dir <- withr::local_tempdir()
+      write_fixture_files(dir, case)
+      withr::local_dir(dir)
+      withr::local_envvar(connect_fixture_env(case[["env"]]))
+      # Keeps a developer's rsconnect accounts out of the cases.
+      local_mocked_bindings(registered_connect_servers = function() character())
+      if (!is.null(case[["search"]])) {
+        httr2::local_mocked_responses(
+          connect_fixture_responses(list(), new.env(), search = case[["search"]])
+        )
+      }
+      expected <- case[["expected"]]
+      if (isTRUE(expected[["error"]])) {
+        expect_error(resolve_trajectory_source(case[["source"]]), info = info)
+        return()
+      }
+      resolved <- suppressMessages(resolve_trajectory_source(case[["source"]]))
+      expect_identical(resolved$kind, expected[["kind"]], info = info)
+      if (identical(expected[["kind"]], "connect")) {
+        expect_identical(resolved$guid, expected[["guid"]], info = info)
+        expect_identical(resolved$client$server, expected[["server"]], info = info)
+      }
+    })
+  }
+}

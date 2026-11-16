@@ -22,16 +22,38 @@ from commons._trajectory._deployment import (
     registered_connect_servers,
 )
 from commons._trajectory._source import (
+    ConnectSource,
+    LocalSource,
     content_url_guid,
     content_vanity_url,
     is_content_guid,
+    resolve_trajectory_source,
 )
+from tests._connect_fake import connect_fixture_server, serve_connect
 from tests._shared import load_shared_fixture
 
 CONNECT = load_shared_fixture("trajectories/connect")
 GUID = "ea3c1445-cb71-42df-a2f2-bdb18874ef41"
 PARSE_MEMBERS = ("content_guid", "content_url", "vanity_url", "window_param")
 RECORD_MEMBERS = ("record_search", "record_fields")
+SOURCE_MEMBERS = (
+    "guid_source",
+    "guid_server",
+    "content_url_source",
+    "dashboard_url_source",
+    "vanity_source",
+    "unrecognized_url",
+    "null_on_connect",
+    "null_deployment",
+    "null_local",
+)
+_CLEARED = (
+    "POSIT_PRODUCT",
+    "CONNECT_CONTENT_GUID",
+    "CONNECT_SERVER",
+    "OTEL_EXPORTER_OTLP_TRACES_FILE",
+    "COMMONS_TRACES_DIR",
+)
 
 
 def cases(members: Sequence[str]) -> list[Any]:
@@ -67,8 +89,23 @@ def write_fixture_files(directory: Path, case: dict[str, Any]) -> None:
         os.utime(directory / name, (mtime, mtime))
 
 
+def connect_env(monkeypatch: pytest.MonkeyPatch, env: dict[str, str | None]) -> None:
+    for name in _CLEARED:
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("CONNECT_API_KEY", "key")
+    for name, value in env.items():
+        if value is None:
+            monkeypatch.delenv(name, raising=False)
+        else:
+            monkeypatch.setenv(name, value)
+
+
 def test_every_member_is_run() -> None:
-    assert set(CONNECT) - {"description"} == {*PARSE_MEMBERS, *RECORD_MEMBERS}
+    assert set(CONNECT) - {"description"} == {
+        *PARSE_MEMBERS,
+        *RECORD_MEMBERS,
+        *SOURCE_MEMBERS,
+    }
 
 
 @_named("content_guid")
@@ -308,3 +345,64 @@ def test_no_registered_servers_without_rsconnect_python(
     monkeypatch.setitem(sys.modules, "rsconnect.metadata", None)
 
     assert registered_connect_servers() == []
+
+
+@pytest.mark.parametrize(("member", "case"), cases(SOURCE_MEMBERS))
+def test_sources_resolve_as_the_shared_fixture_pins(
+    member: dict[str, Any],
+    case: dict[str, Any],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    write_fixture_files(tmp_path, case)
+    monkeypatch.chdir(tmp_path)
+    connect_env(monkeypatch, case.get("env", {}))
+    if "search" in case:
+        serve_connect(monkeypatch, connect_fixture_server({}, search=case["search"])[0])
+    expected = case["expected"]
+    if expected.get("error"):
+        with pytest.raises((ValueError, LookupError)):
+            resolve_trajectory_source(case["source"])
+        return
+    resolved = resolve_trajectory_source(case["source"])
+    if expected["kind"] == "local":
+        assert isinstance(resolved, LocalSource)
+    else:
+        assert isinstance(resolved, ConnectSource)
+        assert (resolved.guid, resolved.client.server) == (
+            expected["guid"],
+            expected["server"],
+        )
+        resolved.client.close()
+
+
+def test_several_registered_servers_are_named_when_none_is_chosen(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write_servers(
+        [
+            _server("a", "https://one.example.com"),
+            _server("b", "https://two.example.com"),
+        ]
+    )
+    monkeypatch.chdir(tmp_path)
+    connect_env(monkeypatch, {})
+
+    with pytest.raises(ValueError, match="Registered Connect servers") as raised:
+        resolve_trajectory_source(GUID)
+
+    assert "https://one.example.com, https://two.example.com" in str(raised.value)
+
+
+def test_a_guid_source_uses_the_one_registered_server(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write_servers([_server("a", "https://one.example.com")])
+    monkeypatch.chdir(tmp_path)
+    connect_env(monkeypatch, {})
+
+    resolved = resolve_trajectory_source(GUID)
+
+    assert isinstance(resolved, ConnectSource)
+    assert resolved.client.server == "https://one.example.com"
+    resolved.client.close()

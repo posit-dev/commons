@@ -73,5 +73,74 @@
       {"name": "a continued field is read whole", "files": {"rsconnect/connect.example.com/me/my-agent.dcf": ["name: my-agent", "hostUrl:", "  https://connect.example.com/__api__", "url: https://connect.example.com/content/ea3c1445-cb71-42df-a2f2-bdb18874ef41/"]}, "expected": {"guid": "ea3c1445-cb71-42df-a2f2-bdb18874ef41", "server": "https://connect.example.com"}},
       {"name": "a file that is not DCF is skipped", "files": {"rsconnect/connect.example.com/me/broken.dcf": ["this line has no field name"], "rsconnect/connect.example.com/me/my-agent.dcf": ["name: my-agent", "hostUrl: https://connect.example.com/__api__", "url: https://connect.example.com/content/ea3c1445-cb71-42df-a2f2-bdb18874ef41/"]}, "expected": {"guid": "ea3c1445-cb71-42df-a2f2-bdb18874ef41", "server": "https://connect.example.com"}}
     ]
+  },
+  "guid_source": {
+    "description": "A content GUID reads that content from the server in CONNECT_SERVER. What `source` reads, given the environment and the deployment records in the working directory (`files`, as in `record_search`). `source` null is no source. `expected` is `{kind: \"local\"}`, `{kind: \"connect\", guid, server}` with the server the client sends requests to, or `{error: true}` when the read cannot start. No Connect server is registered with rsconnect. A case with `search` resolves a vanity URL against a double whose content search answers with those pages, as in connect.json's `vanity_search`.",
+    "cases": [
+      {"name": "a GUID source resolves to a Connect read", "env": {"CONNECT_SERVER": "https://connect.example.com"}, "source": "ea3c1445-cb71-42df-a2f2-bdb18874ef41", "expected": {"kind": "connect", "guid": "ea3c1445-cb71-42df-a2f2-bdb18874ef41", "server": "https://connect.example.com"}},
+      {"name": "a GUID source normalizes the server", "env": {"CONNECT_SERVER": "https://connect.example.com/__api__/"}, "source": "ea3c1445-cb71-42df-a2f2-bdb18874ef41", "expected": {"kind": "connect", "guid": "ea3c1445-cb71-42df-a2f2-bdb18874ef41", "server": "https://connect.example.com"}},
+      {"name": "an uppercase GUID source is kept as written", "env": {"CONNECT_SERVER": "https://connect.example.com"}, "source": "EA3C1445-CB71-42DF-A2F2-BDB18874EF41", "expected": {"kind": "connect", "guid": "EA3C1445-CB71-42DF-A2F2-BDB18874EF41", "server": "https://connect.example.com"}},
+      {"name": "a GUID source without an API key is an error", "env": {"CONNECT_SERVER": "https://connect.example.com", "CONNECT_API_KEY": null}, "source": "ea3c1445-cb71-42df-a2f2-bdb18874ef41", "expected": {"error": true}}
+    ]
+  },
+  "guid_server": {
+    "description": "The server for a GUID source: CONNECT_SERVER, then the server of the project's deployment record, then the one Connect server registered with rsconnect. With none of them, the read cannot start. Cases are as in `guid_source`.",
+    "cases": [
+      {"name": "a GUID source prefers the environment's server to the project's", "env": {"CONNECT_SERVER": "https://env.example.com"}, "files": {"rsconnect/documents/app.R/server/my-agent.dcf": ["name: my-agent", "hostUrl: https://project.example.com/__api__", "url: https://project.example.com/content/01234567-89ab-cdef-0123-456789abcdef/"]}, "source": "ea3c1445-cb71-42df-a2f2-bdb18874ef41", "expected": {"kind": "connect", "guid": "ea3c1445-cb71-42df-a2f2-bdb18874ef41", "server": "https://env.example.com"}},
+      {"name": "a GUID source takes its server from the project's deployment", "files": {"rsconnect/documents/app.R/server/my-agent.dcf": ["name: my-agent", "hostUrl: https://project.example.com/__api__", "url: https://project.example.com/content/01234567-89ab-cdef-0123-456789abcdef/"]}, "source": "ea3c1445-cb71-42df-a2f2-bdb18874ef41", "expected": {"kind": "connect", "guid": "ea3c1445-cb71-42df-a2f2-bdb18874ef41", "server": "https://project.example.com"}},
+      {"name": "a GUID source with no server to use is an error", "source": "ea3c1445-cb71-42df-a2f2-bdb18874ef41", "expected": {"error": true}}
+    ]
+  },
+  "content_url_source": {
+    "description": "A content URL reads that content from the server the URL names. Cases are as in `guid_source`.",
+    "cases": [
+      {"name": "a content URL source carries its own server", "source": "https://connect.example.com/content/ea3c1445-cb71-42df-a2f2-bdb18874ef41/", "expected": {"kind": "connect", "guid": "ea3c1445-cb71-42df-a2f2-bdb18874ef41", "server": "https://connect.example.com"}},
+      {"name": "a content URL's server is preferred to the environment's", "env": {"CONNECT_SERVER": "https://env.example.com"}, "source": "https://connect.example.com/content/ea3c1445-cb71-42df-a2f2-bdb18874ef41/", "expected": {"kind": "connect", "guid": "ea3c1445-cb71-42df-a2f2-bdb18874ef41", "server": "https://connect.example.com"}},
+      {"name": "a content URL source without an API key is an error", "env": {"CONNECT_API_KEY": null}, "source": "https://connect.example.com/content/ea3c1445-cb71-42df-a2f2-bdb18874ef41/", "expected": {"error": true}}
+    ]
+  },
+  "dashboard_url_source": {
+    "description": "A dashboard URL reads that content from the server the URL names. Cases are as in `guid_source`.",
+    "cases": [
+      {"name": "a dashboard URL source carries its own server", "source": "https://connect.example.com/connect/#/apps/ea3c1445-cb71-42df-a2f2-bdb18874ef41/access", "expected": {"kind": "connect", "guid": "ea3c1445-cb71-42df-a2f2-bdb18874ef41", "server": "https://connect.example.com"}},
+      {"name": "a dashboard URL without a dashboard path", "source": "https://connect.example.com/#/apps/ea3c1445-cb71-42df-a2f2-bdb18874ef41", "expected": {"kind": "connect", "guid": "ea3c1445-cb71-42df-a2f2-bdb18874ef41", "server": "https://connect.example.com"}}
+    ]
+  },
+  "vanity_source": {
+    "description": "A vanity URL is resolved to its content through the content search of the server the URL names. Cases are as in `guid_source`.",
+    "cases": [
+      {"name": "a vanity URL is resolved through Connect", "source": "https://connect.example.com/content/my-agent", "search": [{"results": [{"guid": "ea3c1445-cb71-42df-a2f2-bdb18874ef41", "vanity_url": "https://connect.example.com/my-agent/"}], "total": 1}], "expected": {"kind": "connect", "guid": "ea3c1445-cb71-42df-a2f2-bdb18874ef41", "server": "https://connect.example.com"}},
+      {"name": "a vanity URL under a path searches that server", "source": "https://connect.example.com/rsc/content/my-agent", "search": [{"results": [{"guid": "ea3c1445-cb71-42df-a2f2-bdb18874ef41", "vanity_url": "https://connect.example.com/rsc/my-agent/"}], "total": 1}], "expected": {"kind": "connect", "guid": "ea3c1445-cb71-42df-a2f2-bdb18874ef41", "server": "https://connect.example.com/rsc"}},
+      {"name": "a vanity URL that matches no content is an error", "source": "https://connect.example.com/content/missing", "search": [{"results": [], "total": 1}], "expected": {"error": true}}
+    ]
+  },
+  "unrecognized_url": {
+    "description": "An http or https URL that names no content is an error, and is never read as a local directory. Cases are as in `guid_source`.",
+    "cases": [
+      {"name": "a URL without a recognizable GUID errors rather than reading locally", "source": "https://connect.example.com/other", "expected": {"error": true}},
+      {"name": "a server's own URL is an error", "source": "https://connect.example.com/", "expected": {"error": true}}
+    ]
+  },
+  "null_on_connect": {
+    "description": "With no source, content running on Connect reads its own traces, from CONNECT_CONTENT_GUID on CONNECT_SERVER. Cases are as in `guid_source`.",
+    "cases": [
+      {"name": "NULL source on Connect reads this content's traces", "env": {"CONNECT_CONTENT_GUID": "ea3c1445-cb71-42df-a2f2-bdb18874ef41", "CONNECT_SERVER": "https://connect.example.com"}, "source": null, "expected": {"kind": "connect", "guid": "ea3c1445-cb71-42df-a2f2-bdb18874ef41", "server": "https://connect.example.com"}},
+      {"name": "NULL source on Connect ignores the project's deployment", "env": {"CONNECT_CONTENT_GUID": "ea3c1445-cb71-42df-a2f2-bdb18874ef41", "CONNECT_SERVER": "https://connect.example.com"}, "files": {"rsconnect/documents/app.R/server/my-agent.dcf": ["name: my-agent", "hostUrl: https://project.example.com/__api__", "url: https://project.example.com/content/01234567-89ab-cdef-0123-456789abcdef/"]}, "source": null, "expected": {"kind": "connect", "guid": "ea3c1445-cb71-42df-a2f2-bdb18874ef41", "server": "https://connect.example.com"}},
+      {"name": "NULL source on Connect without a server is an error", "env": {"POSIT_PRODUCT": "CONNECT", "CONNECT_CONTENT_GUID": "ea3c1445-cb71-42df-a2f2-bdb18874ef41"}, "source": null, "expected": {"error": true}}
+    ]
+  },
+  "null_deployment": {
+    "description": "With no source off Connect, a project with a deployment record reads that content from the record's server. Cases are as in `guid_source`.",
+    "cases": [
+      {"name": "NULL source uses the project deployment record", "files": {"rsconnect/documents/app.R/server/my-agent.dcf": ["name: my-agent", "hostUrl: https://connect.example.com/__api__", "url: https://connect.example.com/content/ea3c1445-cb71-42df-a2f2-bdb18874ef41/"]}, "source": null, "expected": {"kind": "connect", "guid": "ea3c1445-cb71-42df-a2f2-bdb18874ef41", "server": "https://connect.example.com"}},
+      {"name": "NULL source uses the record's server over the environment's", "env": {"CONNECT_SERVER": "https://env.example.com"}, "files": {"rsconnect/documents/app.R/server/my-agent.dcf": ["name: my-agent", "hostUrl: https://connect.example.com/__api__", "url: https://connect.example.com/content/ea3c1445-cb71-42df-a2f2-bdb18874ef41/"]}, "source": null, "expected": {"kind": "connect", "guid": "ea3c1445-cb71-42df-a2f2-bdb18874ef41", "server": "https://connect.example.com"}}
+    ]
+  },
+  "null_local": {
+    "description": "With no source off Connect and no deployment record, the local traces directory is read. Cases are as in `guid_source`.",
+    "cases": [
+      {"name": "NULL source falls back to the local traces directory", "source": null, "expected": {"kind": "local"}},
+      {"name": "a record without a GUID leaves the local traces directory", "files": {"rsconnect/documents/app.R/server/old.dcf": ["name: old", "hostUrl: https://connect.example.com/__api__", "url: https://connect.example.com/my-agent/"]}, "source": null, "expected": {"kind": "local"}}
+    ]
   }
 }

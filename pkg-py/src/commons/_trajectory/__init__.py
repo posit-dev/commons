@@ -14,7 +14,7 @@ from ._build import (
     drop_contentless,
     filter_chat_spans,
 )
-from ._source import read_source_spans, resolve_trajectory_source
+from ._source import ConnectSource, read_source_spans, resolve_trajectory_source
 
 __all__ = ["ExchangeProvenance", "Trajectory", "trajectory_read"]
 
@@ -61,7 +61,12 @@ def trajectory_read(
     keep = _check_n(n)
     low = window_bound(since, "since")
     high = window_bound(until, "until")
-    spans = read_source_spans(resolve_trajectory_source(source))
+    resolved = resolve_trajectory_source(source)
+    try:
+        spans = read_source_spans(resolved)
+    finally:
+        if isinstance(resolved, ConnectSource):
+            resolved.client.close()
     spans = filter_chat_spans(spans, low, high)
     trajectories = drop_contentless(build_trajectories(spans))
     if keep is not None:
