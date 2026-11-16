@@ -139,6 +139,9 @@ test_that("only a completed final assistant response is attachable", {
 
 test_that("conversations carry their last chat activity time", {
   expect_trajectory_member(build$last_active)
+  case <- build$last_active$cases[[1]]
+  result <- trajectory_fixture_run(build$last_active, case)
+  expect_s3_class(result$trajectories[[1]]$last_active, "POSIXct")
 })
 
 test_that("trajectory_read associates session users with their conversations", {

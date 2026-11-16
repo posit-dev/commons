@@ -366,6 +366,10 @@ def _exchange_signature(exchange: Sequence[Turn]) -> list[dict[str, Any]]:
     ]
 
 
+def _signature_text(signature: object) -> str:
+    return json.dumps(signature, sort_keys=True, default=repr)
+
+
 def _content_signature(content: object) -> dict[str, Any]:
     if isinstance(content, ContentText):
         return {"type": "text", "text": content.text}
@@ -424,11 +428,15 @@ def _associate_provenance(
     an edited or restored conversation never moves a record to another
     exchange.
     """
-    canonical = [_exchange_signature(e) for e in exchanges]
+    # Compared as JSON text, so true and 1 differ as they do in R's identical().
+    canonical = [_signature_text(_exchange_signature(e)) for e in exchanges]
     claims: list[list[ExchangeProvenance]] = [[] for _ in exchanges]
     for candidate in candidates:
         length = len(candidate.signature)
-        if 0 < length <= len(canonical) and candidate.signature == canonical[:length]:
+        if (
+            0 < length <= len(canonical)
+            and [_signature_text(e) for e in candidate.signature] == canonical[:length]
+        ):
             claims[length - 1].append(candidate.record)
 
     records: list[ExchangeProvenance] = []
