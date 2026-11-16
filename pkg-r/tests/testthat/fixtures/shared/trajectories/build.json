@@ -183,7 +183,7 @@
     ]
   },
   "last_active": {
-    "description": "`last_active` is the time of the chat span that supplies the conversation's turns.",
+    "description": "`last_active` is the time of the chat span that supplies the conversation's turns. The case with a time past the range of dates compares only turns, because the range of times each language can represent differs.",
     "cases": [
       {
         "name": "each conversation is as recent as its latest chat span",
@@ -469,6 +469,30 @@
           {"trace": "t1", "span": "provenance", "parent": "turn", "name": "commons_provenance", "attributes": {"commons.provenance.tag": "A", "commons.citation.candidates": "not json"}}
         ],
         "trajectories": [{"id": "conv-a", "provenance": [{"tag": "A", "decisions": []}]}]
+      },
+      {
+        "name": "a history that differs only in a value's type does not match",
+        "spans": [
+          {"trace": "t1", "span": "turn", "name": "commons_conversation_turn", "end": "10", "attributes": {"commons.provenance.tag": "A", "commons.citation.candidates": []}},
+          {"trace": "t1", "span": "chat", "parent": "turn", "chat": true, "conversation": "conv-a", "end": "10",
+            "input": [
+              {"role": "user", "parts": [{"type": "text", "content": "Q1"}]},
+              {"role": "assistant", "parts": [{"type": "tool_call", "id": "c1", "name": "roll_die", "arguments": {"exact": true}}]},
+              {"role": "tool", "parts": [{"type": "tool_call_response", "id": "c1", "response": 4}]}
+            ],
+            "output": [{"role": "assistant", "parts": [{"type": "text", "content": "A1"}]}]},
+          {"trace": "t2", "span": "turn", "name": "commons_conversation_turn", "end": "20", "attributes": {"commons.provenance.tag": "B", "commons.citation.candidates": []}},
+          {"trace": "t2", "span": "chat", "parent": "turn", "chat": true, "conversation": "conv-a", "end": "20",
+            "input": [
+              {"role": "user", "parts": [{"type": "text", "content": "Q1"}]},
+              {"role": "assistant", "parts": [{"type": "tool_call", "id": "c1", "name": "roll_die", "arguments": {"exact": 1}}]},
+              {"role": "tool", "parts": [{"type": "tool_call_response", "id": "c1", "response": 4}]},
+              {"role": "assistant", "parts": [{"type": "text", "content": "A1"}]},
+              {"role": "user", "parts": [{"type": "text", "content": "Q2"}]}
+            ],
+            "output": [{"role": "assistant", "parts": [{"type": "text", "content": "A2"}]}]}
+        ],
+        "trajectories": [{"id": "conv-a", "provenance": [{"tag": null, "decisions": []}, {"tag": "B", "decisions": []}]}]
       }
     ]
   },
@@ -637,7 +661,7 @@
       {"name": "n keeps the most recent conversations", "n": 2, "trajectories": [{"id": "t200"}, {"id": "t300"}]},
       {"name": "n beyond the count keeps every conversation", "n": 5, "trajectories": [{"id": "t100"}, {"id": "t200"}, {"id": "t300"}]},
       {"name": "a whole number written with a fraction is accepted", "n": 1.0, "trajectories": [{"id": "t300"}]},
-      {"name": "n applies after the window", "n": 1, "since": 150, "trajectories": [{"id": "t300"}]},
+      {"name": "n applies after the window", "n": 1, "until": 250, "trajectories": [{"id": "t200"}]},
       {
         "name": "n counts only conversations with content",
         "n": 1,
