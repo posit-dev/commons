@@ -637,6 +637,7 @@
       {"name": "n keeps the most recent conversations", "n": 2, "trajectories": [{"id": "t200"}, {"id": "t300"}]},
       {"name": "n beyond the count keeps every conversation", "n": 5, "trajectories": [{"id": "t100"}, {"id": "t200"}, {"id": "t300"}]},
       {"name": "a whole number written with a fraction is accepted", "n": 1.0, "trajectories": [{"id": "t300"}]},
+      {"name": "n applies after the window", "n": 1, "since": 150, "trajectories": [{"id": "t300"}]},
       {
         "name": "n counts only conversations with content",
         "n": 1,
@@ -652,6 +653,91 @@
       {"name": "a fraction is rejected", "n": 1.5, "error": true},
       {"name": "a string is rejected", "n": "x", "error": true},
       {"name": "a logical is rejected", "n": true, "error": true}
+    ]
+  },
+  "window": {
+    "description": "`since` keeps the chat spans that start at or after it, and `until` the chat spans that start before it. Other spans are kept whatever their time, so a turn span outside the window still gives its record. A conversation left with no chat span is not returned.",
+    "spans": [
+      {"trace": "t100", "span": "s1", "chat": true, "input": [{"role": "user", "parts": [{"type": "text", "content": "Hi."}]}], "start": "100000000000", "end": "101000000000"},
+      {"trace": "t200", "span": "s2", "chat": true, "input": [{"role": "user", "parts": [{"type": "text", "content": "Hi."}]}], "start": "200000000000", "end": "201000000000"},
+      {"trace": "t300", "span": "s3", "chat": true, "input": [{"role": "user", "parts": [{"type": "text", "content": "Hi."}]}], "start": "300000000000", "end": "301000000000"}
+    ],
+    "cases": [
+      {"name": "since keeps chat activity at or after it", "since": 200, "trajectories": [{"id": "t200"}, {"id": "t300"}]},
+      {"name": "until keeps chat activity before it", "until": 200, "trajectories": [{"id": "t100"}]},
+      {"name": "since and until together bound the window", "since": 150, "until": 250, "trajectories": [{"id": "t200"}]},
+      {"name": "a window with no chat activity returns nothing", "since": 400, "trajectories": []},
+      {
+        "name": "a turn span outside the window still gives its record",
+        "since": 100,
+        "spans": [
+          {"trace": "t1", "span": "turn", "name": "commons_conversation_turn", "start": "1", "end": "2", "attributes": {"commons.provenance.tag": "A"}},
+          {"trace": "t1", "span": "chat", "parent": "turn", "chat": true, "conversation": "conv-a",
+            "input": [{"role": "user", "parts": [{"type": "text", "content": "Q1"}]}],
+            "output": [{"role": "assistant", "parts": [{"type": "text", "content": "A1"}]}], "start": "150000000000", "end": "151000000000"}
+        ],
+        "trajectories": [{"id": "conv-a", "provenance": [{"tag": "A", "decisions": []}]}]
+      }
+    ]
+  },
+  "as_of": {
+    "description": "A conversation that continues past `until` is returned as it was at `until`: its turns and `last_active` come from its latest chat span that starts before `until`.",
+    "spans": [
+      {"trace": "t1", "span": "s1", "chat": true, "input": [
+        {"role": "user", "parts": [{"type": "text", "content": "Roll a die."}]},
+        {"role": "assistant", "parts": [{"type": "tool_call", "id": "c1", "name": "roll_die", "arguments": {"sides": 6}}]},
+        {"role": "tool", "parts": [{"type": "tool_call_response", "id": "c1", "response": 4}]}
+      ], "start": "100000000000", "end": "101000000000"},
+      {"trace": "t1", "span": "s2", "chat": true, "input": [
+        {"role": "user", "parts": [{"type": "text", "content": "Roll a die."}]},
+        {"role": "assistant", "parts": [{"type": "tool_call", "id": "c1", "name": "roll_die", "arguments": {"sides": 6}}]},
+        {"role": "tool", "parts": [{"type": "tool_call_response", "id": "c1", "response": 4}]}
+      ], "output": [{"role": "assistant", "parts": [{"type": "text", "content": "You rolled a 4."}]}], "start": "300000000000", "end": "301000000000"}
+    ],
+    "cases": [
+      {
+        "name": "without until the latest chat span supplies the history",
+        "trajectories": [{"id": "t1", "last_active": 301, "turns": [
+          {"role": "user", "contents": [{"type": "text", "text": "Roll a die."}]},
+          {"role": "assistant", "contents": [{"type": "tool_request", "id": "c1", "name": "roll_die", "arguments": {"sides": 6}}]},
+          {"role": "user", "contents": [{"type": "tool_result", "value": 4, "request": {"id": "c1", "name": "roll_die"}}]},
+          {"role": "assistant", "contents": [{"type": "text", "text": "You rolled a 4."}]}
+        ]}]
+      },
+      {
+        "name": "a conversation continuing past until returns its history as of until",
+        "until": 200,
+        "trajectories": [{"id": "t1", "last_active": 101, "turns": [
+          {"role": "user", "contents": [{"type": "text", "text": "Roll a die."}]},
+          {"role": "assistant", "contents": [{"type": "tool_request", "id": "c1", "name": "roll_die", "arguments": {"sides": 6}}]},
+          {"role": "user", "contents": [{"type": "tool_result", "value": 4, "request": {"id": "c1", "name": "roll_die"}}]}
+        ]}]
+      }
+    ]
+  },
+  "local_midnight": {
+    "description": "A window bound given as a date, or as a string with no time, means midnight in local time. Each case gives the bound as a `date` or a `string`. The runner sets the local time zone to America/Denver, and `utc` is the instant the bound means, written as a UTC time.",
+    "cases": [
+      {"name": "a date means local midnight", "date": "2026-07-22", "utc": "2026-07-22 06:00:00"},
+      {"name": "a date string means local midnight", "string": "2026-07-22", "utc": "2026-07-22 06:00:00"},
+      {"name": "a winter date means local midnight in standard time", "string": "2026-01-15", "utc": "2026-01-15 07:00:00"}
+    ]
+  },
+  "complete_parse": {
+    "description": "A window bound string is a date, `YYYY-MM-DD`, followed by an optional time, `HH:MM` or `HH:MM:SS`, after a space or a `T`. Every field is zero-padded, the whole string must parse, and it is read in local time. The runner sets the local time zone to America/Denver, and `utc` is the instant the bound means, written as a UTC time, or null when the bound is rejected.",
+    "cases": [
+      {"name": "a date and time with a space", "string": "2026-07-22 14:30:00", "utc": "2026-07-22 20:30:00"},
+      {"name": "a date and time with a T", "string": "2026-07-22T14:30:00", "utc": "2026-07-22 20:30:00"},
+      {"name": "a time without seconds", "string": "2026-07-22 14:30", "utc": "2026-07-22 20:30:00"},
+      {"name": "a time without seconds after a T", "string": "2026-07-22T14:30", "utc": "2026-07-22 20:30:00"},
+      {"name": "trailing text is rejected", "string": "2026-07-22oops", "utc": null},
+      {"name": "a time zone suffix is rejected", "string": "2026-07-22 14:30:00Z", "utc": null},
+      {"name": "fractional seconds are rejected", "string": "2026-07-22 14:30:00.5", "utc": null},
+      {"name": "a month without its leading zero is rejected", "string": "2026-7-22", "utc": null},
+      {"name": "an hour without its leading zero is rejected", "string": "2026-07-22 9:30", "utc": null},
+      {"name": "a day the month does not have is rejected", "string": "2026-02-30", "utc": null},
+      {"name": "text that is not a date is rejected", "string": "not a date", "utc": null},
+      {"name": "an empty string is rejected", "string": "", "utc": null}
     ]
   }
 }

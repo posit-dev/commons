@@ -340,3 +340,24 @@ expect_trajectory_member <- function(member, read = FALSE) {
     expect_trajectories(result[["trajectories"]], case[["trajectories"]], info)
   }
 }
+
+expect_window_bound_member <- function(member) {
+  withr::local_timezone("America/Denver")
+  expect_gt(length(member[["cases"]]), 0)
+  for (case in member[["cases"]]) {
+    value <- if (!is.null(case[["date"]])) {
+      as.Date(case[["date"]])
+    } else {
+      case[["string"]]
+    }
+    if (is.null(case[["utc"]])) {
+      expect_error(check_window_bound(value), "must be", info = case[["name"]])
+    } else {
+      expect_equal(
+        as.numeric(check_window_bound(value)),
+        as.numeric(as.POSIXct(case[["utc"]], tz = "UTC")),
+        info = case[["name"]]
+      )
+    }
+  }
+}

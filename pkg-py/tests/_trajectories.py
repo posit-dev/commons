@@ -8,6 +8,7 @@ import json
 import logging
 import warnings
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -41,6 +42,7 @@ BUILD_MEMBERS = (
     "incomplete_call",
 )
 READ_MEMBERS = ("contentless", "n", "window", "as_of")
+BOUND_MEMBERS = ("local_midnight", "complete_parse")
 
 
 def cases(members: Sequence[str]) -> list[Any]:
@@ -140,6 +142,10 @@ class _Notices(logging.Handler):
         self.notices.append("message")
 
 
+def _instant(seconds: float | None) -> datetime | None:
+    return None if seconds is None else datetime.fromtimestamp(seconds, UTC)
+
+
 def run_case(
     member: dict[str, Any], case: dict[str, Any], directory: Path | None = None
 ) -> tuple[dict[str, Trajectory], list[str]]:
@@ -158,7 +164,12 @@ def run_case(
             else:
                 trace = directory / "trace-1.jsonl"
                 trace.write_text(fixture_line(spans) + "\n", encoding="utf-8")
-                result = trajectory_read(directory, n=case.get("n"))
+                result = trajectory_read(
+                    directory,
+                    n=case.get("n"),
+                    since=_instant(case.get("since")),
+                    until=_instant(case.get("until")),
+                )
     finally:
         logger.removeHandler(handler)
         logger.setLevel(level)
