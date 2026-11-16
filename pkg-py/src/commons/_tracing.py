@@ -143,7 +143,7 @@ def warn_if_connect_tracing_unsupported(*, client: ConnectClient | None = None) 
         warnings.warn(
             f"This server is running Connect {settings['version']}, but "
             f"trajectory logging requires Connect >= {MINIMUM_TRACING_VERSION}. "
-            "Please ask your server administration to upgrade.",
+            "Please ask your server administrator to upgrade.",
             stacklevel=2,
         )
     elif settings.get("allow_content_instrumentation") is False:
