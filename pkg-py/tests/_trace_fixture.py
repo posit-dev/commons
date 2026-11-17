@@ -82,8 +82,11 @@ def documents(directory: Path) -> Any:
     return context_layer(paths)
 
 
-def agent(responses: list[list[Any]], layer: Any) -> Commons:
-    built = Commons(scripted_chat(responses), source(), context_layer=layer, log=True)
+def agent(responses: list[list[Any]], layer: Any, conversation_id: str) -> Commons:
+    """A logging agent whose host has set a conversation id, as shinychat does."""
+    client = scripted_chat(responses)
+    client.conversation_id = conversation_id
+    built = Commons(client, source(), context_layer=layer, log=True)
     assert built._tracing, "trajectory logging is not live"
     return built
 
@@ -96,11 +99,12 @@ async def converse(layer: Any) -> None:
             cited("Each order is one row.", "Orders are counted twice."),
         ],
         layer,
+        "first",
     )
     await collect(first, "How many orders are there?")
     await collect(first, "Can an order appear twice?")
 
-    second = agent([text("Hello. Ask me about orders or customers.")], layer)
+    second = agent([text("Hello. Ask me about orders or customers.")], layer, "second")
     await collect(second, "Hello")
 
 
