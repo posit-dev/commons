@@ -372,6 +372,7 @@ class Commons(Chat[Any, Any]):
         controller: StreamController | None = None,
         user: str | None = None,
     ) -> AsyncGenerator[str | Content, None]:
+        # `raw` is the stream chatlas returns, before citation projection.
         # chatlas starts its spans on the first pull of `raw`, under whatever
         # is current then. The turn span is current only while `raw` is
         # pulled: this generator's body runs in whichever context pulls it,
