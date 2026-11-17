@@ -449,7 +449,7 @@
     "href": "reference/Commons.set_turns.html",
     "title": "Commons.set_turns()",
     "section": "",
-    "text": "Replace the conversation, dropping any reminder queued for it.\n\n\nUsage\nSource\n\n\nCommons.set_turns(turns)\n\n\nClearing the turns starts a new conversation, so an id the agent generated is dropped. An id the caller chose stays.",
+    "text": "Replace the conversation, dropping any reminder queued for it.\n\n\nUsage\nSource\n\n\nCommons.set_turns(turns)",
     "crumbs": [
       "API Reference",
       "Commons Methods",
