@@ -1,4 +1,14 @@
-"""The span that records an answer's provenance tag and citation decisions."""
+"""Test the span a logging agent records for each completed answer.
+
+A trace reader takes an answer's provenance tag and citation decisions from
+this span, so both packages must write it the same way. These tests check the
+span and attribute names, and the JSON that the decisions serialize to,
+against the shared fixture, and that the tag attribute is absent when an
+answer has no tag. They also check that a completed stream records the span
+under its turn span, that nothing is recorded by an agent that does not log or
+by a stream that is abandoned, and that a failure to record the span does not
+stop the answer.
+"""
 
 from __future__ import annotations
 
