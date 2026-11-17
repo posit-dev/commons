@@ -42,6 +42,8 @@ On Posit Connect, users can now share conversations, documents, plots, or tables
   * `data_source()` imports Databricks metric views from Unity Catalog through ODBC. It previously listed them as plain views and could not read their definitions (#496).
   * `data_source()` given a DBI connection and no `tables` selects the tables and views in the connection's current schema. When that schema has too many tables to list in the system prompt, the agent finds them with `search_catalog` instead, as for Snowflake and Databricks connections. A `DBI::Id` naming only a schema, like `DBI::Id(schema = "marts")`, selects every table and view in that schema. A data dictionary can name those tables relatively, like `orders` for `marts.orders`, when the name matches only one selected table.
 
+* A number of fixes for Snowflake/Databricks semantic models (#439, #441, #446, #447, #486).
+
 * A number of bug fixes in `describle_table()` the tool that the agent uses to grab table metadata and documentation:
   * `describe_table` works on SQL Server, Oracle, and other databases whose SQL has no `LIMIT` clause (#468).
   * `describe_table` shows at most 50 columns and reports how many additional columns it omits, keeping wide-table descriptions compact. Columns documented in the data dictionary are shown first. The system prompt no longer limits the agent to columns that `describe_table` or `search_context` confirmed (#475).
@@ -51,6 +53,8 @@ On Posit Connect, users can now share conversations, documents, plots, or tables
 * A number of security hardenings in `run_r()`:
   * The `run_r` worker reads no R startup files, so variables set in a `.Renviron` file, like API keys, stay out of reach of model-written code.
   * R code run by `run_r` can no longer send a signal to the application process's ID or to its process group. On Linux, the programs it starts can also no longer leave its process group, so they all stop when the R session ends.
+  * The `run_r` worker has its own temporary folder, so model-written code can no longer read or write files in the application's temporary directory (#463).
+  * `run_r` returns plots as image data rather than file paths, so model-written code can no longer pass other files on the host to the model or the viewer (#515).
 
 * `trajectory_read()` now returns a `user` field with the originating Shiny session username supplied by Connect. With `log = TRUE`, authenticated session users are recorded with conversation trajectories; older logs and anonymous sessions return `NA_character_` (#316).
 
