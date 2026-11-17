@@ -332,7 +332,7 @@ app = App(app_ui, app_server)
 
 # Logging conversations
 
-Pass `log=True` to [commons.Commons()](../reference/Commons.md#commons.Commons) to record each conversation with OpenTelemetry. When it is built, the agent checks the tracing setup. On Posit Connect it warns about an unsupported server and turns on Content Observability for you. Off Connect it logs only when a tracer provider is already configured, and otherwise does nothing. Install the extra that logging needs with `pip install 'commons[tracing]'`.
+Pass `log=True` to [commons.Commons()](../reference/Commons.md#commons.Commons) to record each conversation with OpenTelemetry. When it is built, the agent checks the tracing setup. On Posit Connect it warns about an unsupported server and turns on Content Observability for you. Off Connect it logs only when a tracer provider is already configured, and otherwise does nothing. Install the extra that logging needs with `pip install 'commons[tracing]'`. The recorded spans can contain whole conversations, including query results and plots, so read [Security and governance](governance.md#logging-conversations) before you turn logging on.
 
 commons configures no exporter. Where the spans go is your OpenTelemetry setup. To write them to local files, install a tracer provider with a file exporter before you build the agent:
 
