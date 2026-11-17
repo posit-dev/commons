@@ -367,10 +367,6 @@ class Commons(Chat[Any, Any]):
         user: str | None = None,
     ) -> AsyncGenerator[str | Content, None]:
         # `raw` is the stream chatlas returns, before citation projection.
-        # chatlas starts its spans on the first pull of `raw`, under whatever
-        # is current then. The turn span is current only while `raw` is
-        # pulled: this generator's body runs in whichever context pulls it,
-        # so a span attached across a `yield` could be detached in another.
         turn = start_turn_span(user) if self._tracing else None
         try:
             scanner = CitationScanner(self._corpus)
@@ -383,6 +379,11 @@ class Commons(Chat[Any, Any]):
             )
             try:
                 while True:
+                    # chatlas starts its spans on the first pull of `raw`,
+                    # under whatever is current then. The turn span is current
+                    # only while `raw` is pulled: this generator's body runs in
+                    # whichever context pulls it, so a span attached across a
+                    # `yield` could be detached in another.
                     with as_current(turn):
                         try:
                             chunk = await anext(raw)
