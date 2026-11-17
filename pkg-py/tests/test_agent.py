@@ -17,7 +17,7 @@ from commons._connect import ConnectClient
 from commons._reminders import RESTORED_CONVERSATION_REMINDER, ContentTurnReminder
 from commons._tracing import CAPTURE_VAR
 
-from ._connect_double import connect_double
+from ._connect_fake import connect_fake
 from ._provider import ScriptedProvider, scripted_chat, text
 
 DICTIONARY = """
@@ -725,7 +725,7 @@ def test_a_failed_construction_changes_nothing_on_connect(
     monkeypatch.setattr(
         ConnectClient,
         "from_env",
-        classmethod(lambda cls, **_: connect_double(seen=seen)[0]),
+        classmethod(lambda cls, **_: connect_fake(seen=seen)[0]),
     )
     monkeypatch.setenv(CAPTURE_VAR, "true")
     with pytest.raises(ValueError, match="network"):

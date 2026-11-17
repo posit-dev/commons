@@ -34,7 +34,7 @@ from commons._tracing import (
 )
 
 from . import _spans
-from ._connect_double import connect_double
+from ._connect_fake import connect_fake
 from ._fresh_interpreter import run_in_fresh_interpreter
 from ._shared import load_shared_fixture
 
@@ -396,12 +396,12 @@ def test_enablement_without_credentials_warns_instead_of_raising(
 
 @pytest.fixture
 def connect_requests(monkeypatch: pytest.MonkeyPatch) -> list[httpx.Request]:
-    """Route `ConnectClient.from_env()` to a Connect double; yield what it saw."""
+    """Route `ConnectClient.from_env()` to a Connect fake; yield what it saw."""
     seen: list[httpx.Request] = []
     monkeypatch.setattr(
         ConnectClient,
         "from_env",
-        classmethod(lambda cls, **_: connect_double(seen=seen)[0]),
+        classmethod(lambda cls, **_: connect_fake(seen=seen)[0]),
     )
     return seen
 
@@ -496,7 +496,7 @@ def test_logging_with_the_sdk_disabled_is_silent_and_leaves_capture_alone() -> N
 
 def test_logging_on_connect_without_a_provider_turns_on_content_observability() -> None:
     # A fresh process has no provider, as content on Connect does before the
-    # setting is on. The Connect double stands in for the server.
+    # setting is on. The Connect fake stands in for the server.
     output = run_in_fresh_interpreter(
         f"""
         import sys
@@ -506,11 +506,11 @@ def test_logging_on_connect_without_a_provider_turns_on_content_observability() 
 
         from commons._connect import ConnectClient
         from commons._tracing import enable_trajectory_tracing
-        from tests._connect_double import connect_double
+        from tests._connect_fake import connect_fake
 
         seen = []
         ConnectClient.from_env = classmethod(
-            lambda cls, **_: connect_double(seen=seen)[0]
+            lambda cls, **_: connect_fake(seen=seen)[0]
         )
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")

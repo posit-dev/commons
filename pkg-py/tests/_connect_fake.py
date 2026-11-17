@@ -1,4 +1,4 @@
-"""A Posit Connect server double for tests that grant or look up users.
+"""A fake Posit Connect server for tests that grant or look up users.
 
 It also serves the content item ``content-guid``, with Content Observability
 off, and accepts a change to it.
@@ -16,7 +16,7 @@ from commons._connect import ConnectClient
 DIRECTORY = {"ada": "guid-ada", "grace": "guid-grace"}
 
 
-def connect_double(
+def connect_fake(
     *,
     users: dict[str, str] | None = None,
     permitted: Any = None,
