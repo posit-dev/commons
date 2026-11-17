@@ -332,9 +332,9 @@ app = App(app_ui, app_server)
 
 # Logging conversations
 
-Pass `log=True` to [commons.Commons()](../reference/Commons.md#commons.Commons) to record each conversation with OpenTelemetry. When it is built, the agent checks the tracing setup. On Posit Connect it warns about an unsupported server and turns on Content Observability for you. Off Connect it logs only when a tracer provider is already configured, and otherwise does nothing. Install the extra that logging needs with `pip install 'commons[tracing]'`.
+Pass `log=True` to [commons.Commons()](../reference/Commons.md#commons.Commons) to record each conversation with OpenTelemetry. The agent checks the tracing setup at the time it is built. On Posit Connect, it will warn about an unsupported server and turns on Content Observability for you. In a commons deployment running somwhere other than Posit Connect, it logs only when a tracer provider is already configured, and otherwise does nothing. To use tracing, install the extra dependency group that logging needs with `pip install 'commons[tracing]'`. The recorded spans can contain whole conversations, including query results and plots, so read [Security and governance](governance.md#logging-conversations) before you turn logging on.
 
-commons configures no exporter. Where the spans go is your OpenTelemetry setup. To write them to local files, install a tracer provider with a file exporter before you build the agent:
+By default, commons configures no exporter, so where the telemetry spans go depends on your OpenTelemetry setup. To write them to local files, install a tracer provider with a file exporter before you build the agent:
 
 ``` python
 from pathlib import Path
@@ -352,7 +352,7 @@ provider.add_span_processor(BatchSpanProcessor(FileSpanExporter(path=str(trace_f
 trace.set_tracer_provider(provider)
 ```
 
-On Posit Connect (version 2026.09.0 or later) the server exports the spans itself, so this recipe is not needed there. An administrator must set `OpenTelemetry.Enabled` and `OpenTelemetry.AllowContentInstrumentation` to `true`. When the agent runs on Connect in a process with no active tracer provider, it turns on the content's Content Observability setting itself and warns that logging begins once the content restarts; otherwise, use the content's Settings \> Monitoring \> Traces panel. Once logging is live, `share_with=["ada"]` adds the named Connect users as collaborators on the content, so that they can read its traces. This is a wider grant than trace access, and the users need an account that can publish.
+On Posit Connect (version 2026.09.0 or later) the server exports the spans itself, so this recipe is not needed there. An administrator must set `OpenTelemetry.Enabled` and `OpenTelemetry.AllowContentInstrumentation` to `true`. When the agent runs on Connect in a process with no active tracer provider, it turns on the content's Content Observability setting itself and warns that logging begins once the content restarts; otherwise, use the content's Settings \> Monitoring \> Traces panel. Once logging is live, the `share_with=["username"]` argument adds the named Connect users as collaborators on the content, so that they can read its traces.
 
 The R package's `trajectory_read()` reads the resulting trace files and Connect's trace store. From R, pass it the directory, as in `trajectory_read("traces")`.
 
