@@ -127,6 +127,8 @@ async def test_a_cited_answer_records_its_tag_and_decisions(
     (turn,) = logging_live(TURN["span"])
     (provenance,) = logging_live(PROVENANCE["span"])
     assert provenance.parent.span_id == turn.context.span_id
+    assert TAG_ATTRIBUTE not in turn.attributes
+    assert CANDIDATES_ATTRIBUTE not in turn.attributes
     assert provenance.attributes[TAG_ATTRIBUTE] == expected_tag(["B"], True)
     assert [d["status"] for d in candidates(provenance)] == ["accepted"]
 

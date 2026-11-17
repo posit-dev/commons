@@ -447,9 +447,8 @@ Commons <- R6::R6Class(
 
       # Always project citations so reserved model markup cannot reach the browser.
       coro::async_generator(function() {
-        span <- NULL
         if (tracing) {
-          span <- local_conversation_turn_span(user = user)
+          local_conversation_turn_span(user = user)
         }
         scanner <- citation_scanner(
           corpus,
@@ -528,21 +527,6 @@ Commons <- R6::R6Class(
         )
 
         if (tracing) {
-          # An absent provenance tag must not suppress the citation audit record.
-          if (!is.na(tag)) {
-            tryCatch(
-              commons_span_set_attribute(span, "commons.provenance.tag", tag),
-              error = function(err) NULL
-            )
-          }
-          tryCatch(
-            commons_span_set_attribute(
-              span,
-              "commons.citation.candidates",
-              jsonlite::toJSON(decisions, auto_unbox = TRUE)
-            ),
-            error = function(err) NULL
-          )
           tryCatch(
             record_provenance_span(tag, decisions),
             error = function(err) NULL

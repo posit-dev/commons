@@ -161,7 +161,7 @@
     ]
   },
   "provenance": {
-    "description": "The span each package records once per completed answer when trajectory logging is live, as a child of the turn span, with both attributes set when the span starts. The tag attribute is absent when the answer has no provenance tag. The candidates attribute is a JSON string: each package serializes `decisions` and the parsed result must equal `expected`.",
+    "description": "The span each package records once per completed answer when trajectory logging is live, as a child of the turn span, with both attributes set when the span starts. The turn span records neither attribute. The tag attribute is absent when the answer has no provenance tag. The candidates attribute is a JSON string: each package serializes `decisions` and the parsed result must equal `expected`.",
     "span": "commons_provenance",
     "tag_attribute": "commons.provenance.tag",
     "candidates_attribute": "commons.citation.candidates",

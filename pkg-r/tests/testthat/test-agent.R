@@ -669,7 +669,7 @@ test_that("stream_async preserves structured provider content", {
   expect_identical(chunks[[3]]@text, "after.")
 })
 
-test_that("stream_async records provenance at span creation and completion", {
+test_that("stream_async records provenance on a child of the turn span", {
   skip_if_not_installed("otelsdk")
   withr::local_envvar(
     OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = "true"
@@ -694,7 +694,9 @@ test_that("stream_async records provenance at span creation and completion", {
   names <- vapply(recorded$traces, `[[`, character(1), "name")
   span <- recorded$traces[[which(names == "commons_conversation_turn")]]
   provenance_span <- recorded$traces[[which(names == "commons_provenance")]]
-  expect_identical(span$attributes[["commons.provenance.tag"]], "B")
+  contract <- shared_fixture("traces")$provenance
+  expect_null(span$attributes[[contract$tag_attribute]])
+  expect_null(span$attributes[[contract$candidates_attribute]])
   expect_identical(
     provenance_span$attributes[["commons.provenance.tag"]],
     "B"
@@ -774,7 +776,7 @@ test_that("a trusted-only agent streams no provenance or citation markers", {
   )))
 
   names <- vapply(recorded$traces, `[[`, character(1), "name")
-  spans <- recorded$traces[names == "commons_conversation_turn"]
+  spans <- recorded$traces[names == "commons_provenance"]
   expect_length(spans, 2)
   for (span in spans) {
     expect_identical(span$attributes[["commons.provenance.tag"]], "A")
