@@ -99,9 +99,8 @@ def commons_span(
     """Open a span, current for the duration of the block, and end it on exit.
 
     Pass the values known up front in ``attributes``: samplers see only
-    those, and Connect snapshots a span's attributes when it opens. Set
-    values that the work produces, such as a row count, on the yielded
-    span.
+    those. Set values that the work produces, such as a row count, on the
+    yielded span.
     """
     with _TRACER.start_as_current_span(name, attributes=attributes) as span:
         yield span
@@ -147,8 +146,8 @@ def record_provenance_span(
 ) -> None:
     """Record an answer's provenance as a span under ``parent``, and end it.
 
-    Both attributes are set as the span starts, because Connect snapshots a
-    span's attributes then. The tag attribute is absent without a tag.
+    Both attributes are set as the span starts, where samplers can see
+    them. The tag attribute is absent without a tag.
     """
     attributes = {CANDIDATES_ATTRIBUTE: citation_candidates_json(decisions)}
     if tag is not None:
