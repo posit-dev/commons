@@ -91,7 +91,7 @@ def check_trajectory_arguments(log: object, share_with: Sequence[str] | None) ->
 
 
 def enable_trajectory_tracing(
-    *, log: bool, share_with: Sequence[str] | None = None
+    *, log: bool, share_with: Sequence[str] | None = None, stacklevel: int = 2
 ) -> bool:
     """Check the tracing setup, and say whether to stamp conversation spans.
 
@@ -103,37 +103,40 @@ def enable_trajectory_tracing(
     those Connect users access once logging is live. commons configures no
     exporter: where the spans go is the caller's OpenTelemetry setup. Capture
     is checked last, so a process with no tracing keeps its environment
-    unchanged.
+    unchanged. Every warning is attributed ``stacklevel`` frames up from this
+    function.
     """
     check_trajectory_arguments(log, share_with)
+    # The helpers warn one frame deeper than this function does.
+    nested = stacklevel + 1
 
     if not log:
         if share_with is not None:
             warnings.warn(
                 "share_with only applies when log=True. Ignoring it.",
-                stacklevel=2,
+                stacklevel=stacklevel,
             )
         return False
 
-    warn_if_connect_tracing_unsupported()
+    warn_if_connect_tracing_unsupported(stacklevel=nested)
 
     if importlib.util.find_spec("opentelemetry.sdk") is None:
         warnings.warn(
             "Trajectory logging requires the tracing extra. "
             "Install it with: pip install 'commons[tracing]'",
-            stacklevel=2,
+            stacklevel=stacklevel,
         )
         return False
 
     if not tracing_configured():
-        enable_content_observability()
+        enable_content_observability(stacklevel=nested)
         return False
 
     if not content_capture_enabled():
         return False
 
     if share_with is not None:
-        share_trajectory_access(share_with)
+        share_trajectory_access(share_with, stacklevel=nested)
     return True
 
 
@@ -170,7 +173,9 @@ def content_capture_enabled() -> bool:
     return True
 
 
-def warn_if_connect_tracing_unsupported(*, client: ConnectClient | None = None) -> None:
+def warn_if_connect_tracing_unsupported(
+    *, client: ConnectClient | None = None, stacklevel: int = 2
+) -> None:
     """Warn when this Connect server cannot record trajectories.
 
     The server must be at least ``MINIMUM_TRACING_VERSION`` and must allow
@@ -194,7 +199,7 @@ def warn_if_connect_tracing_unsupported(*, client: ConnectClient | None = None) 
             f"This server is running Connect {settings['version']}, but "
             f"trajectory logging requires Connect >= {MINIMUM_TRACING_VERSION}. "
             "Please ask your server administrator to upgrade.",
-            stacklevel=2,
+            stacklevel=stacklevel,
         )
     elif settings.get("allow_content_instrumentation") is False:
         warnings.warn(
@@ -203,11 +208,13 @@ def warn_if_connect_tracing_unsupported(*, client: ConnectClient | None = None) 
             "OpenTelemetry.Enabled = true and "
             "OpenTelemetry.AllowContentInstrumentation = true in the Connect "
             "configuration, then restart Connect.",
-            stacklevel=2,
+            stacklevel=stacklevel,
         )
 
 
-def enable_content_observability(*, client: ConnectClient | None = None) -> None:
+def enable_content_observability(
+    *, client: ConnectClient | None = None, stacklevel: int = 2
+) -> None:
     """Turn on this content's Content Observability setting, and say so.
 
     For a process that started without tracing. Connect injects the exporter
@@ -237,7 +244,7 @@ def enable_content_observability(*, client: ConnectClient | None = None) -> None
             "active. In this content's Settings > Monitoring > Traces panel "
             "on Posit Connect, select Enabled, then redeploy or restart the "
             "content.",
-            stacklevel=2,
+            stacklevel=stacklevel,
         )
         return
 
@@ -250,5 +257,5 @@ def enable_content_observability(*, client: ConnectClient | None = None) -> None
     )
     warnings.warn(
         f"{first} Trajectory logging will begin once the content restarts.",
-        stacklevel=2,
+        stacklevel=stacklevel,
     )

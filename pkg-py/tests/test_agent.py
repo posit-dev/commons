@@ -702,9 +702,19 @@ def test_a_connect_outage_does_not_stop_construction(
     monkeypatch.setenv("CONNECT_SERVER", "http://127.0.0.1:9")
     monkeypatch.setenv("CONNECT_API_KEY", "the-api-key")
     monkeypatch.setenv(CAPTURE_VAR, "true")
-    with pytest.warns(UserWarning, match="Could not share"):
+    with pytest.warns(UserWarning, match="Could not share") as caught:
         agent = Commons(client, source, log=True, share_with=["ada"])
     assert isinstance(agent, Commons)
+    # Raised two calls below the agent, and still attributed to its builder.
+    assert [warning.filename for warning in caught] == [__file__]
+
+
+def test_a_logging_warning_names_the_line_that_built_the_agent(
+    client: Chat, source: Any
+) -> None:
+    with pytest.warns(UserWarning, match="only applies when log=True") as caught:
+        Commons(client, source, share_with=["ada"])
+    assert [warning.filename for warning in caught] == [__file__]
 
 
 def test_a_failed_construction_changes_nothing_on_connect(

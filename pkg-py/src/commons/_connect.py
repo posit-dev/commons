@@ -211,7 +211,10 @@ def normalize_server(server: str) -> str:
 
 
 def share_trajectory_access(
-    usernames: Sequence[str], *, client: ConnectClient | None = None
+    usernames: Sequence[str],
+    *,
+    client: ConnectClient | None = None,
+    stacklevel: int = 2,
 ) -> None:
     """Give `usernames` access to this content's trajectories.
 
@@ -232,7 +235,7 @@ def share_trajectory_access(
     if not is_connect_runtime():
         warnings.warn(
             "share_with only applies when running on Posit Connect. Ignoring it.",
-            stacklevel=2,
+            stacklevel=stacklevel,
         )
         return
 
@@ -268,14 +271,14 @@ def share_trajectory_access(
                 except (ConnectError, LookupError, ValueError) as error:
                     warnings.warn(
                         f"Could not share trajectory access with {username!r}. {error}",
-                        stacklevel=2,
+                        stacklevel=stacklevel,
                     )
                     continue
                 _GRANTED.add((guid, username))
     except (ConnectError, LookupError, ValueError) as error:
         warnings.warn(
             f"Could not share trajectory access. {error}",
-            stacklevel=2,
+            stacklevel=stacklevel,
         )
 
 

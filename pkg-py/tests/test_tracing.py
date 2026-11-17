@@ -10,6 +10,7 @@ import importlib.util
 import os
 import warnings
 from collections.abc import Callable
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import httpx
@@ -491,3 +492,40 @@ def test_logging_with_the_sdk_disabled_is_silent_and_leaves_capture_alone() -> N
         OTEL_SDK_DISABLED="true",
     )
     assert output.split() == ["False", "False"]
+
+
+def test_logging_on_connect_without_a_provider_turns_on_content_observability() -> None:
+    # A fresh process has no provider, as content on Connect does before the
+    # setting is on. The Connect double stands in for the server.
+    output = run_in_fresh_interpreter(
+        f"""
+        import sys
+        import warnings
+
+        sys.path.insert(0, {str(Path(__file__).parents[1])!r})
+
+        from commons._connect import ConnectClient
+        from commons._tracing import enable_trajectory_tracing
+        from tests._connect_double import connect_double
+
+        seen = []
+        ConnectClient.from_env = classmethod(
+            lambda cls, **_: connect_double(seen=seen)[0]
+        )
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            print(enable_trajectory_tracing(log=True))
+        for request in seen:
+            print("request", request.method, request.url.path)
+        for warning in caught:
+            print("warning", warning.message)
+        """,
+        **{CONNECT["environment"]["content_guid"]: "content-guid"},
+    )
+
+    lines = output.splitlines()
+    assert lines[0] == "False"
+    assert "request PATCH /__api__/v1/content/content-guid" in lines
+    warned = [line for line in lines if line.startswith("warning ")]
+    assert len(warned) == 1
+    assert "Enabled Content Observability" in warned[0]

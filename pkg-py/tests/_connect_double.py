@@ -1,4 +1,8 @@
-"""A Posit Connect server double for tests that grant or look up users."""
+"""A Posit Connect server double for tests that grant or look up users.
+
+It also serves the content item ``content-guid``, with Content Observability
+off, and accepts a change to it.
+"""
 
 from __future__ import annotations
 
@@ -44,6 +48,10 @@ def connect_double(
             if json.loads(request.read())["principal_guid"] in refused:
                 return httpx.Response(400, json={"code": 74})
             return httpx.Response(200, json={})
+        if path.endswith("/content/content-guid"):
+            if request.method == "PATCH":
+                return httpx.Response(200, json={})
+            return httpx.Response(200, json={"otel_enabled": False})
         if path.endswith("/users"):
             prefix = request.url.params["prefix"].lower()
             page = int(request.url.params["page_number"])

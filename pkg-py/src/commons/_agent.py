@@ -256,7 +256,9 @@ class Commons(Chat[Any, Any]):
 
         # After construction succeeds, so a failure has changed nothing on
         # Connect, and outside the setup span, which times only the build.
-        self._tracing = enable_trajectory_tracing(log=log, share_with=share_with)
+        self._tracing = enable_trajectory_tracing(
+            log=log, share_with=share_with, stacklevel=_CALLER
+        )
 
     def __repr__(self) -> str:
         count = len(self._sources)
@@ -489,8 +491,8 @@ class Commons(Chat[Any, Any]):
             self._restore_reminder_pending = False
 
 
-# Called straight from __init__, so one stacklevel reaches whoever built the
-# agent from every warning below.
+# The stacklevel that reaches whoever built the agent, from a function called
+# straight from __init__: the warnings below, and trajectory logging setup.
 _CALLER = 3
 
 
