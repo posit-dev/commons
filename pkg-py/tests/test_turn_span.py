@@ -1,4 +1,13 @@
-"""The span around each turn of a logging agent."""
+"""Test the span a logging agent opens around each turn.
+
+A trace reader uses this span to find the spans of one turn and the user who
+asked it. These tests check that chatlas's spans nest under it in both
+``chat()`` and ``stream_async()``, that it records a user only from an
+authenticated Shiny session, and that concurrent conversations do not share
+it. They also check that a stream ends the span however the stream stops,
+and never leaves it current between chunks, where another context could
+detach it.
+"""
 
 from __future__ import annotations
 
