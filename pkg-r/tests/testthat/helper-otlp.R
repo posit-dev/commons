@@ -45,7 +45,10 @@ chat_test_span <- function(
   if (!is.null(conversation_id)) {
     attributes <- c(
       attributes,
-      list(otlp_test_attr("gen_ai.conversation.id", conversation_id))
+      list(otlp_test_attr(
+        shared_fixture("traces")$conversation_turn$conversation_attribute,
+        conversation_id
+      ))
     )
   }
   if (!is.null(system_instructions)) {
