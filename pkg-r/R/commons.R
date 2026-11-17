@@ -108,9 +108,10 @@
 #'
 #' `$context()` needs one more step for now. This applies even without a
 #' context layer when a data source has a data dictionary or semantic model,
-#' since `$context()` searches those too. It relies on DuckDB's `fts` extension, which MCP Console's sandbox
-#' can't download. MCP Console can install the extension itself, but only
-#' into its own cache, which R's duckdb doesn't read by default. Point R at
+#' since `$context()` searches those too. It loads DuckDB's `fts` and `vss`
+#' extensions, which MCP Console's sandbox can't download. MCP Console can
+#' install the extensions itself, but only into its own cache, which R's
+#' duckdb doesn't read by default. Point R at
 #' that cache with an absolute path (`~` and environment variables aren't
 #' expanded):
 #'
@@ -122,11 +123,11 @@
 #'
 #' Then add one more sentence to both `tool.description` and
 #' `tool.instructions`, so the agent asks MCP Console to install the
-#' extension:
+#' extensions:
 #'
 #' ```markdown
 #' The first time you run `commons$context()`, include
-#' `"requirements": {"duckdb": ["fts"]}` in the same call.
+#' `"requirements": {"duckdb": ["fts", "vss"]}` in the same call.
 #' ```
 #'
 #' In either setup, `$run_sql()` refuses queries that write, but that check

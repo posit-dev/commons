@@ -125,9 +125,10 @@ so add the sentence to the end of \code{tool.instructions} as well.
 
 \verb{$context()} needs one more step for now. This applies even without a
 context layer when a data source has a data dictionary or semantic model,
-since \verb{$context()} searches those too. It relies on DuckDB's \code{fts} extension, which MCP Console's sandbox
-can't download. MCP Console can install the extension itself, but only
-into its own cache, which R's duckdb doesn't read by default. Point R at
+since \verb{$context()} searches those too. It loads DuckDB's \code{fts} and \code{vss}
+extensions, which MCP Console's sandbox can't download. MCP Console can
+install the extensions itself, but only into its own cache, which R's
+duckdb doesn't read by default. Point R at
 that cache with an absolute path (\code{~} and environment variables aren't
 expanded):
 
@@ -138,10 +139,10 @@ expanded):
 
 Then add one more sentence to both \code{tool.description} and
 \code{tool.instructions}, so the agent asks MCP Console to install the
-extension:
+extensions:
 
 \if{html}{\out{<div class="sourceCode markdown">}}\preformatted{The first time you run `commons$context()`, include
-`"requirements": \{"duckdb": ["fts"]\}` in the same call.
+`"requirements": \{"duckdb": ["fts", "vss"]\}` in the same call.
 }\if{html}{\out{</div>}}
 
 In either setup, \verb{$run_sql()} refuses queries that write, but that check
