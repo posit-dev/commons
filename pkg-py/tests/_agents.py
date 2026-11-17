@@ -1,4 +1,9 @@
-"""Agents over a scripted model, and a way to read everything one streams."""
+"""Build test agents over a sample sales table, and collect what they stream.
+
+The agents answer from a scripted model instead of a live one, so each test
+chooses the model's responses. ``collect()`` runs one ``stream_async()`` turn
+and returns every chunk the agent yields.
+"""
 
 from __future__ import annotations
 
