@@ -1,10 +1,10 @@
 # Read commons trajectories
 
 `trajectory_read()` reads conversation trajectories captured by
-[`commons()`](https://posit-dev.github.io/commons/r/reference/commons.md)
+[`agent()`](https://posit-dev.github.io/commons/r/reference/agent.md)
 when `log = TRUE`. Trajectories are recorded as OpenTelemetry spans—see
 the `log` argument of
-[`commons()`](https://posit-dev.github.io/commons/r/reference/commons.md)
+[`agent()`](https://posit-dev.github.io/commons/r/reference/agent.md)
 for how capture is enabled—and read back from Posit Connect's content
 observability store or from local trace files.
 
@@ -26,7 +26,7 @@ trajectory_read(source = NULL, ..., n = NULL, from = NULL, to = NULL)
     content's own traces; in a project that has been deployed with
     rsconnect, the deployed content's traces; otherwise, the local trace
     directory that
-    [`commons()`](https://posit-dev.github.io/commons/r/reference/commons.md)
+    [`agent()`](https://posit-dev.github.io/commons/r/reference/agent.md)
     writes to.
 
   - A Connect content GUID, a content URL (`.../content/<guid>/`), a
@@ -59,7 +59,10 @@ oldest-first. Each conversation is a list with a `turns` field
 containing a list of
 [ellmer::Turn](https://ellmer.tidyverse.org/reference/Turn.html)s and a
 `last_active` field containing a `POSIXct` giving the time of the
-conversation's most recent chat activity.
+conversation's most recent chat activity. The `user` field contains the
+authenticated Shiny session username from the earliest recorded
+non-title chat, when supplied by Connect, or `NA_character_` when
+unavailable (including anonymous sessions and older logs).
 
 ## Details
 
@@ -68,7 +71,7 @@ variable (and `CONNECT_SERVER`, when the server can't be inferred from
 the URL, the project's deployment record, or the sole Connect server
 registered with rsconnect), and editor-level access to the content: you
 must own it or be a collaborator. See the `share_with` argument of
-[`commons()`](https://posit-dev.github.io/commons/r/reference/commons.md).
+[`agent()`](https://posit-dev.github.io/commons/r/reference/agent.md).
 
 ## Examples
 

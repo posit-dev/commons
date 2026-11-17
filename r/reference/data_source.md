@@ -1,8 +1,7 @@
 # Create a data source
 
-A data source is the set of tables available to a
-[`commons()`](https://posit-dev.github.io/commons/r/reference/commons.md)
-agent.
+A data source is the set of tables gathered by
+[`commons()`](https://posit-dev.github.io/commons/r/reference/commons.md).
 
 ## Usage
 
@@ -25,23 +24,29 @@ data_source(..., tables = NULL, exclude = NULL, dictionary = NULL)
   For a connection, a character vector of table names, qualified strings
   like `"schema.table"` or `"catalog.schema.table"`, or
   [`DBI::Id`](https://dbi.r-dbi.org/reference/Id.html) objects. Defaults
-  to every table returned by
+  to every table and view in the connection's current schema, read from
+  `information_schema`; the agent searches them rather than reading a
+  list when there are too many to list. Backends without an
+  `information_schema`, like SQLite, default to every table returned by
   [`DBI::dbListTables()`](https://dbi.r-dbi.org/reference/dbListTables.html).
   Strings containing dots are interpreted as qualified names, at most
   three parts; use `DBI::Id(table = "a.b")` for literal table names
-  containing dots. For Snowflake and Databricks connections, a
+  containing dots. A
   [`DBI::Id`](https://dbi.r-dbi.org/reference/Id.html) ending in
-  `catalog` or `schema` selects every table and view in that namespace.
-  Leaving `tables` unset selects the current schema. A Databricks
-  `hive_metastore` selection must include a schema. Snowflake selections
-  import semantic views, and Databricks selections import metric views,
-  as native trusted metrics and dimensions. Namespace selections read
-  model definitions lazily. Explicitly selected models are read and
-  validated when the data source is created. Databricks wildcard members
-  require concrete column metadata from the warehouse. An exact
-  physical-table selection also imports associated models when every
-  physical dependency is selected. Only public relationships, facts,
-  filters, and instructions are exposed to the agent.
+  `schema`, like `DBI::Id(schema = "marts")`, selects every table and
+  view in that schema, labeled `"schema.table"`; for Snowflake and
+  Databricks connections, one ending in `catalog` selects the whole
+  catalog. As with the default, the agent searches a selection too broad
+  to list. A Databricks `hive_metastore` selection must include a
+  schema. Snowflake selections import semantic views, and Databricks
+  selections import metric views, as native trusted metrics and
+  dimensions. Namespace selections read model definitions lazily.
+  Explicitly selected models are read and validated when the data source
+  is created. Databricks wildcard members require concrete column
+  metadata from the warehouse. An exact physical-table selection also
+  imports associated models when every physical dependency is selected.
+  Only public relationships, facts, filters, and instructions are
+  exposed to the agent.
 
   For a board, a named character vector of pins to read: the names
   become table names, and the values are pin names passed to
@@ -50,7 +55,10 @@ data_source(..., tables = NULL, exclude = NULL, dictionary = NULL)
 - exclude:
 
   For Snowflake and Databricks namespace selections, optional
-  unqualified object-name globs to omit, such as `"TMP_*"`.
+  unqualified object-name globs to omit, such as `"TMP_*"`. A glob
+  matches a semantic view or metric view by its own name, not by the
+  tables it reads, so a view over an excluded table can still answer
+  metric queries.
 
 - dictionary:
 
@@ -81,7 +89,7 @@ what you pass:
   construction (a single listing call), but each pin is downloaded only
   when its table is first used. Calling the agent's `prewarm()` method
   (see
-  [`commons()`](https://posit-dev.github.io/commons/r/reference/commons.md))
+  [`agent()`](https://posit-dev.github.io/commons/r/reference/agent.md))
   starts a background process that downloads the remaining pins into the
   local pins cache, so a first use typically only reads an
   already-downloaded file. Since the pins cache is on disk, `prewarm()`

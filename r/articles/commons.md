@@ -125,6 +125,13 @@ occur:
 The agent itself does not determine the provenance outcome. commons
 derives it deterministically from the agent’s behavior.
 
+To turn off the lower-trust path altogether, use
+`agent(mode = "trusted only")`. In this mode, the agent can’t write its
+own SQL or R code; it answers only with trusted calculations. If no
+trusted calculation answers a question, it tells the user so. Since
+every answer comes from a trusted calculation, answers carry no
+provenance markers.
+
 ## Information layers
 
 commons distinguishes between two primary layers of information: the
@@ -301,7 +308,7 @@ expressions as filters, and other row-level expressions as derived
 values.
 
 See the [DevRel Agent
-`data-dict.yaml`](https://github.com/posit-dev/devrel-agent/blob/main/dictionaries/devrel.data-dict.yaml)
+`data-dict.yaml`](https://github.com/posit-dev/devrel-agent/blob/8e77e78b2eb986fe320ad0e288363cc8186fc6eb/dictionaries/devrel.data-dict.yaml)
 for examples of definitions.
 
 When a data source is constructed, commons validates each definition and
@@ -329,12 +336,14 @@ files:
 
 ## Constructing the agent
 
-Use
+Construct an agent in two steps. First, use
 [`commons()`](https://posit-dev.github.io/commons/r/reference/commons.md)
-to construct an agent. Pass it an ellmer `Chat` and one or more data
-sources, along with any semantic and context layers. You can also
-optionally append information to the commons agent system prompt using
-the `instructions` argument.
+to gather one or more data sources, along with any semantic and context
+layers, into “the commons”. You can optionally append information to the
+commons agent system prompt using
+[`commons()`](https://posit-dev.github.io/commons/r/reference/commons.md)’s
+`instructions` argument. Then pass an ellmer `Chat` and the commons to
+[`agent()`](https://posit-dev.github.io/commons/r/reference/agent.md).
 
 ``` r
 
@@ -346,12 +355,16 @@ biodiversity <- data_source(
   dictionary = "dictionaries/biodiversity.yaml"
 )
 
-agent <- commons(
-  client = ellmer::chat("anthropic/claude-sonnet-5"),
+commons <- commons(
   data_sources = list(biodiversity = biodiversity),
   semantic_layer = semantic_layer("measures"),
   context_layer = context_layer("context/context.md"),
   instructions = "instructions.md"
+)
+
+agent <- agent(
+  client = ellmer::chat("anthropic/claude-sonnet-5"),
+  commons = commons
 )
 
 commons_app(agent)
@@ -370,6 +383,36 @@ warms the agent during post-startup idle time; `agent$prewarm()` warms
 the context index and pins cache ahead of deployment. This example
 assumes that `observations` and `site_area` are data frames loaded when
 the app starts.
+
+When deploying, include the packages that the agent’s R code should be
+able to use, such as the tidyverse, by listing them under `Imports` in
+`DESCRIPTION` or loading them in `app.R`. The agent writes its code at
+runtime, so rsconnect can’t detect the packages that code uses.
+
+On Connect, viewers can share copies of their conversations and results,
+which requires the app to be associated with a Connect Visitor API Key
+integration that can publish. To enable it, associate the integration
+after the first deploy:
+
+``` r
+
+client <- connectapi::connect()
+app <- connectapi::content_item(client, "<content GUID>")
+visitor_key <- Filter(
+  function(x) {
+    identical(x$template, "connect") &&
+      identical(x$auth_type, "Visitor API Key") &&
+      identical(x$config$max_role, "Publisher")
+  },
+  connectapi::get_integrations(client)
+)
+# set_integrations() replaces the app's associations, so keep the existing ones.
+connectapi::set_integrations(app, c(connectapi::get_integrations(app), visitor_key[1]))
+```
+
+To reuse the same trusted calculations in reports, apps, and other
+projects, see [Sharing a commons across
+projects](https://posit-dev.github.io/commons/r/articles/sharing.md).
 
 [^1]: commons expands definitions used in custom SQL to expressions
     compiled for the data source. Because this is still custom SQL, the

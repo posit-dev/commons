@@ -1,38 +1,29 @@
-# Create a commons agent
+# Gather trusted calculations and context
 
-`commons()` creates an
-[ellmer::Chat](https://ellmer.tidyverse.org/reference/Chat.html)
-subclass with tools and prompting that allow the agent to navigate its
-data sources, semantic layer, and context layer. Depending on the
-agent's choice of tools, responses can be deterministically classified
-as based on a trusted calculation, cited, or untrusted.
+`commons()` gathers a team's data sources, semantic layer, and context
+layer into one object, "the commons", that code can call directly
+without a model. Pass it to
+[`agent()`](https://posit-dev.github.io/commons/r/reference/agent.md) to
+build an agent in R, or place it in an R session that a coding agent
+already controls.
 
 ## Usage
 
 ``` r
 commons(
-  client,
+  ...,
   data_sources,
   semantic_layer = NULL,
   context_layer = NULL,
-  ...,
-  instructions = NULL,
-  network = c("none", "full"),
-  log = FALSE,
-  share_with = NULL
+  instructions = NULL
 )
 ```
 
 ## Arguments
 
-- client:
+- ...:
 
-  An [ellmer::Chat](https://ellmer.tidyverse.org/reference/Chat.html)
-  giving the provider and model to use, e.g.
-  [`ellmer::chat_anthropic()`](https://ellmer.tidyverse.org/reference/chat_anthropic.html).
-  For best results, enable thinking when supported by the selected
-  provider and model. A system prompt already set on the client is
-  ignored, with a warning; use `instructions` to add to commons' prompt.
+  These dots are for future extensions and must be empty.
 
 - data_sources:
 
@@ -52,190 +43,155 @@ commons(
   An optional
   [`context_layer()`](https://posit-dev.github.io/commons/r/reference/context_layer.md).
 
-- ...:
-
-  These dots are for future extensions and must be empty.
-
 - instructions:
 
-  Optional instructions placed under an `## Additional instructions`
-  heading at the end of commons' built-in system prompt, as a single
-  string or the path to a text or Markdown file.
+  Optional instructions, as a single string or the path to a text or
+  Markdown file. They're shown at the end of the object's printed
+  overview, and
+  [`agent()`](https://posit-dev.github.io/commons/r/reference/agent.md)
+  places them under an `## Additional instructions` heading at the end
+  of its system prompt.
 
       commons(
         # ...
         instructions = "Use the organization's fiscal-year conventions."
       )
 
-- network:
-
-  Whether the agent's R session has network access. One of `"none"` (the
-  default) or `"full"`. The session uses OS sandboxing on Linux and
-  macOS. On unsupported hosts, local development can opt in to
-  best-effort R guardrails with
-  `options(commons.allow_unsafe_fallback = TRUE)`. These guardrails are
-  not a security boundary.
-
-- log:
-
-  Whether to request conversation trajectory capture with OpenTelemetry
-  (default `FALSE`). When `TRUE`, commons checks the tracing setup and
-  warns with setup steps when it is incomplete. This feature requires
-  Connect \>= 2026.09.0.
-
-  When deploying to Posit Connect, include
-  `"OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"` in the
-  `envVars` argument to
-  [`rsconnect::deployApp()`](https://rstudio.github.io/rsconnect/reference/deployApp.html)
-  so ellmer includes message content. A server administrator must also
-  set `OpenTelemetry.Enabled = true` and
-  `OpenTelemetry.AllowContentInstrumentation = true`.
-
-  Once the agent is deployed and serving traffic, you can read
-  conversation histories back into R with
-  [`trajectory_read()`](https://posit-dev.github.io/commons/r/reference/trajectory_read.md).
-
-- share_with:
-
-  An optional character vector of Connect usernames granted access to
-  this content's trajectories when running on Posit Connect. Reading
-  traces requires editor-level access, so named users are added as
-  collaborators on the content. Note that users whose Connect *account*
-  role is viewer cannot read traces even when named here; trace readers
-  need at least a publisher account.
-
 ## Value
 
-An [ellmer::Chat](https://ellmer.tidyverse.org/reference/Chat.html)
-subclass.
+A `commons` object with methods:
+
+- `$search(query)` searches trusted calculations.
+
+- `$measure(name, arguments)` runs a measure.
+
+- `$metrics(metrics, dimensions, filters, where, arguments, source)`
+  computes governed metrics. `where` takes simple conditions on
+  documented columns, either as a string like
+  `"project = 'dplyr' AND date >= '2026-06-01'"` or as a list of
+  `c(column, op, value)` triples.
+
+- `$calculation(name, arguments, source)` runs an exact trusted query.
+
+- `$context(query)` searches trusted context.
+
+- `$describe(table, source)` describes a table.
+
+- `$run_sql(query, source)` runs a read-only query and returns a data
+  frame. Governed definitions can be written as `{{name}}` tokens (or
+  `{{table::name}}` when qualification is needed), and each expands to
+  its compiled SQL before the query runs.
 
 ## Details
 
-The provider and model come from `client`; commons sets its own system
-prompt and tools. Use `agent$chat()` to ask questions,
-[`commons_theme()`](https://posit-dev.github.io/commons/r/reference/commons_server.md)
-and
-[`commons_server()`](https://posit-dev.github.io/commons/r/reference/commons_server.md)
-to embed the agent in Shiny, and
-[`vitals::generate()`](https://vitals.tidyverse.org/reference/generate.html)
-to use the agent as a vitals solver.
+All arguments must be named.
 
-## Cache pre-warming
+To share a commons across projects, put its setup code in an R package;
+see
+[`vignette("sharing", package = "commons")`](https://posit-dev.github.io/commons/r/articles/sharing.md).
 
-A commons agent builds its context search index and downloads uncached
-pins the first time it needs them.
-[`commons_server()`](https://posit-dev.github.io/commons/r/reference/commons_server.md)
-and
-[`commons_app()`](https://posit-dev.github.io/commons/r/reference/commons_app.md)
-call the agent's `prewarm()` method automatically during post-startup
-idle time.
+## Using commons with other coding agents
 
-To warm the caches before deployment, call `agent$prewarm()` in a
-pre-deploy script. The context index is cached on disk once per version
-of the context documents; pin downloads populate the local pins cache.
+`commons()` is the entry point to use commons with external coding
+agents. The approach depends on whether the coding agent already has a
+persistent R session. For example, Posit Assistant connects to the
+user's R session. Claude Code and Codex, by contrast, do not have a
+built-in connection to a persistent R REPL.
 
-To ship a pre-built context index with an app, configure a directory
-inside the app in both the pre-deploy script and the deployed app, then
-prewarm the agent before deploying:
+**For agents that already have an R session, like Posit Assistant**,
+create a `commons()` object in the relevant `.Rprofile` and then add a
+line telling the agent to print it out before doing data analysis:
 
-    options(commons.context_cache = "commons-cache")
-    agent <- commons(
-      ellmer::chat_anthropic(),
-      data_sources = data_source(sales = sales)
-    )
-    agent$prewarm()
+    The R session has an object called `commons` that holds this team's trusted
+    code and context. Before analyzing data, run `print(commons)`, and use its
+    calculations where they apply in favor of writing analysis code ad-hoc.
 
-Do not use `app_cache/` for this workflow because rsconnect excludes it
-from deployed bundles. Without explicit configuration, commons uses
-Connect's persistent content data directory when available, an
-`app_cache/` directory beside hosted apps, or the per-user cache
-directory. Set the cache directory with
-`options(commons.context_cache = "path/to/dir")` or the
-`COMMONS_CONTEXT_CACHE` environment variable. Set the option to `FALSE`
-to disable persistence. The cache is capped at 256 MB with
-least-recently-used eviction; change the cap with
-`options(commons.context_cache_max_size)`.
+**Claude Code and Codex have no persistent R session of their own.**
+They can get one through [MCP
+Console](https://posit-dev.github.io/mcp-console/). Its R session reads
+the project's `.Rprofile` like any other, so build `commons` there in
+the same way, and then edit the console tool's description to tell the
+model to print out `commons` before analyzing data.
 
-## Agent tools
+To use MCP console, register it for the project, from the project
+directory:
 
-Depending on its semantic layer, context layer, and data sources, a
-commons agent receives some combination of these tools:
+    uvx mcp-console configure-client claude --directory .
+    uvx mcp-console configure-client codex --directory .
 
-- `search_pool` searches trusted calculations and semantic models.
+Then configure MCP Console to offer the model only R, so that it queries
+data through `commons$run_sql()` rather than sending SQL to a database
+itself, and to mention `commons` in its tool description. A configured
+description replaces the one MCP Console generates, so start from an
+export of the resolved configuration:
 
-- `search_catalog` searches a warehouse catalog.
+    mkdir -p .agents/console
+    uvx mcp-console config resolve --full --no-project-config \
+      -c 'languages=[r]' > .agents/console/config.yaml
 
-- `call_measure` invokes an R measure.
+In that file, keep `languages: [r]`, and add the same sentence to the
+end of the exported description:
 
-- `call_metrics` invokes governed or warehouse-native metrics.
+    languages:
+      - r
+    tool:
+      description: |-
+        # ...the exported description, unchanged...
 
-- `call_calculation` invokes an exact trusted query.
+        The R session has an object called `commons` that holds this team's
+        trusted code and context. Before analyzing data, run
+        `print(commons)`, and use its calculations where they apply in favor of
+        writing analysis code ad-hoc.
 
-- `search_context` retrieves relevant business context.
+Claude Code shows the tool description only once the agent loads the
+tool, so add the sentence to the end of `tool.instructions` as well.
 
-- `describe_trust_system` explains how commons determines and displays
-  answer trust.
+`$context()` needs one more step for now. This applies even without a
+context layer when a data source has a data dictionary or semantic
+model, since `$context()` searches those too. It loads DuckDB's `fts`
+and `vss` extensions, which MCP Console's sandbox can't download. MCP
+Console can install the extensions itself, but only into its own cache,
+which R's duckdb doesn't read by default. Point R at that cache with an
+absolute path (`~` and environment variables aren't expanded):
 
-- `describe_table` inspects a table or semantic model.
+    environment:
+      # macOS; on Linux, /home/you/.cache/mcp-console/dependencies/duckdb
+      DUCKDB_R_HOME: /Users/you/Library/Caches/mcp-console/dependencies/duckdb
 
-- `run_sql` executes a read-only SQL query.
+Then add one more sentence to both `tool.description` and
+`tool.instructions`, so the agent asks MCP Console to install the
+extensions:
 
-- `run_r` executes R code to analyze results and render plots in the
-  agent's R session.
+    The first time you run `commons$context()`, include
+    `"requirements": {"duckdb": ["fts", "vss"]}` in the same call.
 
-These model-facing tools should be considered private. Their
-constructors are intentionally not exported, and their names, arguments,
-availability, and behavior may change without notice. Application code
-should configure an agent through `commons()` and its layer constructors
-rather than depend on individual tools.
+In either setup, `$run_sql()` refuses queries that write, but that check
+isn't a security boundary. Code that the agent runs in the same R
+session can reach anything the session can, including the connections
+behind `commons`. Connect to databases with a read-only role.
+
+## Lifecycle
+
+Before commons 0.2.0, `commons()` built the agent itself, taking
+`client` as its first argument. Calls in that form still work, with a
+deprecation warning, and return an agent as before. Use
+[`agent()`](https://posit-dev.github.io/commons/r/reference/agent.md)
+instead.
 
 ## Examples
 
 ``` r
 if (FALSE) { # \dontrun{
-# A measure over local data computes directly in R.
-sem <- semantic_layer(
-  measure(
-    "order_count",
-    "Count of orders.",
-    function() nrow(my_sales),
-    arguments = list()
-  )
+commons <- commons(
+  data_sources = data_source(warehouse = con),
+  semantic_layer = sem,
+  context_layer = context_layer(files = "notes.md")
 )
-agent <- commons(
-  ellmer::chat_anthropic(),
-  data_sources = data_source(sales = my_sales),
-  semantic_layer = sem
-)
-agent$chat("How many orders are there?")
+commons
+commons$search("revenue by region")
+commons$measure("revenue_by_region", arguments = list(region = "West"))
 
-# A measure takes a connection as an argument named after a data source.
-# `warehouse` isn't in `arguments`, so the model never sees it; commons
-# supplies it when the measure runs. Bind model-supplied arguments through
-# DBI so they're quoted safely.
-con <- DBI::dbConnect(duckdb::duckdb())
-sem <- semantic_layer(
-  measure(
-    "revenue_by_region",
-    "Total revenue for a region.",
-    function(region, warehouse) {
-      DBI::dbGetQuery(
-        warehouse,
-        "SELECT sum(revenue) AS revenue FROM sales WHERE region = ?",
-        params = list(region)
-      )
-    },
-    arguments = list(region = ellmer::type_string("Sales region."))
-  )
-)
-agent <- commons(
-  ellmer::chat_anthropic(),
-  data_sources = list(warehouse = data_source(con)),
-  semantic_layer = sem
-)
-
-# Objects that aren't data sources (a pins board, an API client) come from
-# argument defaults in the measure, e.g. `board = pins::board_connect()`.
-# See ?semantic_layer.
+# The same object backs an agent:
+agent <- agent(ellmer::chat_anthropic(), commons = commons)
 } # }
 ```

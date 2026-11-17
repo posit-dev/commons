@@ -2,10 +2,11 @@
 
 ## Main functions
 
-The main agent constructor, plus the building blocks for a commons
-agent.
+The main constructor, plus the building blocks for a commons agent.
 
 - [`commons()`](https://posit-dev.github.io/commons/r/reference/commons.md)
+  : Gather trusted calculations and context
+- [`agent()`](https://posit-dev.github.io/commons/r/reference/agent.md)
   : Create a commons agent
 - [`data_source()`](https://posit-dev.github.io/commons/r/reference/data_source.md)
   : Create a data source
@@ -28,9 +29,7 @@ Put a commons agent inside of an interactive chat app.
 
 ## Trajectories
 
-Read and annotate conversation histories.
+Read logged conversation histories.
 
 - [`trajectory_read()`](https://posit-dev.github.io/commons/r/reference/trajectory_read.md)
   : Read commons trajectories
-- [`trajectory_review()`](https://posit-dev.github.io/commons/r/reference/trajectory_review.md)
-  : Review commons trajectories

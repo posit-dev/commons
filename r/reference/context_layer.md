@@ -1,8 +1,7 @@
 # Create a context layer
 
-A context layer contains text that helps a
-[`commons()`](https://posit-dev.github.io/commons/r/reference/commons.md)
-agent interpret its data source.
+A context layer contains text that helps a commons agent interpret its
+data source.
 
 ## Usage
 
