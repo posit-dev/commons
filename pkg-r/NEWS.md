@@ -1,4 +1,4 @@
-# commons (development version)
+# commons 0.2.0
 
 commons 0.2.0 introduces three big features in addition to a number of minor improvements and big fixes.
 
