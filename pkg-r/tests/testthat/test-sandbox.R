@@ -334,6 +334,8 @@ listen_on_pathname_sockets <- function(paths, env) {
     ),
     script
   )
+  # unlink(recursive = TRUE) skips socket files, leaving their directories.
+  withr::defer(file.remove(paths[file.exists(paths)]), envir = env)
   listener <- processx::process$new(
     "perl",
     c(script, unname(paths)),
