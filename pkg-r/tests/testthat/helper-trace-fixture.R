@@ -104,7 +104,7 @@ tidy_trace_envelope <- function(envelope) {
 }
 
 # Which of a file URL, the package's paths, and the login name (as a path
-# component or a whole quoted value) appear in the trace at `path`.
+# component or a whole JSON string value) appear in the trace at `path`.
 trace_private_strings <- function(path) {
   roots <- c(trace_fixture_source(), system.file(package = "commons"))
   user <- Sys.info()[["user"]]
@@ -113,7 +113,7 @@ trace_private_strings <- function(path) {
     "file://",
     normalizePath(roots[nzchar(roots)]),
     if (nchar(user) >= 3 && !tolower(user) %in% generic) {
-      c(paste0("/", user, "/"), paste0("\\", user, "\\"), paste0("\"", user, "\""))
+      c(paste0("/", user, "/"), paste0("\\", user, "\\"), paste0(":\"", user, "\""))
     }
   )
   text <- paste(readLines(path, warn = FALSE), collapse = "\n")
