@@ -15,6 +15,8 @@ Sys.setenv(
   OTEL_EXPORTER_OTLP_TRACES_FILE = file.path(args[[1]], "trace-%N.jsonl"),
   OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = "true"
 )
+# A hyperlinked backtrace names the source file's absolute path.
+options(cli.hyperlink = FALSE)
 if (length(args) > 1 && nzchar(args[[2]])) {
   pkgload::load_all(args[[2]], helpers = FALSE, quiet = TRUE)
 } else {

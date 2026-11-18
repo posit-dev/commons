@@ -2,7 +2,7 @@
 # running trace-fixture.R in a process of its own, and returns its path. To
 # regenerate the committed trace, from the repository root:
 #
-#   rm -f tests/shared/traces/r/trace-0.jsonl && cd pkg-r &&
+#   rm -f tests/shared/traces/r/*.jsonl && cd pkg-r &&
 #     Rscript -e 'devtools::load_all(quiet = TRUE); write_trace_fixture("../tests/shared/traces/r")' &&
 #     cd .. && scripts/sync-shared.sh
 write_trace_fixture <- function(directory) {
@@ -15,11 +15,6 @@ write_trace_fixture <- function(directory) {
     )
   }
 
-  source_dir <- if (pkgload::is_dev_package("commons")) {
-    pkgload::pkg_path(test_path())
-  } else {
-    ""
-  }
   # R CMD check sets R_TESTS to a startup file the child can't find.
   withr::local_envvar(
     R_LIBS = paste(.libPaths(), collapse = .Platform$path.sep),
@@ -30,7 +25,7 @@ write_trace_fixture <- function(directory) {
     shQuote(c(
       normalizePath(test_path("trace-fixture.R")),
       directory,
-      source_dir
+      trace_fixture_source()
     ))
   )
 
@@ -46,14 +41,79 @@ write_trace_fixture <- function(directory) {
     cli::cli_abort("trace-fixture.R failed with status {status}.")
   }
 
-  lines <- readLines(written, warn = FALSE)
-  writeLines(
-    gsub(
-      '("key":"process[.]owner","value":[{]"stringValue":")[^"]*"',
-      '\\1developer"',
-      lines
-    ),
-    written
+  lines <- vapply(
+    readLines(written, warn = FALSE),
+    function(line) {
+      envelope <- tidy_trace_envelope(
+        jsonlite::fromJSON(line, simplifyVector = FALSE)
+      )
+      as.character(jsonlite::toJSON(
+        envelope,
+        auto_unbox = TRUE,
+        null = "null",
+        digits = NA
+      ))
+    },
+    character(1),
+    USE.NAMES = FALSE
   )
+  writeLines(lines, written)
+
+  leaked <- trace_private_strings(written)
+  if (length(leaked) > 0) {
+    unlink(written)
+    cli::cli_abort("The trace names {.val {leaked}}, so it was not kept.")
+  }
   written
+}
+
+# The package source trace-fixture.R loads, or "" for the installed package.
+trace_fixture_source <- function() {
+  if (pkgload::is_dev_package("commons")) {
+    pkgload::pkg_path(test_path())
+  } else {
+    ""
+  }
+}
+
+# Replaces the login name otelsdk records as process.owner, and drops the
+# events on DBI's spans, whose error backtraces name local files.
+tidy_trace_envelope <- function(envelope) {
+  envelope$resourceSpans <- lapply(envelope$resourceSpans, function(resource) {
+    resource$resource$attributes <- lapply(
+      resource$resource$attributes,
+      function(attribute) {
+        if (identical(attribute$key, "process.owner")) {
+          attribute$value <- list(stringValue = "developer")
+        }
+        attribute
+      }
+    )
+    resource$scopeSpans <- lapply(resource$scopeSpans, function(scope_spans) {
+      if (startsWith(scope_spans$scope$name %||% "", "org.r-dbi.")) {
+        scope_spans$spans <- lapply(scope_spans$spans, function(span) {
+          span$events <- NULL
+          span
+        })
+      }
+      scope_spans
+    })
+    resource
+  })
+  envelope
+}
+
+# Which of a file URL, the package's paths, and the login name appear in the
+# trace at `path`.
+trace_private_strings <- function(path) {
+  roots <- c(trace_fixture_source(), system.file(package = "commons"))
+  user <- Sys.info()[["user"]]
+  generic <- c("root", "user", "admin", "runner", "developer")
+  private <- c(
+    "file://",
+    normalizePath(roots[nzchar(roots)]),
+    if (nchar(user) >= 3 && !tolower(user) %in% generic) user
+  )
+  text <- paste(readLines(path, warn = FALSE), collapse = "\n")
+  private[vapply(private, grepl, logical(1), x = text, fixed = TRUE)]
 }
