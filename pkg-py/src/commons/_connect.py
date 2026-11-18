@@ -131,10 +131,11 @@ class ConnectClient:
         status is anything other than 2xx.
         """
         prefix = ("__api__", "v1") if versioned else ("__api__",)
-        url = httpx.URL("/".join((self.server, *prefix, *path)))
+        route = "/" + "/".join((*prefix, *path))
         # Messages name the path only: the request carries the API key in a
         # header, and a message can reach a log or a bug report.
         try:
+            url = httpx.URL(self.server + route)
             response = self._http.request(
                 method,
                 url,
@@ -142,9 +143,9 @@ class ConnectClient:
                 json=json,
                 headers={"Authorization": f"Key {self.api_key}"},
             )
-        except httpx.RequestError as error:
+        except (httpx.RequestError, httpx.InvalidURL) as error:
             raise ConnectError(
-                f"Could not reach Posit Connect for {method} {url.path}: "
+                f"Could not reach Posit Connect for {method} {route}: "
                 f"{type(error).__name__}"
             ) from error
         if not response.is_success:
@@ -210,7 +211,10 @@ def normalize_server(server: str) -> str:
 
 
 def share_trajectory_access(
-    usernames: Sequence[str], *, client: ConnectClient | None = None
+    usernames: Sequence[str],
+    *,
+    client: ConnectClient | None = None,
+    stacklevel: int = 2,
 ) -> None:
     """Give `usernames` access to this content's trajectories.
 
@@ -231,7 +235,7 @@ def share_trajectory_access(
     if not is_connect_runtime():
         warnings.warn(
             "share_with only applies when running on Posit Connect. Ignoring it.",
-            stacklevel=2,
+            stacklevel=stacklevel,
         )
         return
 
@@ -267,14 +271,14 @@ def share_trajectory_access(
                 except (ConnectError, LookupError, ValueError) as error:
                     warnings.warn(
                         f"Could not share trajectory access with {username!r}. {error}",
-                        stacklevel=2,
+                        stacklevel=stacklevel,
                     )
                     continue
                 _GRANTED.add((guid, username))
     except (ConnectError, LookupError, ValueError) as error:
         warnings.warn(
             f"Could not share trajectory access. {error}",
-            stacklevel=2,
+            stacklevel=stacklevel,
         )
 
 
