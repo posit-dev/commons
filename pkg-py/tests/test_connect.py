@@ -17,10 +17,16 @@ import httpx
 import pytest
 
 from commons._connect import (
+    MINIMUM_TRACING_VERSION,
     ConnectClient,
     ConnectError,
     connect_content_guid,
+    content,
+    enable_otel,
     is_connect_runtime,
+    parse_connect_version,
+    server_settings,
+    version_is_older,
 )
 
 from ._shared import load_shared_fixture
@@ -30,6 +36,8 @@ ENVIRONMENT: dict[str, str] = SPEC["environment"]
 NORMALIZATION: list[dict[str, Any]] = SPEC["server_normalization"]["cases"]
 DETECTION: list[dict[str, Any]] = SPEC["runtime_detection"]["cases"]
 API_REQUEST: dict[str, Any] = SPEC["api_request"]
+OBSERVABILITY: dict[str, Any] = SPEC["observability"]
+SETTINGS_CASES: list[dict[str, Any]] = OBSERVABILITY["server_settings"]["cases"]
 
 CONNECT_ENV = (
     ENVIRONMENT["product"],
@@ -69,6 +77,12 @@ def test_the_shared_fixture_carries_the_cases_it_promises() -> None:
     assert {case["expected"] for case in DETECTION} == {True, False}
     assert len(NORMALIZATION) >= 2
     assert len(API_REQUEST["cases"]) >= 1
+    assert {case["warns"] for case in SETTINGS_CASES} == {"version", "disabled", None}
+    assert {case["outcome"] for case in OBSERVABILITY["enable"]["cases"]} == {
+        "toggled",
+        "already_on",
+        "failed",
+    }
 
 
 @pytest.mark.parametrize("case", DETECTION, ids=lambda case: case["name"])
@@ -258,3 +272,94 @@ def test_closing_leaves_a_caller_supplied_client_open() -> None:
         pass
 
     assert not http.is_closed
+
+
+def test_the_minimum_tracing_version_matches_the_shared_fixture() -> None:
+    assert OBSERVABILITY["minimum_version"] == MINIMUM_TRACING_VERSION
+
+
+def test_server_settings_requests_the_unversioned_url_from_the_shared_fixture() -> None:
+    client, seen = client_recording(
+        server="https://connect.example.com", json={"version": "2026.09.0"}
+    )
+
+    assert server_settings(client) == {"version": "2026.09.0"}
+
+    (request,) = seen
+    spec = OBSERVABILITY["server_settings"]
+    assert request.method == spec["method"]
+    assert str(request.url) == spec["url"].replace(
+        "{server}", "https://connect.example.com"
+    )
+    assert request.headers["Authorization"] == "Key the-api-key"
+
+
+def test_server_settings_rejects_an_answer_that_is_not_an_object() -> None:
+    client, _ = client_recording(json="unexpected response")
+
+    with pytest.raises(ConnectError, match="unexpected"):
+        server_settings(client)
+
+
+def test_content_reads_the_shared_endpoint() -> None:
+    client, seen = client_recording(json={"otel_enabled": False})
+    spec = OBSERVABILITY["enable"]["read"]
+
+    assert content(client, GUID) == {"otel_enabled": False}
+
+    (request,) = seen
+    assert request.method == spec["method"]
+    assert request.url.path == "/__api__/v1/" + "/".join(spec["endpoint"]).replace(
+        "{guid}", GUID
+    )
+
+
+def test_content_rejects_an_answer_that_is_not_an_object() -> None:
+    client, _ = client_recording(json=[])
+
+    with pytest.raises(ConnectError, match="unexpected"):
+        content(client, GUID)
+
+
+def test_enable_otel_sends_the_shared_write() -> None:
+    client, seen = client_recording(json={})
+    spec = OBSERVABILITY["enable"]["write"]
+
+    enable_otel(client, GUID)
+
+    (request,) = seen
+    assert request.method == spec["method"]
+    assert request.url.path == "/__api__/v1/" + "/".join(spec["endpoint"]).replace(
+        "{guid}", GUID
+    )
+    assert json.loads(request.content) == spec["body"]
+
+
+@pytest.mark.parametrize(
+    "case",
+    [case for case in SETTINGS_CASES if isinstance(case["settings"], dict)],
+    ids=lambda case: case["name"],
+)
+def test_the_version_comparison_matches_the_shared_cases(
+    case: dict[str, Any],
+) -> None:
+    version = parse_connect_version(case["settings"].get("version"))
+
+    too_old = version is not None and version_is_older(version, MINIMUM_TRACING_VERSION)
+
+    assert too_old is (case["warns"] == "version")
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("2026.09.0", (2026, 9, 0)),
+        ("v2026.10.0-dev+12-gabc123", (2026, 10, 0)),
+        ("2026.09", (2026, 9)),
+        ("unknown", None),
+        (None, None),
+        (2026, None),
+    ],
+)
+def test_parse_connect_version(text: object, expected: tuple[int, ...] | None) -> None:
+    assert parse_connect_version(text) == expected

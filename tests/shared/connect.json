@@ -198,5 +198,39 @@
         "granted": ["guid-ada"]
       }
     ]
+  },
+  "observability": {
+    "description": "What trajectory logging checks on Posit Connect. `server_settings` is an internal endpoint, so a failed request, an answer that is not an object, or a missing field means unknown and warns about nothing. The version is checked before the server setting.",
+    "minimum_version": "2026.09.0",
+    "server_settings": {
+      "method": "GET",
+      "url": "{server}/__api__/server_settings",
+      "cases": [
+        { "name": "an old server", "settings": { "version": "2026.08.1" }, "warns": "version" },
+        { "name": "an old server that also disallows instrumentation", "settings": { "version": "2026.08.1", "allow_content_instrumentation": false }, "warns": "version" },
+        { "name": "the minimum version", "settings": { "version": "2026.09.0" }, "warns": null },
+        { "name": "the minimum version with instrumentation allowed", "settings": { "version": "2026.09.0", "allow_content_instrumentation": true }, "warns": null },
+        { "name": "a two-part minimum version", "settings": { "version": "2026.09" }, "warns": null },
+        { "name": "a development build", "settings": { "version": "v2026.10.0-dev+12-gabc123" }, "warns": null },
+        { "name": "instrumentation disallowed", "settings": { "version": "2026.09.0", "allow_content_instrumentation": false }, "warns": "disabled" },
+        { "name": "no version, instrumentation disallowed", "settings": { "allow_content_instrumentation": false }, "warns": "disabled" },
+        { "name": "an unreadable version", "settings": { "version": "unknown" }, "warns": null },
+        { "name": "no fields", "settings": {}, "warns": null },
+        { "name": "an answer that is not an object", "settings": "unexpected response", "warns": null },
+        { "name": "the request failed", "settings": null, "warns": null }
+      ]
+    },
+    "enable": {
+      "description": "Turning on the content's observability setting. `content` is the answer to the read, or null when the read fails. `patch_fails` makes the write fail. `patched` is whether the write is sent, and `outcome` is what the caller is told.",
+      "read": { "method": "GET", "endpoint": ["content", "{guid}"] },
+      "write": { "method": "PATCH", "endpoint": ["content", "{guid}"], "body": { "otel_enabled": true } },
+      "cases": [
+        { "name": "off is turned on", "content": { "otel_enabled": false }, "patched": true, "outcome": "toggled" },
+        { "name": "a missing field is turned on", "content": {}, "patched": true, "outcome": "toggled" },
+        { "name": "already on", "content": { "otel_enabled": true }, "patched": false, "outcome": "already_on" },
+        { "name": "the read fails", "content": null, "patched": false, "outcome": "failed" },
+        { "name": "the write fails", "content": { "otel_enabled": false }, "patch_fails": true, "patched": true, "outcome": "failed" }
+      ]
+    }
   }
 }

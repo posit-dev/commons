@@ -82,7 +82,7 @@ warn_if_connect_tracing_unsupported <- function() {
         settings$version,
         ", but trajectory logging requires Connect >= 2026.09.0."
       ),
-      i = "Please ask your server administration to upgrade."
+      i = "Please ask your server administrator to upgrade."
     ))
   } else if (identical(settings$allow_content_instrumentation, FALSE)) {
     cli::cli_warn(c(
