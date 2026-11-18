@@ -46,7 +46,9 @@ from ._prompt import (
 from ._provenance import collect_appended_tags, derive_provenance_tag, provenance_aside
 from ._reminders import append_restored_conversation_reminder, append_turn_reminder
 from ._run_python import run_python_description, run_python_tools
+from ._semantic_models import semantic_registry
 from ._tools import FirstTouch, ToolContext, build_commons_tools
+from ._tracing import commons_span
 
 __all__ = ["Commons"]
 
@@ -145,75 +147,88 @@ class Commons(Chat[Any, Any]):
                 f"{type(semantic_layer).__name__}."
             )
         check_instructions(instructions)
-        # Built here so a host that cannot sandbox the session fails now,
-        # before any model asks to run code. The process starts on first use.
-        worker = Worker(
-            network=network,
-            measure_sources=list(semantic_layer.source_text.values()),
-        )
-
-        # Share the provider, which knows the chosen model; shallow-copy
-        # the chat kwargs so later changes don't cross between the two.
-        super().__init__(
-            provider=client.provider, kwargs_chat=copy.copy(client.kwargs_chat)
-        )
-        # chatlas never generates one, so an id the caller chose is explicitly kept
-        self.conversation_id = client.conversation_id
-        _carry_model_params(self, client)
-
-        self._sources = sources
-        self._context_layer = augment_context_layer(context_layer, sources.values())
-        self._definitions = build_registry(sources)
-        self._measures = semantic_layer.measures
-        # The injectables side stays here because it is the only part that
-        # knows what a DataSource is: a measure asks for a source by name and
-        # receives whatever that source is queried through.
-        self._injections = resolve_injections(
-            self._measures, _measure_injectables(data_sources, sources)
-        )
-        self._first_touch = FirstTouch()
-        self._handles = HandleStore()
-        self._citation_request = CitationRequest()
-        self._corpus = build_citation_corpus(
-            self._context_layer, self._measures.values(), sources
-        )
-        self._restore_reminder_pending = False
-
-        context = ToolContext(
-            sources=sources,
-            measures=self._measures,
-            definitions=self._definitions,
-            context_layer=self._context_layer,
-            handles=self._handles,
-            citation_request=self._citation_request,
-            injections=self._injections,
-            first_touch=self._first_touch,
-        )
-        tools = build_commons_tools(context)
-        self._python = WorkerThread(worker)
-        # Close the session's process and thread when the agent is
-        # collected or the interpreter exits. The callback names only the
-        # WorkerThread, so the finalizer never keeps the agent alive.
-        weakref.finalize(self, self._python.close)
-        self._run_python, self._run_python_sync = run_python_tools(
-            self._python,
-            context,
-            run_python_description(
-                [tool.name for tool in tools],
-                has_measures=bool(self._measures),
+        definitions = build_registry(sources)
+        semantic = semantic_registry(sources)
+        with commons_span(
+            "commons_agent_create",
+            {
+                "commons.agent.n_data_sources": len(sources),
+                "commons.agent.has_context_layer": context_layer is not None,
+                "commons.agent.n_measures": len(semantic_layer.measures),
+                "commons.agent.n_definitions": len(definitions.records),
+                "commons.agent.n_semantic_members": len(semantic.members),
+                "commons.agent.n_calculations": len(semantic.calculations),
+            },
+        ):
+            # Built here so a host that cannot sandbox the session fails now,
+            # before any model asks to run code. The process starts on first use.
+            worker = Worker(
                 network=network,
-            ),
-            network,
-        )
-        tools.append(self._run_python)
-        self.set_tools(list(tools))
-        self.system_prompt = _system_prompt(
-            sources,
-            self._definitions,
-            instructions=instructions,
-            tools=tools,
-            model=self.model,
-        )
+                measure_sources=list(semantic_layer.source_text.values()),
+            )
+
+            # Share the provider, which knows the chosen model; shallow-copy
+            # the chat kwargs so later changes don't cross between the two.
+            super().__init__(
+                provider=client.provider, kwargs_chat=copy.copy(client.kwargs_chat)
+            )
+            # chatlas never generates one, so an id the caller chose is explicitly kept
+            self.conversation_id = client.conversation_id
+            _carry_model_params(self, client)
+
+            self._sources = sources
+            self._context_layer = augment_context_layer(context_layer, sources.values())
+            self._definitions = definitions
+            self._measures = semantic_layer.measures
+            # The injectables side stays here because it is the only part that
+            # knows what a DataSource is: a measure asks for a source by name and
+            # receives whatever that source is queried through.
+            self._injections = resolve_injections(
+                self._measures, _measure_injectables(data_sources, sources)
+            )
+            self._first_touch = FirstTouch()
+            self._handles = HandleStore()
+            self._citation_request = CitationRequest()
+            self._corpus = build_citation_corpus(
+                self._context_layer, self._measures.values(), sources
+            )
+            self._restore_reminder_pending = False
+
+            context = ToolContext(
+                sources=sources,
+                measures=self._measures,
+                definitions=self._definitions,
+                context_layer=self._context_layer,
+                handles=self._handles,
+                citation_request=self._citation_request,
+                injections=self._injections,
+                first_touch=self._first_touch,
+            )
+            tools = build_commons_tools(context)
+            self._python = WorkerThread(worker)
+            # Close the session's process and thread when the agent is
+            # collected or the interpreter exits. The callback names only the
+            # WorkerThread, so the finalizer never keeps the agent alive.
+            weakref.finalize(self, self._python.close)
+            self._run_python, self._run_python_sync = run_python_tools(
+                self._python,
+                context,
+                run_python_description(
+                    [tool.name for tool in tools],
+                    has_measures=bool(self._measures),
+                    network=network,
+                ),
+                network,
+            )
+            tools.append(self._run_python)
+            self.set_tools(list(tools))
+            self.system_prompt = _system_prompt(
+                sources,
+                self._definitions,
+                instructions=instructions,
+                tools=tools,
+                model=self.model,
+            )
 
     def __repr__(self) -> str:
         count = len(self._sources)
@@ -396,8 +411,16 @@ class Commons(Chat[Any, Any]):
         Failures propagate: a direct call is typically warming caches ahead
         of a deployment, so a cold cache should fail the deploy.
         """
-        if self._context_layer is not None:
-            self._context_layer.prewarm()
+        layer = self._context_layer
+        if layer is not None and layer.docs:
+            with commons_span(
+                "commons_context_prewarm",
+                {
+                    "commons.context.n_docs": len(layer.docs),
+                    "commons.context.cache_hit": layer._is_built(),
+                },
+            ):
+                layer.prewarm()
         for source in self._sources.values():
             source.ensure_loaded()
 
