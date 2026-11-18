@@ -671,7 +671,7 @@ There are three kinds of definition. A definition can take part in a trusted met
 
 [^definition-sql]: In custom SQL, the agent writes a definition as a `{{name}}` token, and `commons` expands it to the SQL compiled for the data source. This is still custom SQL, so the provenance outcome is `Cited` or `Untrusted`, not `Trusted`.
 
-See the [DevRel Agent's `data-dict.yaml`](https://github.com/posit-dev/devrel-agent/blob/main/dictionaries/devrel.data-dict.yaml) for examples of definitions.
+See the [DevRel Agent's `data-dict.yaml`](https://github.com/posit-dev/devrel-agent/blob/8e77e78b2eb986fe320ad0e288363cc8186fc6eb/dictionaries/devrel.data-dict.yaml) for examples of definitions.
 
 When a data source is constructed, `commons` validates each definition and compiles it to the source’s SQL dialect.
 
