@@ -194,7 +194,7 @@
     ]
   },
   "file_naming": {
-    "description": "Which files in a trace directory a reader takes as trace files when no exporter template is set. A writer must choose a name a reader takes. trace-latest.jsonl is not read: the file exporter in R's otelsdk keeps it as a hard link to the newest numbered file, which is read already.",
+    "description": "The file names `trajectory_read()` reads in a trace directory when `OTEL_EXPORTER_OTLP_TRACES_FILE` is unset, so a writer must use a name marked `read`. `trace-latest.jsonl` is skipped because it is a hard link to the newest numbered file, which is already read.",
     "cases": [
       { "file": "trace.jsonl", "read": true },
       { "file": "trace-1.jsonl", "read": true },
