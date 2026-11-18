@@ -25,10 +25,9 @@ from chatlas import ContentToolRequest
 from chatlas.types import ContentText
 
 from commons import context_layer, data_source
-from commons._agent import Commons
 
-from ._agents import collect
-from ._provider import scripted_chat, text
+from ._agents import collect, logging_agent_over
+from ._provider import text
 
 TRACE_FILE = "trace-1.jsonl"
 GET_STARTED = Path(__file__).parents[1] / "docs" / "01-get-started.qmd"
@@ -82,29 +81,27 @@ def documents(directory: Path) -> Any:
     return context_layer(paths)
 
 
-def agent(responses: list[list[Any]], layer: Any, conversation_id: str) -> Commons:
-    """A logging agent whose host has set a conversation id, as shinychat does."""
-    client = scripted_chat(responses)
-    client.conversation_id = conversation_id
-    built = Commons(client, source(), context_layer=layer, log=True)
-    assert built._tracing, "trajectory logging is not live"
-    return built
-
-
 async def converse(layer: Any) -> None:
-    first = agent(
+    # Each host conversation id stands in for the one shinychat sets.
+    first = logging_agent_over(
+        source(),
         [
             query(),
             cited("There are three orders.", DOCUMENTS[0]),
             cited("Each order is one row.", "Orders are counted twice."),
         ],
-        layer,
-        "first",
+        conversation_id="first",
+        context_layer=layer,
     )
     await collect(first, "How many orders are there?")
     await collect(first, "Can an order appear twice?")
 
-    second = agent([text("Hello. Ask me about orders or customers.")], layer, "second")
+    second = logging_agent_over(
+        source(),
+        [text("Hello. Ask me about orders or customers.")],
+        conversation_id="second",
+        context_layer=layer,
+    )
     await collect(second, "Hello")
 
 
