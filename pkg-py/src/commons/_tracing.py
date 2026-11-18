@@ -14,12 +14,13 @@ Content Observability. ``pkg-r/R/tracing.R`` holds the R counterparts.
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import sys
 import warnings
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager, contextmanager, nullcontext
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from opentelemetry import trace
 from opentelemetry.trace import Span
@@ -39,18 +40,27 @@ from ._connect import (
     version_is_older,
 )
 
+if TYPE_CHECKING:
+    from ._citations import CitationDecision
+    from ._provenance import Tag
+
 __all__ = [
+    "CANDIDATES_ATTRIBUTE",
     "CAPTURE_VAR",
+    "PROVENANCE_SPAN",
+    "TAG_ATTRIBUTE",
     "TRACER_NAME",
     "TURN_SPAN",
     "USER_ATTRIBUTE",
     "Span",
     "as_current",
     "check_trajectory_arguments",
+    "citation_candidates_json",
     "commons_span",
     "content_capture_enabled",
     "enable_content_observability",
     "enable_trajectory_tracing",
+    "record_provenance_span",
     "start_turn_span",
     "tracing_configured",
     "trajectory_user",
@@ -68,6 +78,11 @@ TRACER_NAME = "co.posit.python-package.commons"
 TURN_SPAN = "commons_conversation_turn"
 USER_ATTRIBUTE = "commons.connect.user"
 
+# The span that records an answer's provenance tag and citation decisions.
+PROVENANCE_SPAN = "commons_provenance"
+TAG_ATTRIBUTE = "commons.provenance.tag"
+CANDIDATES_ATTRIBUTE = "commons.citation.candidates"
+
 # Set before the first request, so the API calls are made once per process.
 _OBSERVABILITY_ATTEMPTED = False
 
@@ -84,9 +99,8 @@ def commons_span(
     """Open a span, current for the duration of the block, and end it on exit.
 
     Pass the values known up front in ``attributes``: samplers see only
-    those, and Connect snapshots a span's attributes when it opens. Set
-    values that the work produces, such as a row count, on the yielded
-    span.
+    those. Set values that the work produces, such as a row count, on the
+    yielded span.
     """
     with _TRACER.start_as_current_span(name, attributes=attributes) as span:
         yield span
@@ -100,6 +114,49 @@ def start_turn_span(user: str | None) -> Span:
     return _TRACER.start_span(
         TURN_SPAN, attributes=None if user is None else {USER_ATTRIBUTE: user}
     )
+
+
+def citation_candidates_json(decisions: Sequence[CitationDecision]) -> str:
+    """The decisions as the JSON array written to the candidates attribute.
+
+    A decision's ``label`` and ``kind`` are left out when absent. ``quote``
+    is always present and is ``null`` for a malformed body.
+    """
+    return json.dumps(
+        [
+            {
+                key: value
+                for key, value in (
+                    ("quote", decision.quote),
+                    ("status", decision.status),
+                    ("label", decision.label),
+                    ("kind", decision.kind),
+                )
+                if key in ("quote", "status") or value is not None
+            }
+            for decision in decisions
+        ],
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+
+
+def record_provenance_span(
+    parent: Span, tag: Tag | None, decisions: Sequence[CitationDecision]
+) -> None:
+    """Record an answer's provenance as a span under ``parent``, and end it.
+
+    Both attributes are set as the span starts, where samplers can see
+    them. The tag attribute is absent without a tag.
+    """
+    attributes = {CANDIDATES_ATTRIBUTE: citation_candidates_json(decisions)}
+    if tag is not None:
+        attributes[TAG_ATTRIBUTE] = str(tag)
+    _TRACER.start_span(
+        PROVENANCE_SPAN,
+        context=trace.set_span_in_context(parent),
+        attributes=attributes,
+    ).end()
 
 
 def as_current(span: Span | None) -> AbstractContextManager[Any]:
