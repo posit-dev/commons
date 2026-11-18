@@ -192,5 +192,17 @@
         "expected": [{ "quote": "b", "status": "rejected" }, { "quote": "a", "status": "rejected" }]
       }
     ]
+  },
+  "file_naming": {
+    "description": "The file names `trajectory_read()` reads in a trace directory when `OTEL_EXPORTER_OTLP_TRACES_FILE` is unset, so a writer must use a name marked `read`. `trace-latest.jsonl` is skipped because it is a hard link to the newest numbered file, which is already read.",
+    "cases": [
+      { "file": "trace.jsonl", "read": true },
+      { "file": "trace-1.jsonl", "read": true },
+      { "file": "trace-12.jsonl", "read": true },
+      { "file": "trace-latest.jsonl", "read": false },
+      { "file": "trace-1.jsonl.bak", "read": false },
+      { "file": "spans.jsonl", "read": false },
+      { "file": "trace-1.json", "read": false }
+    ]
   }
 }

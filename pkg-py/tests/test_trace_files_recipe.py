@@ -3,26 +3,15 @@
 from __future__ import annotations
 
 import json
-import re
 from pathlib import Path
 
 import pytest
 
 from ._fresh_interpreter import run_in_fresh_interpreter
+from ._trace_fixture import recipe
 
 pytest.importorskip("opentelemetry.sdk")
 pytest.importorskip("opentelemetry.exporter.otlp.json.file")
-
-GET_STARTED = Path(__file__).parents[1] / "docs" / "01-get-started.qmd"
-HEADING = "## Logging conversations"
-
-
-def recipe() -> str:
-    text = GET_STARTED.read_text()
-    section = text.split(HEADING, 1)[1].split("\n## ", 1)[0]
-    match = re.search(r"```python\n(.*?)```", section, re.DOTALL)
-    assert match, f"no Python block under {HEADING!r}"
-    return match.group(1)
 
 
 def test_the_recipe_writes_a_trace_file(tmp_path: Path) -> None:
