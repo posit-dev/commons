@@ -1,5 +1,7 @@
 # commons (development version)
 
+* The `commons_conversation_turn` span no longer records `commons.provenance.tag` or `commons.citation.candidates` on a per-turn basis. Both attributes are still set in its child `commons_provenance` span (where `trajectory_read()` looks for them).
+
 # commons 0.2.0
 
 commons 0.2.0 introduces three big features in addition to a number of minor improvements and big fixes.
