@@ -1,4 +1,10 @@
-"""The trace the Python agent writes, which the R suite reads with trajectory_read()."""
+"""The Python agent keeps writing the trace committed under tests/shared/traces/python/.
+
+The R suite reads that committed trace with trajectory_read(), so the check
+that R reads what Python writes is only as current as the trace. These tests
+fail when the agent's spans drift from it, and when a writer names its trace
+file something a reader skips.
+"""
 
 from __future__ import annotations
 
