@@ -72,7 +72,7 @@ Because of this, you should only include facts that you can share with both the 
 
 ## Logging conversations
 
-Conversation logging is off by default. With `Commons(log=True)`, `commons` turns on message content capture in the OpenTelemetry spans that chatlas records. These spans can contain user messages, model responses, tool requests, and tool results, including query results and plots. Treat them as another copy of the data available to the agent.
+Conversation logging is off by default. With `Commons(log=True)`, `commons` turns on message content capture in the OpenTelemetry spans that chatlas records. These spans can contain user messages, model responses, tool requests, and tool results, including query results and plots. Treat them as another copy of the data available to the agent. An agent built with `log=True` also records the signed-in user's name on each turn, if the Shiny session has one. It does this only if the process is tracing and content capture is not turned off when the agent is built. A conversation id is recorded only when the application sets one, as shinychat does when chat history is enabled. A tracing process records that id whether or not the agent logs.
 
 Capture is controlled for the whole process by the `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` environment variable, and the agent's `log` argument only sets it when nothing else has. Once the variable is on, whether `log=True` or the environment turned it on, chatlas records the conversations of every agent in a traced process, including agents built with `log=False`. The variable is on when it is `true` or `1`, in any case. Any other non-empty value turns capture off, and `log=True` leaves that value alone. An empty value counts as unset.
 

@@ -15,9 +15,10 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import sys
 import warnings
 from collections.abc import Iterator, Mapping, Sequence
-from contextlib import contextmanager, nullcontext
+from contextlib import AbstractContextManager, contextmanager, nullcontext
 from typing import Any
 
 from opentelemetry import trace
@@ -41,13 +42,18 @@ from ._connect import (
 __all__ = [
     "CAPTURE_VAR",
     "TRACER_NAME",
+    "TURN_SPAN",
+    "USER_ATTRIBUTE",
     "Span",
+    "as_current",
     "check_trajectory_arguments",
     "commons_span",
     "content_capture_enabled",
     "enable_content_observability",
     "enable_trajectory_tracing",
+    "start_turn_span",
     "tracing_configured",
+    "trajectory_user",
     "warn_if_connect_tracing_unsupported",
 ]
 
@@ -57,6 +63,10 @@ CAPTURE_VAR = "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"
 # Identifies commons as the emitter, alongside chatlas' own spans. R uses
 # `co.posit.r-package.commons`.
 TRACER_NAME = "co.posit.python-package.commons"
+
+# The span around one turn of a logging agent, and the session user it records.
+TURN_SPAN = "commons_conversation_turn"
+USER_ATTRIBUTE = "commons.connect.user"
 
 # Set before the first request, so the API calls are made once per process.
 _OBSERVABILITY_ATTEMPTED = False
@@ -80,6 +90,52 @@ def commons_span(
     """
     with _TRACER.start_as_current_span(name, attributes=attributes) as span:
         yield span
+
+
+def start_turn_span(user: str | None) -> Span:
+    """Start a turn span under the current one, without making it current.
+
+    The caller ends it. ``user`` is recorded when given.
+    """
+    return _TRACER.start_span(
+        TURN_SPAN, attributes=None if user is None else {USER_ATTRIBUTE: user}
+    )
+
+
+def as_current(span: Span | None) -> AbstractContextManager[Any]:
+    """Make ``span`` current for the block, leaving it open and its status alone.
+
+    Does nothing when there is no span.
+    """
+    if span is None:
+        return nullcontext()
+    return trace.use_span(
+        span, end_on_exit=False, record_exception=False, set_status_on_exception=False
+    )
+
+
+_CURRENT_SESSION = object()
+
+
+def trajectory_user(session: object | None = _CURRENT_SESSION) -> str | None:
+    """The authenticated user of ``session``, by default the current Shiny one.
+
+    Only a non-empty string counts. A module's scope reports the user of the
+    session it belongs to. Shiny is consulted only when something has
+    imported it already, so an agent without the ``shiny`` extra imports
+    nothing.
+    """
+    if session is _CURRENT_SESSION:
+        session = None
+        if "shiny" in sys.modules:
+            from shiny.session import get_current_session
+
+            session = get_current_session()
+    root_scope = getattr(session, "root_scope", None)
+    if callable(root_scope):
+        session = root_scope()
+    user = getattr(session, "user", None)
+    return user if isinstance(user, str) and user else None
 
 
 def check_trajectory_arguments(log: object, share_with: Sequence[str] | None) -> None:
