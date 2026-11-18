@@ -235,7 +235,7 @@ There are three kinds of definition. A definition can take part in a trusted met
 
 `commons` infers the kind from the expression. An aggregate or constant expression is a metric. A row-level Boolean expression is a filter. Every other row-level expression is a derived value.
 
-See the [DevRel Agent's `data-dict.yaml`](https://github.com/posit-dev/devrel-agent/blob/main/dictionaries/devrel.data-dict.yaml) for examples of definitions.
+See the [DevRel Agent's `data-dict.yaml`](https://github.com/posit-dev/devrel-agent/blob/8e77e78b2eb986fe320ad0e288363cc8186fc6eb/dictionaries/devrel.data-dict.yaml) for examples of definitions.
 
 When a data source is constructed, `commons` validates each definition and compiles it to the source's SQL dialect.
 
