@@ -182,18 +182,20 @@ test_that("the agent still writes the committed trace", {
 
   committed <- test_path("fixtures", "shared", "traces", "r", basename(written))
   expect_true(file.exists(committed))
+  expect_identical(trace_private_strings(committed), character())
   want <- normalized_trace(committed)
   expect_gt(length(want), 0)
   expect_identical(
     normalized_trace(written),
     want,
-    info = paste(
-      "The agent no longer writes the committed trace. If the change is",
-      "intended, regenerate it from the repository root:",
-      "rm -f tests/shared/traces/r/trace-0.jsonl && cd pkg-r &&",
-      "Rscript -e 'devtools::load_all(quiet = TRUE);",
-      "write_trace_fixture(\"../tests/shared/traces/r\")' && cd .. &&",
-      "scripts/sync-shared.sh, then run the Python suite."
+    info = paste0(
+      "The agent no longer writes the committed trace. If the change is ",
+      "intended, regenerate it from the repository root:\n\n",
+      "  rm -f tests/shared/traces/r/*.jsonl && cd pkg-r && ",
+      "Rscript -e 'devtools::load_all(quiet = TRUE); ",
+      "write_trace_fixture(\"../tests/shared/traces/r\")' && cd .. && ",
+      "scripts/sync-shared.sh\n\n",
+      "Then run the Python suite."
     )
   )
 })
