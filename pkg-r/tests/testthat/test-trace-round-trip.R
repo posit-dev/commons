@@ -191,7 +191,7 @@ test_that("the agent still writes the committed trace", {
     info = paste0(
       "The agent no longer writes the committed trace. If the change is ",
       "intended, regenerate it from the repository root:\n\n",
-      "  rm -f tests/shared/traces/r/*.jsonl && cd pkg-r && ",
+      "  find tests/shared/traces/r -name '*.jsonl' -delete && cd pkg-r && ",
       "Rscript -e 'devtools::load_all(quiet = TRUE); ",
       "write_trace_fixture(\"../tests/shared/traces/r\")' && cd .. && ",
       "scripts/sync-shared.sh\n\n",

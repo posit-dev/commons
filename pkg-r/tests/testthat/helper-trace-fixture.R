@@ -2,7 +2,7 @@
 # running trace-fixture.R in a process of its own, and returns its path. To
 # regenerate the committed trace, from the repository root:
 #
-#   rm -f tests/shared/traces/r/*.jsonl && cd pkg-r &&
+#   find tests/shared/traces/r -name '*.jsonl' -delete && cd pkg-r &&
 #     Rscript -e 'devtools::load_all(quiet = TRUE); write_trace_fixture("../tests/shared/traces/r")' &&
 #     cd .. && scripts/sync-shared.sh
 write_trace_fixture <- function(directory) {
@@ -103,8 +103,8 @@ tidy_trace_envelope <- function(envelope) {
   envelope
 }
 
-# Which of a file URL, the package's paths, and the login name appear in the
-# trace at `path`.
+# Which of a file URL, the package's paths, and the login name (as a path
+# component or a whole quoted value) appear in the trace at `path`.
 trace_private_strings <- function(path) {
   roots <- c(trace_fixture_source(), system.file(package = "commons"))
   user <- Sys.info()[["user"]]
@@ -112,7 +112,9 @@ trace_private_strings <- function(path) {
   private <- c(
     "file://",
     normalizePath(roots[nzchar(roots)]),
-    if (nchar(user) >= 3 && !tolower(user) %in% generic) user
+    if (nchar(user) >= 3 && !tolower(user) %in% generic) {
+      c(paste0("/", user, "/"), paste0("\\", user, "\\"), paste0("\"", user, "\""))
+    }
   )
   text <- paste(readLines(path, warn = FALSE), collapse = "\n")
   private[vapply(private, grepl, logical(1), x = text, fixed = TRUE)]
