@@ -199,3 +199,15 @@ test_that("the agent still writes the committed trace", {
     )
   )
 })
+
+test_that("the privacy check finds a login name only as a path part or value", {
+  path <- withr::local_tempfile(fileext = ".jsonl")
+  writeLines('{"key":"service.name","value":{"stringValue":"same"}}', path)
+  expect_identical(trace_private_strings(path, user = "key"), character())
+  expect_identical(trace_private_strings(path, user = "sam"), character())
+
+  writeLines('{"key":"process.owner","value":{"stringValue":"sam"}}', path)
+  expect_identical(trace_private_strings(path, user = "sam"), ':"sam"')
+  writeLines('{"key":"code.filepath","value":{"stringValue":"/home/sam/x.R"}}', path)
+  expect_identical(trace_private_strings(path, user = "sam"), "/sam/")
+})
