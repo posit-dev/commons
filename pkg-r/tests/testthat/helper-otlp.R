@@ -11,14 +11,11 @@ otlp_test_span <- function(
   start_time = "1",
   end_time = "2"
 ) {
-  span <- list(
-    traceId = trace_id,
-    spanId = span_id,
-    name = name,
-    startTimeUnixNano = start_time,
-    endTimeUnixNano = end_time,
-    attributes = attributes
-  )
+  span <- list(traceId = trace_id, spanId = span_id, name = name)
+  # A NULL time leaves the field out of the span.
+  span$startTimeUnixNano <- start_time
+  span$endTimeUnixNano <- end_time
+  span$attributes <- attributes
   span$parentSpanId <- parent_span_id
   span
 }
@@ -239,9 +236,14 @@ trajectory_fixture_span <- function(span) {
     attributes = lapply(names(attributes), function(key) {
       otlp_test_attr(key, otlp_fixture_line(attributes[[key]]))
     }),
-    start_time = span[["start"]] %||% "1",
-    end_time = span[["end"]] %||% "2"
+    start_time = fixture_time(span[["start"]], "1"),
+    end_time = fixture_time(span[["end"]], "2")
   )
+}
+
+# `false` leaves the timestamp out; an absent one takes its default.
+fixture_time <- function(time, default) {
+  if (isFALSE(time)) NULL else time %||% default
 }
 
 fixture_instant <- function(x) {

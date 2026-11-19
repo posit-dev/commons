@@ -71,8 +71,6 @@ def _fixture_span(span: dict[str, Any]) -> dict[str, Any]:
         "traceId": span["trace"],
         "spanId": span["span"],
         "name": "chat test-model" if span.get("chat") else span["name"],
-        "startTimeUnixNano": span.get("start", "1"),
-        "endTimeUnixNano": span.get("end", "2"),
         "attributes": [
             {
                 "key": k,
@@ -81,6 +79,12 @@ def _fixture_span(span: dict[str, Any]) -> dict[str, Any]:
             for k, v in attributes.items()
         ],
     }
+    for key, field, default in (
+        ("start", "startTimeUnixNano", "1"),
+        ("end", "endTimeUnixNano", "2"),
+    ):
+        if span.get(key) is not False:
+            encoded[field] = span.get(key, default)
     if "parent" in span:
         encoded["parentSpanId"] = span["parent"]
     return encoded
