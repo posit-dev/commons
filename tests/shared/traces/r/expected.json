@@ -1,0 +1,18 @@
+{
+  "description": "What a trace reader must make of trace-0.jsonl, which the R agent wrote (pkg-r/tests/testthat/trace-fixture.R). Conversations are oldest first. `roles` lists each turn's role. `tool` names the one tool request whose result must link back to it. `exchanges` lists each exchange's provenance tag and the status of each citation decision, in order.",
+  "conversations": [
+    {
+      "roles": ["system", "user", "assistant", "user", "assistant", "user", "assistant"],
+      "tool": { "name": "run_sql", "linked": true },
+      "exchanges": [
+        { "provenance_tag": "B", "decision_statuses": ["accepted"] },
+        { "provenance_tag": null, "decision_statuses": ["rejected"] }
+      ]
+    },
+    {
+      "roles": ["system", "user", "assistant"],
+      "tool": null,
+      "exchanges": [{ "provenance_tag": null, "decision_statuses": [] }]
+    }
+  ]
+}

@@ -144,24 +144,28 @@ def test_a_path_that_is_not_a_directory_reads_as_no_spans(
     assert trajectory_read(path) == {}
 
 
-COMMITTED = SHARED_DIR / "traces" / "python"
+TRACES = SHARED_DIR / "traces"
+WRITERS = ("python", "r")
+COMMONS_SPANS = Counter(
+    {
+        "commons_data_source_create": 2,
+        "commons_data_source_load_frames": 2,
+        "commons_agent_create": 2,
+        "commons_conversation_turn": 3,
+        "invoke_agent": 3,
+        "chat claude-sonnet-4-5": 4,
+        "execute_tool run_sql": 1,
+        "commons_provenance": 3,
+    }
+)
 
 
-def test_the_committed_python_trace_reads_as_its_spans() -> None:
-    spans = read_local_spans(COMMITTED)
+@pytest.mark.parametrize("writer", WRITERS)
+def test_each_committed_trace_reads_as_its_spans(writer: str) -> None:
+    spans = read_local_spans(TRACES / writer)
+    named = [span for span in spans if span.name in COMMONS_SPANS]
 
-    assert Counter(span.name for span in spans) == Counter(
-        {
-            "commons_data_source_create": 2,
-            "commons_data_source_load_frames": 2,
-            "commons_agent_create": 2,
-            "commons_conversation_turn": 3,
-            "invoke_agent": 3,
-            "chat claude-sonnet-4-5": 4,
-            "execute_tool run_sql": 1,
-            "commons_provenance": 3,
-        }
-    )
+    assert Counter(span.name for span in named) == COMMONS_SPANS
     by_id = {span.span_id: span for span in spans}
     roots = {
         "commons_conversation_turn",
@@ -175,7 +179,7 @@ def test_the_committed_python_trace_reads_as_its_spans() -> None:
         "chat claude-sonnet-4-5": "invoke_agent",
         "execute_tool run_sql": "invoke_agent",
     }
-    for span in spans:
+    for span in named:
         if span.name in roots:
             assert span.parent_span_id == ""
         else:
