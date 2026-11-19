@@ -131,3 +131,34 @@ test_turn_json <- function() {
     output = '[{"role":"assistant","parts":[{"type":"text","content":"You rolled a 4."}]}]'
   )
 }
+
+otlp_fixture_line <- function(line) {
+  if (is.character(line)) {
+    return(line)
+  }
+  as.character(jsonlite::toJSON(line, auto_unbox = TRUE, digits = NA))
+}
+
+expect_otlp_span <- function(span, expected, info = NULL) {
+  expect_identical(span$trace_id, expected$trace_id, info = info)
+  expect_identical(span$span_id, expected$span_id, info = info)
+  expect_identical(span$parent_span_id, expected$parent_span_id, info = info)
+  expect_identical(span$name, expected$name, info = info)
+  if (!is.null(expected$start_time_unix_nano)) {
+    expect_identical(span$start_time, expected$start_time_unix_nano, info = info)
+  }
+  if (!is.null(expected$end_time_unix_nano)) {
+    expect_identical(span$end_time, expected$end_time_unix_nano, info = info)
+  }
+  expect_setequal(
+    as.character(unique(names(span$attributes))),
+    as.character(names(expected$attributes))
+  )
+  for (key in names(expected$attributes)) {
+    expect_equal(
+      span$attributes[[key]],
+      expected$attributes[[key]],
+      info = info
+    )
+  }
+}

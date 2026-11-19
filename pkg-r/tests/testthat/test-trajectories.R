@@ -1,33 +1,24 @@
 test_that("parse_otlp_lines unwraps envelopes and flattens attributes", {
-  line <- otlp_test_line(list(
-    otlp_test_span(
-      "t1",
-      "s1",
-      name = "demo",
-      attributes = list(otlp_test_attr("gen_ai.operation.name", "chat"))
-    )
-  ))
+  cases <- shared_fixture(file.path("trajectories", "otlp"))$lines$cases
+  expect_gt(length(cases), 0)
 
-  spans <- parse_otlp_lines(c(line, "not json", ""))
-
-  expect_length(spans, 1)
-  expect_equal(spans[[1]]$trace_id, "t1")
-  expect_equal(spans[[1]]$span_id, "s1")
-  expect_equal(spans[[1]]$name, "demo")
-  expect_equal(spans[[1]]$attributes[["gen_ai.operation.name"]], "chat")
+  for (case in cases) {
+    lines <- vapply(case$lines, otlp_fixture_line, character(1))
+    spans <- parse_otlp_lines(lines)
+    expect_length(spans, length(case$spans))
+    for (i in seq_along(case$spans)) {
+      expect_otlp_span(spans[[i]], case$spans[[i]], info = case$name)
+    }
+  }
 })
 
 test_that("otlp_attribute_value handles OTLP value encodings", {
-  expect_equal(otlp_attribute_value(list(stringValue = "x")), "x")
-  expect_equal(otlp_attribute_value(list(intValue = "42")), 42)
-  expect_equal(otlp_attribute_value(list(doubleValue = 1.5)), 1.5)
-  expect_true(otlp_attribute_value(list(boolValue = TRUE)))
-  expect_equal(
-    otlp_attribute_value(
-      list(arrayValue = list(values = list(list(stringValue = "a"))))
-    ),
-    list("a")
-  )
+  cases <- shared_fixture(file.path("trajectories", "otlp"))$attribute_values$cases
+  expect_gt(length(cases), 0)
+
+  for (case in cases) {
+    expect_equal(otlp_attribute_value(case$value), case$expected, info = case$name)
+  }
 })
 
 test_that("trajectories rebuild ellmer turns from semconv messages", {
@@ -1133,18 +1124,30 @@ test_that("local trace files are named as the shared fixture pins", {
 })
 
 test_that("local trace files can follow a custom exporter template", {
-  path <- withr::local_tempdir()
-  withr::local_envvar(
-    OTEL_EXPORTER_OTLP_TRACES_FILE = file.path(path, "spans-%N.ndjson")
-  )
-  json <- test_turn_json()
-  line <- otlp_test_line(list(
-    chat_test_span("t1", "s1", input_messages = json$input)
-  ))
-  writeLines(line, file.path(path, "spans-0.ndjson"))
-  writeLines(line, file.path(path, "spans-latest.ndjson"))
+  cases <- shared_fixture(file.path("trajectories", "otlp"))$exporter_template$cases
+  expect_gt(length(cases), 0)
 
-  expect_length(read_local_spans(path), 1)
+  for (case in cases) {
+    path <- withr::local_tempdir()
+    withr::local_envvar(
+      OTEL_EXPORTER_OTLP_TRACES_FILE = file.path(path, case$template)
+    )
+    for (file in case$files) {
+      writeLines(
+        otlp_test_line(list(otlp_test_span("t1", file))),
+        file.path(path, file)
+      )
+    }
+    expect_equal(
+      sort(vapply(
+        read_local_spans(path),
+        function(span) span$span_id,
+        character(1)
+      )),
+      sort(as.character(unlist(case$read))),
+      info = case$name
+    )
+  }
 })
 
 test_that("the latest chat span wins across timestamp digit counts", {
@@ -1513,7 +1516,17 @@ test_that("trajectory_read stops Connect paging after n conversations", {
 })
 
 test_that("trajectory_read returns an empty list for a missing directory", {
-  expect_length(trajectory_read(file.path(tempdir(), "nope")), 0)
+  cases <- shared_fixture(file.path("trajectories", "otlp"))$missing_directory$cases
+  expect_gt(length(cases), 0)
+
+  for (case in cases) {
+    path <- file.path(withr::local_tempdir(), case$path)
+    if (case$file) {
+      writeLines(otlp_test_line(list(otlp_test_span("t1", "s1"))), path)
+    }
+    expect_length(read_local_spans(path), 0)
+    expect_length(trajectory_read(path), 0)
+  }
 })
 
 test_that("trajectory_read validates source", {
@@ -1708,10 +1721,16 @@ test_that("NULL source falls back to the local traces directory", {
 })
 
 test_that("local_traces_dir follows the active file exporter", {
-  withr::local_envvar(
-    OTEL_EXPORTER_OTLP_TRACES_FILE = "/some/dir/trace-%N.jsonl"
-  )
-  expect_equal(local_traces_dir(), "/some/dir")
+  cases <- shared_fixture(file.path("trajectories", "otlp"))$traces_dir$cases
+  expect_gt(length(cases), 0)
+
+  for (case in cases) {
+    withr::local_envvar(
+      OTEL_EXPORTER_OTLP_TRACES_FILE = case$exporter_file %||% NA,
+      COMMONS_TRACES_DIR = case$commons_traces_dir %||% NA
+    )
+    expect_equal(local_traces_dir(), case$dir, info = case$name)
+  }
 })
 
 test_that("is_content_guid recognizes GUIDs", {
