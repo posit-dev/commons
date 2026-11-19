@@ -13,6 +13,7 @@ from typing import Any
 
 import pytest
 
+from commons._trajectory import trajectory_read
 from commons._trajectory._otlp import (
     EXPORTER_FILE_VAR,
     TRACES_DIR_VAR,
@@ -140,6 +141,7 @@ def test_a_path_that_is_not_a_directory_reads_as_no_spans(
     if case["file"]:
         _write_span(path, "s1")
     assert read_local_spans(path) == []
+    assert trajectory_read(path) == {}
 
 
 COMMITTED = SHARED_DIR / "traces" / "python"

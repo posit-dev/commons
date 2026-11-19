@@ -9,12 +9,13 @@ import json
 from typing import Any
 
 import pytest
-from chatlas import AssistantTurn, SystemTurn, Turn, UserTurn
-from chatlas.types import ContentText, ContentToolRequest, ContentToolResult
+from chatlas import AssistantTurn, SystemTurn, UserTurn
+from chatlas.types import ContentToolRequest, ContentToolResult
 
 from commons._trajectory._otlp import Span, parse_otlp_lines, read_local_spans
 from commons._trajectory._semconv import trajectory_turns
 from tests._shared import SHARED_DIR, load_shared_fixture
+from tests._trajectories import described_turns
 
 SEMCONV = load_shared_fixture("trajectories/semconv")
 
@@ -49,38 +50,6 @@ def _span(attributes: dict[str, Any]) -> Span:
     return span
 
 
-def _descriptor(content: object, turns: list[Turn]) -> dict[str, Any]:
-    if isinstance(content, ContentText):
-        return {"type": "text", "text": content.text}
-    if isinstance(content, ContentToolRequest):
-        return {
-            "type": "tool_request",
-            "id": content.id,
-            "name": content.name,
-            "arguments": content.arguments,
-        }
-    if isinstance(content, ContentToolResult):
-        requests = [
-            c for t in turns for c in t.contents if isinstance(c, ContentToolRequest)
-        ]
-        assert content.request is None or any(content.request is r for r in requests)
-        return {
-            "type": "tool_result",
-            "value": content.value,
-            "request": None
-            if content.request is None
-            else {"id": content.request.id, "name": content.request.name},
-        }
-    raise AssertionError(f"unexpected content {type(content).__name__}")
-
-
-def _described(turns: list[Turn]) -> list[dict[str, Any]]:
-    return [
-        {"role": turn.role, "contents": [_descriptor(c, turns) for c in turn.contents]}
-        for turn in turns
-    ]
-
-
 def test_the_fixture_has_cases() -> None:
     assert SEMCONV["turns"]["cases"]
     assert SEMCONV["dropped"]["cases"]
@@ -92,7 +61,7 @@ def test_the_fixture_has_cases() -> None:
     ids=lambda case: case["name"],
 )
 def test_messages_decode_as_the_shared_fixture_pins(case: dict[str, Any]) -> None:
-    assert _described(trajectory_turns(_span(case["attributes"]))) == case["turns"]
+    assert described_turns(trajectory_turns(_span(case["attributes"]))) == case["turns"]
 
 
 def test_each_role_decodes_to_its_chatlas_turn_class() -> None:
