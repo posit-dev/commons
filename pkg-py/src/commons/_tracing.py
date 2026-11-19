@@ -50,7 +50,9 @@ if TYPE_CHECKING:
 __all__ = [
     "CANDIDATES_ATTRIBUTE",
     "CAPTURE_VAR",
+    "CONTENT_TRACING_HINT",
     "PROVENANCE_SPAN",
+    "SERVER_TRACING_HINT",
     "TAG_ATTRIBUTE",
     "TRACER_NAME",
     "TURN_SPAN",
@@ -85,6 +87,17 @@ USER_ATTRIBUTE = "commons.connect.user"
 PROVENANCE_SPAN = "commons_provenance"
 TAG_ATTRIBUTE = "commons.provenance.tag"
 CANDIDATES_ATTRIBUTE = "commons.citation.candidates"
+
+# How to turn on the content setting and the server settings that tracing needs.
+CONTENT_TRACING_HINT = (
+    "In this content's Settings > Monitoring > Traces panel on Posit Connect, "
+    "select Enabled, then redeploy or restart the content."
+)
+SERVER_TRACING_HINT = (
+    "Ask your server administrator to set OpenTelemetry.Enabled = true and "
+    "OpenTelemetry.AllowContentInstrumentation = true in the Connect "
+    "configuration, then restart Connect."
+)
 
 # Set before the first request, so the API calls are made once per process.
 _OBSERVABILITY_ATTEMPTED = False
@@ -320,10 +333,7 @@ def warn_if_connect_tracing_unsupported(
     elif settings.get("allow_content_instrumentation") is False:
         warnings.warn(
             "Trajectory logging is disabled by this Posit Connect server's "
-            "configuration. Ask your server administrator to set "
-            "OpenTelemetry.Enabled = true and "
-            "OpenTelemetry.AllowContentInstrumentation = true in the Connect "
-            "configuration, then restart Connect.",
+            f"configuration. {SERVER_TRACING_HINT}",
             stacklevel=stacklevel,
         )
 
@@ -357,9 +367,7 @@ def enable_content_observability(
     except (ConnectError, ValueError):
         warnings.warn(
             "Trajectory logging is enabled but OpenTelemetry tracing is not "
-            "active. In this content's Settings > Monitoring > Traces panel "
-            "on Posit Connect, select Enabled, then redeploy or restart the "
-            "content.",
+            f"active. {CONTENT_TRACING_HINT}",
             stacklevel=stacklevel,
         )
         return
