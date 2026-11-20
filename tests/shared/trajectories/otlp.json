@@ -131,13 +131,14 @@
     ]
   },
   "traces_dir": {
-    "description": "Where a reader looks for trace files when it is given no source. `exporter_file` and `commons_traces_dir` are the values of OTEL_EXPORTER_OTLP_TRACES_FILE and COMMONS_TRACES_DIR, null when unset. When the exporter's file is set and not empty, its directory is the one; otherwise COMMONS_TRACES_DIR is. With neither set, each package uses a directory under its own temporary directory, which is not pinned.",
+    "description": "Where a reader looks for trace files when it is given no source. `exporter_file` and `commons_traces_dir` are the values of OTEL_EXPORTER_OTLP_TRACES_FILE and COMMONS_TRACES_DIR, null when unset. When the exporter's file is set and not empty, its directory is the one; otherwise COMMONS_TRACES_DIR is. With neither set, each package uses a directory under its own temporary directory, which is not pinned. An empty COMMONS_TRACES_DIR names no directory, so `dir` is null and a read finds no spans, even with a trace file in the working directory.",
     "cases": [
       {"name": "the exporter's file names the directory", "exporter_file": "/some/dir/trace-%N.jsonl", "commons_traces_dir": null, "dir": "/some/dir"},
       {"name": "the exporter's file wins over COMMONS_TRACES_DIR", "exporter_file": "/a/trace.jsonl", "commons_traces_dir": "/b", "dir": "/a"},
       {"name": "COMMONS_TRACES_DIR names it when no exporter file is set", "exporter_file": null, "commons_traces_dir": "/b", "dir": "/b"},
       {"name": "an empty exporter variable counts as unset", "exporter_file": "", "commons_traces_dir": "/b", "dir": "/b"},
-      {"name": "a bare file name is in the working directory", "exporter_file": "trace.jsonl", "commons_traces_dir": null, "dir": "."}
+      {"name": "a bare file name is in the working directory", "exporter_file": "trace.jsonl", "commons_traces_dir": null, "dir": "."},
+      {"name": "an empty COMMONS_TRACES_DIR names no directory", "exporter_file": null, "commons_traces_dir": "", "dir": null}
     ]
   },
   "missing_directory": {

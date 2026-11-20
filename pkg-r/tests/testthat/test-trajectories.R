@@ -1729,7 +1729,17 @@ test_that("local_traces_dir follows the active file exporter", {
       OTEL_EXPORTER_OTLP_TRACES_FILE = case$exporter_file %||% NA,
       COMMONS_TRACES_DIR = case$commons_traces_dir %||% NA
     )
-    expect_equal(local_traces_dir(), case$dir, info = case$name)
+    if (!is.null(case$dir)) {
+      expect_equal(local_traces_dir(), case$dir, info = case$name)
+      next
+    }
+    # Windows unsets a variable set to "", so the case cannot be set up there.
+    if (.Platform$OS.type == "windows") {
+      next
+    }
+    withr::local_dir(withr::local_tempdir())
+    writeLines(otlp_test_line(list(otlp_test_span("t1", "s1"))), "trace-1.jsonl")
+    expect_length(read_local_spans(local_traces_dir()), 0)
   }
 })
 

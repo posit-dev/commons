@@ -115,7 +115,7 @@ def test_local_trace_files_follow_an_exporter_template(
     "case", OTLP["traces_dir"]["cases"], ids=lambda case: case["name"]
 )
 def test_the_traces_dir_follows_the_shared_fixture(
-    case: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+    case: dict[str, Any], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     for var, value in (
         (EXPORTER_FILE_VAR, case["exporter_file"]),
@@ -123,7 +123,12 @@ def test_the_traces_dir_follows_the_shared_fixture(
     ):
         if value is not None:
             monkeypatch.setenv(var, value)
-    assert local_traces_dir() == Path(case["dir"])
+    if case["dir"] is not None:
+        assert local_traces_dir() == Path(case["dir"])
+        return
+    _write_span(tmp_path / "trace-1.jsonl", "s1")
+    monkeypatch.chdir(tmp_path)
+    assert read_local_spans(local_traces_dir()) == []
 
 
 def test_the_traces_dir_defaults_under_the_temporary_directory() -> None:
@@ -267,12 +272,3 @@ def test_files_are_split_on_newlines_only(tmp_path: Path) -> None:
     )
     spans = read_local_spans(tmp_path)
     assert [s.name for s in spans] == ["a\u2028b", "a\u2028b"]
-
-
-def test_an_empty_traces_dir_variable_reads_as_no_spans(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    _write_span(tmp_path / "trace-1.jsonl", "s1")
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv(TRACES_DIR_VAR, "")
-    assert read_local_spans(local_traces_dir()) == []
