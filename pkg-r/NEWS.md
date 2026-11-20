@@ -1,5 +1,7 @@
 # commons (development version)
 
+* Adjacent code cells in a document share one "Code" fold, in the drawer and in shared copies.
+
 # commons 0.2.0
 
 commons 0.2.0 introduces three big features in addition to a number of minor improvements and big fixes.
