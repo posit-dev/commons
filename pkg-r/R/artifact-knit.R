@@ -349,11 +349,11 @@ artifact_run_emit <- function(run) {
   frontmatter$title <- frontmatter$title %||% run$title %||% run$artifact$title
   html <- c(
     artifact_header_html(frontmatter),
-    vapply(
+    merge_code_folds(vapply(
       run$pieces %||% list(),
       function(piece) artifact_piece_html(run, piece),
       character(1)
-    )
+    ))
   )
   old <- run$sent
   length(old) <- length(html)
@@ -586,6 +586,34 @@ markdown_fragment_html <- function(markdown) {
 # them. Removing only the tags leaves a form's contents in place.
 strip_navigation_tags <- function(html) {
   gsub("</?(meta|base|form)\\b[^>]*>", "", html, perl = TRUE, ignore.case = TRUE)
+}
+
+# Cells with nothing between them share one fold: a piece's leading fold
+# moves into the fold that ends the piece before it. The emptied piece stays
+# in place, since the view patches pieces by index. Code inside a fold is
+# escaped, so `</details>` only ever closes one.
+merge_code_folds <- function(html) {
+  fold <- "<details class=\"commons-code\"><summary>Code</summary>"
+  leading <- paste0("(?s)^\\s*", fold, "((?:(?!</details>).)*)</details>\\s*")
+  trailing <- paste0("(?s)", fold, "(?:(?!</details>).)*</details>\\s*$")
+  previous <- NA_integer_
+  for (i in seq_along(html)) {
+    if (!is.na(previous) && grepl(leading, html[[i]], perl = TRUE)) {
+      code <- regmatches(html[[i]], regexec(leading, html[[i]], perl = TRUE))[[1]][[2]]
+      html[[i]] <- sub(leading, "", html[[i]], perl = TRUE)
+      html[[previous]] <- sub(
+        "</details>\\s*$",
+        paste0(code, "</details>\n"),
+        html[[previous]],
+        perl = TRUE
+      )
+    }
+    if (!nzchar(trimws(html[[i]]))) {
+      next
+    }
+    previous <- if (grepl(trailing, html[[i]], perl = TRUE)) i else NA_integer_
+  }
+  html
 }
 
 artifact_header_html <- function(frontmatter) {

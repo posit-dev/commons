@@ -177,6 +177,31 @@ test_that("callouts keep their Markdown", {
   expect_match(html, "<strong>samples</strong>", fixed = TRUE)
 })
 
+test_that("adjacent cells share one code fold", {
+  fold <- function(code) {
+    markdown_fragment_html(paste0(
+      "\n<details class=\"commons-code\"><summary>Code</summary>\n\n```r\n",
+      code,
+      "\n```\n\n</details>\n\n"
+    ))
+  }
+  html <- merge_code_folds(c(
+    fold("a <- 1"),
+    fold("b <- \"</details>\""),
+    paste0(fold("c"), "<p>out</p>\n"),
+    fold("d"),
+    "<p>prose</p>\n",
+    fold("e")
+  ))
+  expect_length(html, 6)
+  expect_length(gregexpr("<pre>", html[[1]], fixed = TRUE)[[1]], 3)
+  expect_match(html[[1]], "b &lt;- &quot;&lt;/details&gt;&quot;", fixed = TRUE)
+  expect_identical(html[[2]], "")
+  expect_identical(html[[3]], "<p>out</p>\n")
+  expect_identical(html[[4]], fold("d"))
+  expect_identical(html[[6]], fold("e"))
+})
+
 test_that("an edit that breaks the frontmatter makes no version", {
   store <- new_artifact_store(resolve_input = function(method, args) NULL)
   wait_for_promise(
