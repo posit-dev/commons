@@ -38,7 +38,12 @@ def _nanos(value: Any) -> int:
 
 
 def _number(value: Any) -> int | float | None:
-    """An integer value; one that is not a number reads as None, as NA does in R."""
+    """Decode an ``intValue`` as ``tests/shared/trajectories/otlp.json`` pins it.
+
+    OTLP JSON writes 64-bit integers as strings. A whole number decodes to an
+    int, so one past 2**53 keeps every digit. A fraction decodes to a float,
+    and a value that is not a number decodes to None.
+    """
     if not isinstance(value, float):
         try:
             return int(value)
