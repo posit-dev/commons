@@ -116,8 +116,9 @@ timing_attributes <- c(
   "gen_ai.invoke_agent.duration"
 )
 
-# The spans in file order, with what varies between runs replaced. See
-# normalized() in pkg-py/tests/test_trace_round_trip.py.
+# The spans in file order, keeping only the fields commons and the readers
+# use, with what varies between runs replaced. Other span fields, such as
+# flags and kind, belong to the SDK and are not compared.
 normalized_trace <- function(path) {
   ordinals <- character()
   ordinal <- function(value) {
@@ -132,24 +133,22 @@ normalized_trace <- function(path) {
     envelope <- jsonlite::fromJSON(line, simplifyVector = FALSE)
     for (resource in envelope$resourceSpans) {
       for (scope_spans in resource$scopeSpans) {
-        scope <- scope_spans$scope
-        scope$version <- NULL
-        if (startsWith(scope$name, "org.r-dbi.")) {
+        scope <- scope_spans$scope$name
+        if (startsWith(scope, "org.r-dbi.")) {
           next
         }
         for (span in scope_spans$spans) {
-          span$startTimeUnixNano <- NULL
-          span$endTimeUnixNano <- NULL
-          for (key in c("traceId", "spanId", "parentSpanId")) {
-            if (nzchar(span[[key]] %||% "")) {
-              span[[key]] <- ordinal(span[[key]])
+          ids <- lapply(
+            c(trace = "traceId", span = "spanId", parent = "parentSpanId"),
+            function(key) {
+              if (nzchar(span[[key]] %||% "")) ordinal(span[[key]])
             }
-          }
+          )
           kept <- Filter(
             function(attribute) !attribute$key %in% timing_attributes,
             span$attributes
           )
-          span$attributes <- lapply(kept, function(attribute) {
+          attributes <- lapply(kept, function(attribute) {
             value <- attribute$value$stringValue
             if (!is.null(value)) {
               attribute$value$stringValue <- masked_attribute(
@@ -160,13 +159,42 @@ normalized_trace <- function(path) {
             }
             attribute
           })
-          spans[[length(spans) + 1L]] <- c(list(scope = scope), span)
+          spans[[length(spans) + 1L]] <- list(
+            scope = scope,
+            name = span$name,
+            ids = ids,
+            attributes = attributes,
+            # 2 is OTLP's error code. An SDK may leave a span that ended
+            # without error unset or set it to ok.
+            error = identical(span$status$code, 2L)
+          )
         }
       }
     }
   }
   spans
 }
+
+test_that("the trace comparison ignores SDK fields and keeps an error", {
+  normalized_span <- function(...) {
+    path <- withr::local_tempfile(fileext = ".jsonl")
+    span <- list(traceId = "t", spanId = "s", name = "x", ...)
+    envelope <- list(resourceSpans = list(list(scopeSpans = list(
+      list(scope = list(name = "commons"), spans = list(span))
+    ))))
+    writeLines(jsonlite::toJSON(envelope, auto_unbox = TRUE), path)
+    normalized_trace(path)
+  }
+  plain <- normalized_span(flags = 1L, kind = 1L)
+  expect_identical(
+    normalized_span(flags = 3L, kind = 3L, status = list(code = 1L)),
+    plain
+  )
+  expect_false(identical(
+    normalized_span(flags = 1L, kind = 1L, status = list(code = 2L)),
+    plain
+  ))
+})
 
 test_that("the agent still writes the committed trace", {
   skip_on_cran()
