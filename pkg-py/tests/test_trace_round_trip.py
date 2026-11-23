@@ -23,8 +23,9 @@ from ._trace_fixture import TRACE_FILE, recipe
 COMMITTED = SHARED_DIR / "traces" / "python" / "trace-1.jsonl"
 FILE_NAMING = load_shared_fixture("traces")["file_naming"]["cases"]
 
-_IDS = ("traceId", "spanId", "parentSpanId")
-_TIMESTAMPS = ("startTimeUnixNano", "endTimeUnixNano")
+_IDS = {"trace": "traceId", "span": "spanId", "parent": "parentSpanId"}
+# OTLP's status code for a span that ended with an error.
+_ERROR = 2
 _CONVERSATION = "gen_ai.conversation.id"
 # The system prompt and tool descriptions change on their own schedule.
 _INSTRUCTIONS = "gen_ai.system_instructions"
@@ -43,14 +44,16 @@ def _masked_instructions(value: str) -> str:
 
 
 def normalized(path: Path) -> list[dict[str, Any]]:
-    """The spans in file order, with what varies between runs replaced.
+    """The spans in file order, keeping only the fields commons and the readers use.
 
-    Ids and conversation ids become the order each first appears, the text
-    of the system instructions and tool descriptions becomes a placeholder,
-    and timestamps, resource attributes, and the scope version are dropped.
-    The system instructions keep their structure, so a change to their part
-    count or part types still fails. Span names, attribute keys, and message
-    content are compared as written.
+    Each span keeps its scope and span names, its ids, its attributes, and
+    whether it records an error. Other span fields, such as flags and kind,
+    belong to the SDK and are not compared. Ids and conversation ids become
+    the order each first appears, and the text of the system instructions and
+    tool descriptions becomes a placeholder. The system instructions keep
+    their structure, so a change to their part count or part types still
+    fails. Span names, attribute keys, and message content are compared as
+    written.
     """
     ordinals: dict[str, str] = {}
 
@@ -61,15 +64,15 @@ def normalized(path: Path) -> list[dict[str, Any]]:
     for line in path.read_text(encoding="utf-8").splitlines():
         for resource in json.loads(line)["resourceSpans"]:
             for scope_spans in resource["scopeSpans"]:
-                scope = {
-                    k: v for k, v in scope_spans["scope"].items() if k != "version"
-                }
+                scope = scope_spans["scope"]["name"]
                 for span in scope_spans["spans"]:
-                    span = {k: v for k, v in span.items() if k not in _TIMESTAMPS}
-                    for key in _IDS:
-                        if span.get(key):
-                            span[key] = ordinal(span[key])
-                    for attribute in span.get("attributes", []):
+                    ids = {
+                        name: ordinal(span[key])
+                        for name, key in _IDS.items()
+                        if span.get(key)
+                    }
+                    attributes = span.get("attributes", [])
+                    for attribute in attributes:
                         value = attribute["value"]
                         if "stringValue" not in value:
                             continue
@@ -81,8 +84,35 @@ def normalized(path: Path) -> list[dict[str, Any]]:
                             )
                         elif attribute["key"] == _TOOL_DESCRIPTION:
                             value["stringValue"] = _PROSE
-                    spans.append({"scope": scope, **span})
+                    spans.append(
+                        {
+                            "scope": scope,
+                            "name": span["name"],
+                            "ids": ids,
+                            "attributes": attributes,
+                            "error": span.get("status", {}).get("code") == _ERROR,
+                        }
+                    )
     return spans
+
+
+def test_the_trace_comparison_ignores_sdk_fields_and_keeps_an_error(
+    tmp_path: Path,
+) -> None:
+    def normalized_span(**fields: Any) -> list[dict[str, Any]]:
+        span = {"traceId": "t", "spanId": "s", "name": "x", **fields}
+        envelope = {
+            "resourceSpans": [
+                {"scopeSpans": [{"scope": {"name": "commons"}, "spans": [span]}]}
+            ]
+        }
+        path = tmp_path / "trace.jsonl"
+        path.write_text(json.dumps(envelope) + "\n", encoding="utf-8")
+        return normalized(path)
+
+    plain = normalized_span(flags=256, kind=1, status={})
+    assert normalized_span(flags=768, kind=3, status={"code": 1}) == plain
+    assert normalized_span(flags=256, kind=1, status={"code": 2}) != plain
 
 
 def test_the_agent_still_writes_the_committed_trace(tmp_path: Path) -> None:
