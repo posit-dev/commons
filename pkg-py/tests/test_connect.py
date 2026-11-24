@@ -13,12 +13,14 @@ import json
 import re
 import threading
 from collections.abc import Callable, Iterator
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from typing import Any
 
 import httpx
 import pytest
 
+import commons._connect
 from commons._connect import (
     LEGACY_TRACE_STORE_BEFORE,
     MINIMUM_TRACING_VERSION,
@@ -536,15 +538,26 @@ def test_malformed_jobs_read_as_no_jobs(jobs: object) -> None:
     assert [r.url.path.rsplit("/", 1)[-1] for r in seen] == ["traces", "jobs"]
 
 
-def test_a_failed_job_request_cancels_the_queued_ones() -> None:
-    # job1 fails at once while the other running requests wait for `release`,
-    # which a timer sets after the failure. The read must not return while they
-    # run, since the caller closes the client it shares with them.
+def test_a_failed_job_request_cancels_the_queued_ones(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # job1 fails at once while the other running requests wait for `release`.
+    # The pool releases them once it has cancelled the queued requests, and
+    # the read must not return while they run, since the caller closes the
+    # client it shares with them.
     jobs = [{"key": f"job{i}"} for i in range(100)]
     release = threading.Event()
     lock = threading.Lock()
     running = 0
     seen: list[httpx.Request] = []
+
+    class ReleasingPool(ThreadPoolExecutor):
+        def shutdown(self, wait: bool = True, *, cancel_futures: bool = False) -> None:
+            super().shutdown(wait=False, cancel_futures=cancel_futures)
+            release.set()
+            super().shutdown(wait=wait)
+
+    monkeypatch.setattr(commons._connect, "ThreadPoolExecutor", ReleasingPool)
 
     def route(request: httpx.Request) -> httpx.Response:
         nonlocal running
@@ -563,15 +576,12 @@ def test_a_failed_job_request_cancels_the_queued_ones() -> None:
             return httpx.Response(200, headers={"X-Total-Count": "1"}, text="x\n")
         return httpx.Response(200, headers={"X-Total-Count": "0"}, text="")
 
-    timer = threading.Timer(0.2, release.set)
-    timer.start()
     try:
         with _trace_client(route) as client, pytest.raises(ConnectError):
             connect_trace_lines(client, GUID)
         assert running == 0
     finally:
         release.set()
-        timer.cancel()
     # Only the requests already running when job1 failed are sent.
     job_requests = [r for r in seen if "/jobs/" in r.url.path]
     assert len(job_requests) < len(jobs) // 2
