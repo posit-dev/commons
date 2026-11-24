@@ -328,8 +328,7 @@ def _job_trace_lines(
             # on a server that has it, so the GUID is not on this server.
             raise ConnectError(
                 f"{MISSING_CONTENT_MESSAGE} {client.server} has no content "
-                f"{guid}. Check the GUID, or pass a content URL or set "
-                "CONNECT_SERVER to the server that has it.",
+                f"{guid}. Check the GUID, or pass the content's URL.",
                 status_code=404,
             ) from error
         raise

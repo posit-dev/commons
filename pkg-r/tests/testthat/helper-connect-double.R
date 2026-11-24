@@ -106,7 +106,10 @@ expect_trace_lines_member <- function(member, spec) {
       next
     }
     if (identical(case[["error"]], "missing")) {
-      expect_error(read(), spec[["missing_error"]], fixed = TRUE, info = info)
+      err <- expect_error(read(), spec[["missing_error"]], fixed = TRUE, info = info)
+      message <- conditionMessage(err)
+      expect_match(message, "ea3c1445-cb71-42df-a2f2-bdb18874ef41", fixed = TRUE, info = info)
+      expect_match(message, "https://connect.example.com", fixed = TRUE, info = info)
       next
     }
     if (identical(case[["error"]], "failed")) {

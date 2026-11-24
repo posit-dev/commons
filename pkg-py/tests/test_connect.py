@@ -436,8 +436,12 @@ def test_trace_lines_match_the_shared_fixture(case: dict[str, Any]) -> None:
         with pytest.raises(ConnectError, match=re.escape(TRACES["access_error"])):
             read()
     elif case.get("error") == "missing":
-        with pytest.raises(ConnectError, match=re.escape(TRACES["missing_error"])):
+        with pytest.raises(
+            ConnectError, match=re.escape(TRACES["missing_error"])
+        ) as raised:
             read()
+        assert GUID in str(raised.value)
+        assert "https://connect.example.com" in str(raised.value)
     elif case.get("error") == "failed":
         with pytest.raises(ConnectError) as raised:
             read()
