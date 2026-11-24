@@ -459,7 +459,6 @@ def _associate_provenance(
     an edited or restored conversation never moves a record to another
     exchange.
     """
-    # Compared as JSON text, so true and 1 differ as they do in R's identical().
     canonical = [_signature_text(_exchange_signature(e)) for e in exchanges]
     claims: list[list[_Candidate]] = [[] for _ in exchanges]
     for candidate in candidates:
