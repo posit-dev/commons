@@ -209,7 +209,7 @@ commons can use any DBI connection. The agent writes SQL for the connected datab
 | Compile [`definitions`](#definitions) from a data dictionary | Yes | Yes | Yes | No |
 | Import [warehouse semantic layers](#warehouse-semantic-layers) | No | Semantic views | Metric views | No |
 | Omit objects by name with `exclude` | No | Yes | Yes | No |
-| Reject queries after the connection's identity changes (see `vignette("governance")`) | No | Yes | Yes | No |
+| Check the connection's identity before running SQL the agent writes (see `vignette("governance")`) | No | Yes | Yes | No |
 
 Data frames and pins boards always use DuckDB. If a data dictionary declares `definitions` and the connection is to another database, `data_source()` fails.
 
