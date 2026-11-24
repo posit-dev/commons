@@ -40,7 +40,7 @@ The table below lists how each provenance outcome can occur:
 |----|----|
 | A trusted Python [measure](#semantic-layer) | `Trusted` <img src="assets/figs/trusted-icon.svg" class="commons-documentation-marker" /> |
 | A [data dictionary metric](#definitions), possibly grouped or filtered with definitions | `Trusted` <img src="assets/figs/trusted-icon.svg" class="commons-documentation-marker" /> |
-| A metric from a [Snowflake semantic view](#warehouse-semantic-layers), possibly grouped or filtered by its dimensions | `Trusted` <img src="assets/figs/trusted-icon.svg" class="commons-documentation-marker" /> |
+| A metric from a [Snowflake semantic view or Databricks metric view](#warehouse-semantic-layers), possibly grouped or filtered by its dimensions | `Trusted` <img src="assets/figs/trusted-icon.svg" class="commons-documentation-marker" /> |
 | A verified query from a [Snowflake semantic view](#warehouse-semantic-layers) | `Trusted` <img src="assets/figs/trusted-icon.svg" class="commons-documentation-marker" /> |
 | Custom SQL, including SQL that uses [data dictionary definitions](#definitions) | `Cited` <img src="assets/figs/citation-mark.svg" class="commons-documentation-marker" /> when the answer quotes a trusted source and `commons` verifies the quote; otherwise `Untrusted` <img src="assets/figs/warning-icon.svg" class="commons-documentation-marker" /> |
 | Custom Python | `Cited` <img src="assets/figs/citation-mark.svg" class="commons-documentation-marker" /> when the answer quotes a trusted source and `commons` verifies the quote; otherwise `Untrusted` <img src="assets/figs/warning-icon.svg" class="commons-documentation-marker" /> |
@@ -55,7 +55,7 @@ The agent does not decide the provenance outcome. `commons` derives it from the 
 
 | Layer | Sources | Role |
 |----|----|----|
-| Semantic layer | Measures in `.py` files, [`definitions`](#definitions) in `data-dict.yaml`, and [Snowflake semantic views](#warehouse-semantic-layers) | Provides trusted calculations. |
+| Semantic layer | Measures in `.py` files, [`definitions`](#definitions) in `data-dict.yaml`, and [Snowflake semantic views or Databricks metric views](#warehouse-semantic-layers) | Provides trusted calculations. |
 | Context layer | Markdown files and descriptive fields in [`data-dict.yaml`](#data-dictionaries) | Informs custom SQL and guides interpretation. |
 
 
@@ -83,11 +83,11 @@ When a user asks "Which species were observed at Oak Bluff?", the model reads th
 
 ## Warehouse semantic layers
 
-If you have trusted metrics in [Snowflake semantic views](https://docs.snowflake.com/en/user-guide/views-semantic/overview), you can use those calculations directly with commons. It can also group or filter metrics by approved fields from the warehouse. Answers based on these warehouse-defined metrics have the `Trusted` provenance outcome and display the green check-shield provenance marker.
+If you have trusted metrics in [Snowflake semantic views](https://docs.snowflake.com/en/user-guide/views-semantic/overview) or [Databricks metric views](https://docs.databricks.com/aws/en/uc-semantics/metric-views), you can use those calculations directly with commons. It can also group or filter metrics by approved fields from the warehouse. Answers based on these warehouse-defined metrics have the `Trusted` provenance outcome and display the green check-shield provenance marker.
 
-A semantic view can also declare verified queries: fixed SQL that answers one question. The agent finds them beside the other trusted calculations and runs one exactly as the view declares it, with the `Trusted` outcome. commons reads a verified query only if it is one read-only `SELECT` or `WITH` statement. A view that declares any other kind of verified query cannot be read. If you name that view in `tables`, creating the source fails. If a database or schema selection reaches it, the agent gets the error when it first uses the view. If commons finds it over tables you named, commons skips it.
+A Snowflake semantic view can also declare verified queries: fixed SQL that answers one question. The agent finds them beside the other trusted calculations and runs one exactly as the view declares it, with the `Trusted` outcome. commons reads a verified query only if it is one read-only `SELECT` or `WITH` statement. A view that declares any other kind of verified query cannot be read. If you name that view in `tables`, creating the source fails. If a database or schema selection reaches it, the agent gets the error when it first uses the view. If commons finds it over tables you named, commons skips it.
 
-A Snowflake data source imports the semantic views its `tables` selection reaches. A view that you name in `tables` is read and checked for access when you create the source. A view that a database or schema selection reaches is read only when the agent first uses it. When you name tables exactly, commons also imports the views over them, but only when the selection includes every table that a view reads.
+A Snowflake or Databricks data source imports the semantic views or metric views its `tables` selection reaches. A view that you name in `tables` is read and checked for access when you create the source. A view that a database or schema selection reaches is read only when the agent first uses it. When you name tables exactly, commons also imports the views in those tables' schemas that read only selected tables. It skips a view whose definition it cannot read or does not support, and it does not check query access to these views. To use a view in another schema, or to have its access checked when you create the source, name it in `tables`.
 
 
 ## Context layer
@@ -287,7 +287,7 @@ agent.chat("How many species were observed at Oak Bluff?")
 
 `data_sources` is one [DataSource](../reference/DataSource.md#commons.DataSource) or a mapping of name to [DataSource](../reference/DataSource.md#commons.DataSource). Name the sources when a measure takes an injected connection, because commons injects by name. [semantic_layer()](../reference/semantic_layer.md#commons.semantic_layer) accepts measures, modules, or paths to `.py` files and directories. [context_layer()](../reference/context_layer.md#commons.context_layer) accepts a list of file paths.
 
-The agent can also write and run Python code, for example to reshape a query result or draw a matplotlib chart. The code runs in a separate, sandboxed Python process. That process cannot reach the network unless you pass `network="full"`. On a host where `commons` cannot sandbox the process, [Commons()](../reference/Commons.md#commons.Commons) raises an error. See [Security and governance](governance.md#python-code-execution) for what the sandbox does and how to run on such a host for local development.
+The agent can also write and run Python code, for example to reshape a query result or draw a matplotlib chart. The code runs in a separate, sandboxed Python process. See [Security and governance](governance.md#python-code-execution) for what the sandbox allows, how to give it network access, and what happens on a host where `commons` cannot sandbox it.
 
 Underneath, a [Commons](../reference/Commons.md#commons.Commons) agent inherits from a `chatlas.Chat` object, but builds its own system prompt and tools. As such, it follows the `Chat` API and provides the [chat()](../reference/Commons.chat.md#commons.Commons.chat) and [stream_async()](../reference/Commons.stream_async.md#commons.Commons.stream_async) methods as ways to ask a question. The other `chatlas` entry points, such as [chat_async()](../reference/Commons.chat_async.md#commons.Commons.chat_async), [stream()](../reference/Commons.stream.md#commons.Commons.stream), and [chat_structured()](../reference/Commons.chat_structured.md#commons.Commons.chat_structured), are not supported and will raise `NotImplementedError` at this moment.
 
@@ -332,7 +332,7 @@ app = App(app_ui, app_server)
 
 # Logging conversations
 
-Pass `log=True` to [commons.Commons()](../reference/Commons.md#commons.Commons) to record each conversation with OpenTelemetry. The agent checks the tracing setup at the time it is built. On Posit Connect, it will warn about an unsupported server and turns on Content Observability for you. In a commons deployment running somwhere other than Posit Connect, it logs only when a tracer provider is already configured, and otherwise does nothing. To use tracing, install the extra dependency group that logging needs with `pip install 'commons[tracing]'`. The recorded spans can contain whole conversations, including query results and plots, so read [Security and governance](governance.md#logging-conversations) before you turn logging on.
+Pass `log=True` to [commons.Commons()](../reference/Commons.md#commons.Commons) to record each conversation with OpenTelemetry. The agent checks the tracing setup at the time it is built. On Posit Connect, it will warn about an unsupported server and turns on Content Observability for you. In a commons deployment running somewhere other than Posit Connect, it logs only when a tracer provider is already configured, and otherwise does nothing. To use tracing, install the extra dependency group that logging needs with `pip install 'commons[tracing]'`. The recorded spans can contain whole conversations, including query results and plots, so read [Security and governance](governance.md#logging-conversations) before you turn logging on.
 
 By default, commons configures no exporter, so where the telemetry spans go depends on your OpenTelemetry setup. To write them to local files, install a tracer provider with a file exporter before you build the agent:
 
