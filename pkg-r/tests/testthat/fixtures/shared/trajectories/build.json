@@ -708,7 +708,7 @@
     ]
   },
   "window": {
-    "description": "`since` keeps the chat spans that start at or after it, and `until` the chat spans that start before it. Other spans are kept whatever their time, so a turn span outside the window still gives its record. A call whose chat span starts before `since` is left out, so an exchange that only such a call answered has no record, though the history of the latest call in the window still includes its turns. A conversation left with no chat span is not returned.",
+    "description": "`since` keeps the chat spans that start at or after it, and `until` the chat spans that start before it. Other spans are kept whatever their time, so a turn span outside the window still gives its record. A call whose chat span starts before `since` is left out, so an exchange that only such a call answered has no record, though the history of the latest call in the window can still include its turns. A conversation left with no chat span is not returned.",
     "spans": [
       {"trace": "t100", "span": "s1", "chat": true, "input": [{"role": "user", "parts": [{"type": "text", "content": "Hi."}]}], "start": "100000000000", "end": "101000000000"},
       {"trace": "t200", "span": "s2", "chat": true, "input": [{"role": "user", "parts": [{"type": "text", "content": "Hi."}]}], "start": "200000000000", "end": "201000000000"},
