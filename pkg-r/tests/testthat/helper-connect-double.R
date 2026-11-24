@@ -206,15 +206,20 @@ expect_source_member <- function(member) {
       withr::local_dir(dir)
       withr::local_envvar(connect_fixture_env(case[["env"]]))
       # Keeps a developer's rsconnect accounts out of the cases.
-      local_mocked_bindings(registered_connect_servers = function() character())
+      registered <- unlist(case[["registered"]]) %||% character()
+      local_mocked_bindings(registered_connect_servers = function() registered)
       if (!is.null(case[["search"]])) {
         httr2::local_mocked_responses(
           connect_fixture_responses(list(), new.env(), search = case[["search"]])
         )
       }
       expected <- case[["expected"]]
-      if (isTRUE(expected[["error"]])) {
-        expect_error(resolve_trajectory_source(case[["source"]]), info = info)
+      if (!is.null(expected[["error"]])) {
+        err <- expect_error(resolve_trajectory_source(case[["source"]]), info = info)
+        expect_true(
+          grepl(expected[["error"]], gsub("\\s+", " ", conditionMessage(err)), fixed = TRUE),
+          info = info
+        )
         return()
       }
       resolved <- record_notices(resolve_trajectory_source(case[["source"]]))
@@ -271,7 +276,7 @@ expect_connect_read_member <- function(member) {
       empty_read <- !is.null(case[["hints"]])
       httr2::local_mocked_responses(if (empty_read) {
         connect_fixture_responses(
-          list(version = "2026.09.0", traces = list(), jobs = list()),
+          list(version = "2026.09.0", traces = case[["traces"]] %||% list(), jobs = list()),
           state,
           content = case[["content"]],
           settings = case[["settings"]]
@@ -301,7 +306,7 @@ expect_connect_read_member <- function(member) {
 
       if (empty_read) {
         hints <- unlist(case[["hints"]]) %||% character()
-        expect_equal(length(trajectories), 0, info = info)
+        expect_trajectories(trajectories, case[["trajectories"]] %||% list(), info)
         if (length(hints) == 0) {
           expect_identical(warnings, character(), info = info)
           return()
@@ -328,6 +333,16 @@ expect_connect_read_member <- function(member) {
         function(r) r[["query"]]
       )
       expect_identical(queries, case[["trace_queries"]], info = info)
+      if (!is.null(case[["job_queries"]])) {
+        job_queries <- lapply(
+          Filter(
+            function(r) grepl("/jobs/[^/]+/traces$", r[["path"]]),
+            state$requests
+          ),
+          function(r) r[["query"]]
+        )
+        expect_identical(job_queries, case[["job_queries"]], info = info)
+      }
       expect_identical(
         notices,
         unlist(case[["notice"]]) %||% character(),

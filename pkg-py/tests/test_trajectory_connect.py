@@ -7,6 +7,7 @@ module adds only what the fixture cannot pin.
 
 import json
 import os
+import re
 import sys
 import warnings
 from collections.abc import Sequence
@@ -22,6 +23,7 @@ from commons._tracing import CONTENT_TRACING_HINT, SERVER_TRACING_HINT
 from commons._trajectory import trajectory_read
 from commons._trajectory._build import has_severed_ancestry
 from commons._trajectory._deployment import (
+    _rsconnect_python_config_dir,
     deployment_record_files,
     find_deployment,
     registered_connect_servers,
@@ -469,6 +471,35 @@ def test_a_store_that_is_not_read_registers_no_servers(text: str) -> None:
     assert registered_connect_servers() == []
 
 
+@pytest.mark.parametrize(
+    ("platform", "env", "expected"),
+    [
+        ("linux", {"XDG_CONFIG_HOME": "/xdg"}, "/xdg/rsconnect-python"),
+        ("linux", {}, "/home/.rsconnect-python"),
+        ("darwin", {}, "/home/Library/Application Support/rsconnect-python"),
+        ("win32", {"APPDATA": "/appdata"}, "/appdata/rsconnect-python"),
+        ("win32", {}, "/home/.rsconnect-python"),
+        ("freebsd14", {"XDG_CONFIG_HOME": "/xdg"}, "/home/.rsconnect-python"),
+    ],
+)
+def test_the_store_is_where_rsconnect_python_keeps_it(
+    platform: str,
+    env: dict[str, str],
+    expected: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # As config_dirname() in rsconnect-python 1.33 finds it: a dot directory
+    # in HOME unless the platform's configuration directory is elsewhere.
+    monkeypatch.setattr(sys, "platform", platform)
+    monkeypatch.setenv("HOME", "/home")
+    for name in ("XDG_CONFIG_HOME", "APPDATA"):
+        monkeypatch.delenv(name, raising=False)
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+
+    assert _rsconnect_python_config_dir() == Path(expected)
+
+
 @pytest.mark.parametrize(("member", "case"), cases(SOURCE_MEMBERS))
 def test_sources_resolve_as_the_shared_fixture_pins(
     member: dict[str, Any],
@@ -479,11 +510,17 @@ def test_sources_resolve_as_the_shared_fixture_pins(
     write_fixture_files(tmp_path, case)
     monkeypatch.chdir(tmp_path)
     connect_env(monkeypatch, case.get("env", {}))
+    if "registered" in case:
+        _write_servers(
+            [_server(f"s{i}", url) for i, url in enumerate(case["registered"])]
+        )
     if "search" in case:
         serve_connect(monkeypatch, connect_fixture_server({}, search=case["search"])[0])
     expected = case["expected"]
-    if expected.get("error"):
-        with pytest.raises((ValueError, LookupError)):
+    if "error" in expected:
+        with pytest.raises(
+            (ValueError, LookupError), match=re.escape(expected["error"])
+        ):
             resolve_trajectory_source(case["source"])
         return
     resolved, notices = read_case(lambda: resolve_trajectory_source(case["source"]))
@@ -517,38 +554,6 @@ def test_the_deployment_warning_points_at_the_caller(
     assert [w.filename for w in caught] == [__file__]
 
 
-def test_several_registered_servers_are_named_when_none_is_chosen(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _write_servers(
-        [
-            _server("a", "https://one.example.com"),
-            _server("b", "https://two.example.com"),
-        ]
-    )
-    monkeypatch.chdir(tmp_path)
-    connect_env(monkeypatch, {})
-
-    with pytest.raises(ValueError, match="Registered Connect servers") as raised:
-        resolve_trajectory_source(GUID)
-
-    assert "https://one.example.com, https://two.example.com" in str(raised.value)
-
-
-def test_a_guid_source_uses_the_one_registered_server(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _write_servers([_server("a", "https://one.example.com")])
-    monkeypatch.chdir(tmp_path)
-    connect_env(monkeypatch, {})
-
-    resolved = resolve_trajectory_source(GUID)
-
-    assert isinstance(resolved, ConnectSource)
-    assert resolved.client.server == "https://one.example.com"
-    resolved.client.close()
-
-
 @pytest.mark.parametrize(("member", "case"), cases(("enough", "enough_ancestry")))
 def test_paging_stops_as_the_shared_fixture_pins(
     member: dict[str, Any], case: dict[str, Any]
@@ -578,6 +583,14 @@ def _trace_queries(seen: list[Any]) -> list[dict[str, str]]:
     ]
 
 
+def _job_queries(seen: list[Any]) -> list[dict[str, str]]:
+    return [
+        dict(r.url.params)
+        for r in seen
+        if "/jobs/" in r.url.path and r.url.path.endswith("/traces")
+    ]
+
+
 @pytest.mark.parametrize(
     ("member", "case"), cases(("refetch", "fetch_once", "early_stop"))
 )
@@ -598,6 +611,8 @@ def test_connect_reads_match_the_shared_fixture(
     )
 
     assert _trace_queries(seen) == case["trace_queries"]
+    if "job_queries" in case:
+        assert _job_queries(seen) == case["job_queries"]
     assert notices == case.get("notice", [])
     assert_trajectories(result, case["trajectories"])
 
@@ -608,8 +623,9 @@ _HINTS = {"content": CONTENT_TRACING_HINT, "server": SERVER_TRACING_HINT}
 
 def _serve_empty_read(monkeypatch: pytest.MonkeyPatch, case: dict[str, Any]) -> None:
     connect_env(monkeypatch, {"CONNECT_SERVER": "https://connect.example.com"})
+    server = {**_EMPTY, "traces": case.get("traces", [])}
     route, _ = connect_fixture_server(
-        _EMPTY, content=case["content"], settings=case["settings"]
+        server, content=case["content"], settings=case["settings"]
     )
     serve_connect(monkeypatch, route)
 
@@ -628,7 +644,7 @@ def test_an_empty_read_reports_as_the_shared_fixture_pins(
     hints = [_HINTS[hint] for hint in case["hints"]]
     expected = [" ".join([message, *hints])] if hints else []
     assert [str(w.message) for w in caught] == expected
-    assert result == {}
+    assert_trajectories(result, case.get("trajectories", []))
 
 
 def test_an_empty_read_warning_points_at_the_caller(

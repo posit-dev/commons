@@ -475,6 +475,18 @@ test_that("window bound strings must parse completely", {
 
 connect_cases <- shared_fixture(file.path("trajectories", "connect"))
 
+test_that("every member of trajectories/connect.json is run", {
+  # A member that no test reads would pass silently.
+  source <- paste(readLines(test_path("test-trajectories.R")), collapse = "\n")
+  for (member in setdiff(names(connect_cases), "description")) {
+    used <- paste0("connect_cases$", member, c(")", "$"))
+    expect_true(
+      any(vapply(used, grepl, logical(1), x = source, fixed = TRUE)),
+      info = member
+    )
+  }
+})
+
 test_that("an empty Connect read diagnoses disabled tracing settings", {
   skip_on_cran()
   expect_connect_read_member(connect_cases$empty_read)
@@ -505,9 +517,6 @@ test_that("an empty Connect read diagnoses disabled tracing settings", {
   content_enabled <- TRUE
   instrumentation_allowed <- FALSE
   expect_snapshot(warn_if_connect_tracing_disabled(client, "guid"))
-
-  instrumentation_allowed <- TRUE
-  expect_no_warning(warn_if_connect_tracing_disabled(client, "guid"))
 })
 
 test_that("a Connect read recovers a wrapper the `from` pushdown dropped", {
@@ -565,21 +574,7 @@ test_that("a GUID source resolves to a Connect read", {
   expect_source_member(connect_cases$guid_source)
 })
 
-test_that("a GUID source infers its server from rsconnect", {
-  withr::local_envvar(CONNECT_SERVER = NA, CONNECT_API_KEY = "key")
-  withr::local_dir(withr::local_tempdir())
-  local_mocked_bindings(
-    registered_connect_servers = function() "https://connect.example.com"
-  )
-
-  resolved <- resolve_trajectory_source(
-    "ea3c1445-cb71-42df-a2f2-bdb18874ef41"
-  )
-
-  expect_equal(resolved$client$server, "https://connect.example.com")
-})
-
-test_that("a GUID source prefers its environment and project deployment", {
+test_that("a GUID source finds its server in the environment, project, or rsconnect", {
   expect_source_member(connect_cases$guid_server)
 })
 
