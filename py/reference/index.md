@@ -124,6 +124,25 @@ Read the pins behind `tables` that this source has not read yet.
 A hint for the system prompt, not a contract.
 
 
+## Reading logged conversations
+
+
+Read back the conversations an agent logged with `log=True`.
+
+
+[trajectory_read()](trajectory_read.md#commons.trajectory_read)  
+Read the conversations an agent logged with `log=True`.
+
+[Trajectory](Trajectory.md#commons.Trajectory)  
+One logged conversation.
+
+[Exchange](Exchange.md#commons.Exchange)  
+One exchange of a conversation: a user's question and the turns that answer it.
+
+[CitationDecision](CitationDecision.md#commons.CitationDecision)  
+One citation in an answer, and whether its quote was verified.
+
+
 ## Shiny UI and server
 
 

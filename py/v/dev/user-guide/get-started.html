@@ -83,7 +83,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-63b5708e65d6cd79cd7618c58d0c21e7.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-9ec6d0bacfee18682fb645e4ac94e31e.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-060bb7a8a8d4c53fdaf081ccad6b884f.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -233,7 +233,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
             <ul class="navbar-nav navbar-nav-scroll ms-auto">
   <li class="nav-item">
     <span class="nav-link">
-<div id="github-widget" data-owner="posit-dev" data-repo="commons" data-stars="77" data-forks="6"></div>
+<div id="github-widget" data-owner="posit-dev" data-repo="commons" data-stars="80" data-forks="6"></div>
     </span>
   </li>  
 </ul>
@@ -306,6 +306,8 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   <ul class="collapse">
   <li><a href="#chat-ui" id="toc-chat-ui" class="nav-link" data-scroll-target="#chat-ui">Chat UI</a></li>
   </ul></li>
+  <li><a href="#logging-conversations" id="toc-logging-conversations" class="nav-link" data-scroll-target="#logging-conversations">Logging conversations</a></li>
+  <li><a href="#reading-logged-conversations" id="toc-reading-logged-conversations" class="nav-link" data-scroll-target="#reading-logged-conversations">Reading logged conversations</a></li>
   <li><a href="#example-application" id="toc-example-application" class="nav-link" data-scroll-target="#example-application">Example application</a></li>
   </ul>
 </nav>
@@ -372,7 +374,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td><code>Trusted</code> <img class="commons-documentation-marker" src="assets/figs/trusted-icon.svg" alt=""></td>
 </tr>
 <tr class="odd">
-<td>A metric from a <a href="#warehouse-semantic-layers">Snowflake semantic view</a>, possibly grouped or filtered by its dimensions</td>
+<td>A metric from a <a href="#warehouse-semantic-layers">Snowflake semantic view or Databricks metric view</a>, possibly grouped or filtered by its dimensions</td>
 <td><code>Trusted</code> <img class="commons-documentation-marker" src="assets/figs/trusted-icon.svg" alt=""></td>
 </tr>
 <tr class="even">
@@ -409,7 +411,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <tbody>
 <tr class="odd">
 <td>Semantic layer</td>
-<td>Measures in <code>.py</code> files, <a href="#definitions"><code>definitions</code></a> in <code>data-dict.yaml</code>, and <a href="#warehouse-semantic-layers">Snowflake semantic views</a></td>
+<td>Measures in <code>.py</code> files, <a href="#definitions"><code>definitions</code></a> in <code>data-dict.yaml</code>, and <a href="#warehouse-semantic-layers">Snowflake semantic views or Databricks metric views</a></td>
 <td>Provides trusted calculations.</td>
 </tr>
 <tr class="even">
@@ -435,9 +437,9 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </section>
 <section id="warehouse-semantic-layers" class="level2">
 <h2 class="anchored" data-anchor-id="warehouse-semantic-layers">Warehouse semantic layers</h2>
-<p>If you have trusted metrics in <a href="https://docs.snowflake.com/en/user-guide/views-semantic/overview">Snowflake semantic views</a>, you can use those calculations directly with commons. It can also group or filter metrics by approved fields from the warehouse. Answers based on these warehouse-defined metrics have the <code>Trusted</code> provenance outcome and display the green check-shield provenance marker.</p>
-<p>A semantic view can also declare verified queries: fixed SQL that answers one question. The agent finds them beside the other trusted calculations and runs one exactly as the view declares it, with the <code>Trusted</code> outcome. commons reads a verified query only if it is one read-only <code>SELECT</code> or <code>WITH</code> statement. A view that declares any other kind of verified query cannot be read. If you name that view in <code>tables</code>, creating the source fails. If a database or schema selection reaches it, the agent gets the error when it first uses the view. If commons finds it over tables you named, commons skips it.</p>
-<p>A Snowflake data source imports the semantic views its <code>tables</code> selection reaches. A view that you name in <code>tables</code> is read and checked for access when you create the source. A view that a database or schema selection reaches is read only when the agent first uses it. When you name tables exactly, commons also imports the views over them, but only when the selection includes every table that a view reads.</p>
+<p>If you have trusted metrics in <a href="https://docs.snowflake.com/en/user-guide/views-semantic/overview">Snowflake semantic views</a> or <a href="https://docs.databricks.com/aws/en/uc-semantics/metric-views">Databricks metric views</a>, you can use those calculations directly with commons. It can also group or filter metrics by approved fields from the warehouse. Answers based on these warehouse-defined metrics have the <code>Trusted</code> provenance outcome and display the green check-shield provenance marker.</p>
+<p>A Snowflake semantic view can also declare verified queries: fixed SQL that answers one question. The agent finds them beside the other trusted calculations and runs one exactly as the view declares it, with the <code>Trusted</code> outcome. commons reads a verified query only if it is one read-only <code>SELECT</code> or <code>WITH</code> statement. A view that declares any other kind of verified query cannot be read. If you name that view in <code>tables</code>, creating the source fails. If a database or schema selection reaches it, the agent gets the error when it first uses the view. If commons finds it over tables you named, commons skips it.</p>
+<p>A Snowflake or Databricks data source imports the semantic views or metric views its <code>tables</code> selection reaches. A view that you name in <code>tables</code> is read and checked for access when you create the source. A view that a database or schema selection reaches is read only when the agent first uses it. When you name tables exactly, commons also imports the views in those tables’ schemas that read only selected tables. It skips a view whose definition it cannot read or does not support, and it does not check query access to these views. To use a view in another schema, or to have its access checked when you create the source, name it in <code>tables</code>.</p>
 </section>
 <section id="context-layer" class="level2">
 <h2 class="anchored" data-anchor-id="context-layer">Context layer</h2>
@@ -604,7 +606,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb12-18"><a href="#cb12-18" aria-hidden="true" tabindex="-1"></a>agent.chat(<span class="st">"How many species were observed at Oak Bluff?"</span>)</span></code></pre></div>
 <p><code>data_sources</code> is one <a href="../reference/DataSource.html#commons.DataSource" class="gdls-link gdls-code">DataSource</a> or a mapping of name to <a href="../reference/DataSource.html#commons.DataSource" class="gdls-link gdls-code">DataSource</a>. Name the sources when a measure takes an injected connection, because commons injects by name. <a href="../reference/semantic_layer.html#commons.semantic_layer" class="gdls-link gdls-code">semantic_layer()</a> accepts measures, modules, or paths to <code>.py</code> files and directories. <a href="../reference/context_layer.html#commons.context_layer" class="gdls-link gdls-code">context_layer()</a> accepts a list of file paths.</p>
-<p>The agent can also write and run Python code, for example to reshape a query result or draw a matplotlib chart. The code runs in a separate, sandboxed Python process. That process cannot reach the network unless you pass <code>network="full"</code>. On a host where <code>commons</code> cannot sandbox the process, <a href="../reference/Commons.html#commons.Commons" class="gdls-link gdls-code">Commons()</a> raises an error. See <a href="../user-guide/governance.html#python-code-execution">Security and governance</a> for what the sandbox does and how to run on such a host for local development.</p>
+<p>The agent can also write and run Python code, for example to reshape a query result or draw a matplotlib chart. The code runs in a separate, sandboxed Python process. See <a href="../user-guide/governance.html#python-code-execution">Security and governance</a> for what the sandbox allows, how to give it network access, and what happens on a host where <code>commons</code> cannot sandbox it.</p>
 <p>Underneath, a <a href="../reference/Commons.html#commons.Commons" class="gdls-link gdls-code">Commons</a> agent inherits from a <code>chatlas.Chat</code> object, but builds its own system prompt and tools. As such, it follows the <code>Chat</code> API and provides the <a href="../reference/Commons.chat.html#commons.Commons.chat" class="gdls-link gdls-code">chat()</a> and <a href="../reference/Commons.stream_async.html#commons.Commons.stream_async" class="gdls-link gdls-code">stream_async()</a> methods as ways to ask a question. The other <code>chatlas</code> entry points, such as <a href="../reference/Commons.chat_async.html#commons.Commons.chat_async" class="gdls-link gdls-code">chat_async()</a>, <a href="../reference/Commons.stream.html#commons.Commons.stream" class="gdls-link gdls-code">stream()</a>, and <a href="../reference/Commons.chat_structured.html#commons.Commons.chat_structured" class="gdls-link gdls-code">chat_structured()</a>, are not supported and will raise <code>NotImplementedError</code> at this moment.</p>
 <section id="chat-ui" class="level2">
 <h2 class="anchored" data-anchor-id="chat-ui">Chat UI</h2>
@@ -635,6 +637,40 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb14-21"><a href="#cb14-21" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb14-22"><a href="#cb14-22" aria-hidden="true" tabindex="-1"></a>app <span class="op">=</span> App(app_ui, app_server)</span></code></pre></div>
 </section>
+</section>
+<section id="logging-conversations" class="level1">
+<h1>Logging conversations</h1>
+<p>Pass <code>log=True</code> to <a href="../reference/Commons.html#commons.Commons" class="gdls-link gdls-code">commons.Commons()</a> to record each conversation with OpenTelemetry. The agent checks the tracing setup at the time it is built. On Posit Connect, it will warn about an unsupported server and turns on Content Observability for you. In a commons deployment running somewhere other than Posit Connect, it logs only when a tracer provider is already configured, and otherwise does nothing. To use tracing, install the extra dependency group that logging needs with <code>pip install 'commons[tracing]'</code>. The recorded spans can contain whole conversations, including query results and plots, so read <a href="../user-guide/governance.html#logging-conversations">Security and governance</a> before you turn logging on.</p>
+<p>By default, commons configures no exporter, so where the telemetry spans go depends on your OpenTelemetry setup. To write them to local files, install a tracer provider with a file exporter before you build the agent:</p>
+<div class="sourceCode" id="cb15"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> pathlib <span class="im">import</span> Path</span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> opentelemetry <span class="im">import</span> trace</span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> opentelemetry.exporter.otlp.json.<span class="bu">file</span> <span class="im">import</span> FileSpanExporter</span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> opentelemetry.sdk.trace <span class="im">import</span> TracerProvider</span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> opentelemetry.sdk.trace.export <span class="im">import</span> BatchSpanProcessor</span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a>trace_file <span class="op">=</span> Path(<span class="st">"traces"</span>) <span class="op">/</span> <span class="st">"trace-1.jsonl"</span></span>
+<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a>trace_file.parent.mkdir(exist_ok<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a>provider <span class="op">=</span> TracerProvider()</span>
+<span id="cb15-12"><a href="#cb15-12" aria-hidden="true" tabindex="-1"></a>provider.add_span_processor(BatchSpanProcessor(FileSpanExporter(path<span class="op">=</span><span class="bu">str</span>(trace_file))))</span>
+<span id="cb15-13"><a href="#cb15-13" aria-hidden="true" tabindex="-1"></a>trace.set_tracer_provider(provider)</span></code></pre></div>
+<p>On Posit Connect (version 2026.09.0 or later) the server exports the spans itself, so this recipe is not needed there. An administrator must set <code>OpenTelemetry.Enabled</code> and <code>OpenTelemetry.AllowContentInstrumentation</code> to <code>true</code>. When the agent runs on Connect in a process with no active tracer provider, it turns on the content’s Content Observability setting itself and warns that logging begins once the content restarts; otherwise, use the content’s Settings &gt; Monitoring &gt; Traces panel. Once logging is live, the <code>share_with=["username"]</code> argument adds the named Connect users as collaborators on the content, so that they can read its traces.</p>
+<p>Read the files back with <a href="../reference/trajectory_read.html#commons.trajectory_read" class="gdls-link gdls-code">commons.trajectory_read()</a>, as the next section describes. It groups turns into conversations by the conversation id the application sets, as shinychat does when chat history is enabled. A turn without one reads as a conversation of its own, so to group a script’s turns, set <code>conversation_id</code> on the chatlas client before you pass it to <a href="../reference/Commons.html#commons.Commons" class="gdls-link gdls-code">commons.Commons()</a>.</p>
+</section>
+<section id="reading-logged-conversations" class="level1">
+<h1>Reading logged conversations</h1>
+<p><a href="../reference/trajectory_read.html#commons.trajectory_read" class="gdls-link gdls-code">commons.trajectory_read()</a> reads logged conversations back as chatlas turns, one entry per conversation. Pass it the directory of trace files, or a Posit Connect content GUID or URL to read the conversations of a deployed agent. The <code>BatchSpanProcessor</code> exports spans in batches, so to read in the process that logged them, call <code>provider.force_flush()</code> first.</p>
+<div class="sourceCode" id="cb16"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> commons</span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>recent <span class="op">=</span> commons.trajectory_read(<span class="st">"traces"</span>, n<span class="op">=</span><span class="dv">20</span>, since<span class="op">=</span><span class="st">"2026-07-01"</span>)</span></code></pre></div>
+<p>A read from Connect also needs the <code>CONNECT_API_KEY</code> environment variable:</p>
+<div class="sourceCode" id="cb17"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> commons</span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>deployed <span class="op">=</span> commons.trajectory_read(</span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">"https://connect.example.com/content/01234567-89ab-cdef-0123-456789abcdef/"</span></span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div>
+<p>See the <a href="../reference/trajectory_read.html"><code>trajectory_read()</code> reference</a> for the sources it accepts, the credentials and access a read from Connect needs, and how the time window applies, and the <a href="../reference/Trajectory.html"><code>Trajectory</code> reference</a> for the fields of each conversation.</p>
 </section>
 <section id="example-application" class="level1">
 <h1>Example application</h1>

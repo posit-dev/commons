@@ -82,7 +82,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-63b5708e65d6cd79cd7618c58d0c21e7.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-9ec6d0bacfee18682fb645e4ac94e31e.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-060bb7a8a8d4c53fdaf081ccad6b884f.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -259,7 +259,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
             <ul class="navbar-nav navbar-nav-scroll ms-auto">
   <li class="nav-item">
     <span class="nav-link">
-<div id="github-widget" data-owner="posit-dev" data-repo="commons" data-stars="77" data-forks="6"></div>
+<div id="github-widget" data-owner="posit-dev" data-repo="commons" data-stars="80" data-forks="6"></div>
     </span>
   </li>  
 </ul>
@@ -537,9 +537,41 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
         <li class="sidebar-item sidebar-item-section">
       <div class="sidebar-item-container"> 
             <button type="button" class="sidebar-item-text sidebar-item-toggle sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-5" aria-controls="quarto-sidebar-section-5" aria-expanded="true">
- <span class="menu-text" id="quarto-sidebar-section-5-label">Shiny UI and server</span><i class="bi bi-chevron-right" aria-hidden="true"></i></button>
+ <span class="menu-text" id="quarto-sidebar-section-5-label">Reading logged conversations</span><i class="bi bi-chevron-right" aria-hidden="true"></i></button>
       </div>
       <ul id="quarto-sidebar-section-5" aria-labelledby="quarto-sidebar-section-5-label" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../reference/trajectory_read.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">trajectory_read</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../reference/Trajectory.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Trajectory</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../reference/Exchange.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Exchange</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../reference/CitationDecision.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">CitationDecision</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <button type="button" class="sidebar-item-text sidebar-item-toggle sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-6" aria-controls="quarto-sidebar-section-6" aria-expanded="true">
+ <span class="menu-text" id="quarto-sidebar-section-6-label">Shiny UI and server</span><i class="bi bi-chevron-right" aria-hidden="true"></i></button>
+      </div>
+      <ul id="quarto-sidebar-section-6" aria-labelledby="quarto-sidebar-section-6-label" class="collapse list-unstyled sidebar-section depth1 show">  
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../reference/ui.app.html" class="sidebar-item-text sidebar-link">
@@ -607,7 +639,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </div>
 <div class="doc-usage-source">
 <p>Usage</p>
-<p><a href="https://github.com/posit-dev/commons/blob/main/pkg-py/src/commons/_agent.py#L67-L438" target="_blank" rel="noopener">Source</a></p>
+<p><a href="https://github.com/posit-dev/commons/blob/main/pkg-py/src/commons/_agent.py#L81-L529" target="_blank" rel="noopener">Source</a></p>
 </div>
 <div class="doc-signature doc-Kind.CLASS">
 <div class="sourceCode" id="cb1"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="sig-name">Commons</span>(</span>
@@ -617,8 +649,10 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="va">context_layer</span><span class="op">=</span><span class="cn-none">None</span>,</span>
 <span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="op">*</span>,</span>
 <span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="va">instructions</span><span class="op">=</span><span class="cn-none">None</span>,</span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="va">network</span><span class="op">=</span><span class="st">"none"</span></span>
-<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="va">network</span><span class="op">=</span><span class="st">"none"</span>,</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="va">log</span><span class="op">=</span><span class="cn-bool">False</span>,</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="va">share_with</span><span class="op">=</span><span class="cn-none">None</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div>
 </div>
 <div class="doc-text">
 <p>Given a <code>chatlas.Chat</code> for the provider and model, the data sources it can query, and optionally a semantic layer of trusted calculations and a context layer of prose, a <a href="Commons.html#commons.Commons" class="gdls-link gdls-code">Commons</a> agent will allow for agent interactions with answers classified by how they were produced.</p>
@@ -626,7 +660,8 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <p><a href="Commons.chat.html#commons.Commons.chat" class="gdls-link gdls-code">chat()</a> and <a href="Commons.stream_async.html#commons.Commons.stream_async" class="gdls-link gdls-code">stream_async()</a> are the currently supported ways to interact with a <a href="Commons.html#commons.Commons" class="gdls-link gdls-code">Commons</a> agent. The other entry points chatlas offers (<a href="Commons.chat_async.html#commons.Commons.chat_async" class="gdls-link gdls-code">chat_async()</a>, <a href="Commons.stream.html#commons.Commons.stream" class="gdls-link gdls-code">stream()</a>, <a href="Commons.chat_structured.html#commons.Commons.chat_structured" class="gdls-link gdls-code">chat_structured()</a>, etc.) are disabled and raise <code>NotImplementedError</code>s because they are not (yet) tied in to the commons framework. The rest of chatlas’s surface works as it does on any chat.</p>
 <p><code>data_sources</code> is a <a href="DataSource.html#commons.DataSource" class="gdls-link gdls-code">DataSource</a>, or a mapping of name to <a href="DataSource.html#commons.DataSource" class="gdls-link gdls-code">DataSource</a>; a measure can take a named source’s connection as an argument named after it. <code>instructions</code> is extra text placed under an <code>## Additional instructions</code> heading at the end of commons’ built-in system prompt, as a string or the path to a text or Markdown file.</p>
 <p>The agent can run Python code that its model writes. The code runs in a separate, sandboxed Python process, which starts the first time the model runs code. <code>network</code> sets whether that process can reach the network: <code>"none"</code> (the default) or <code>"full"</code>. The sandbox works on Linux and macOS. For local development on another system, set the <code>COMMONS_ALLOW_UNSAFE_FALLBACK</code> environment variable to run the code with limited checks instead. Warning! These checks are not intended to be a security boundary.</p>
-<p>Construction raises a TypeError if <code>client</code> is not a <code>chatlas.Chat</code>, if an entry of <code>data_sources</code> is not a <a href="DataSource.html#commons.DataSource" class="gdls-link gdls-code">DataSource</a>, or if a layer is not the layer its argument claims; a ValueError if <code>data_sources</code> names no source, a measure asks for an injection no named source can fill, or <code>network</code> is neither <code>"none"</code> nor <code>"full"</code>; a FileNotFoundError if <code>instructions</code> names a file that does not exist; and a RuntimeError if this host cannot sandbox the session and the opt-in is not set.</p>
+<p><code>log</code> requests trajectory capture with OpenTelemetry (default <code>False</code>). It needs the <code>tracing</code> extra (<code>pip install 'commons[tracing]'</code>), and warns without it. On Posit Connect, the agent warns when the server cannot record trajectories, and turns on the content’s Content Observability setting when the process is not yet traced. Connect must be &gt;= 2026.09.0, with <code>OpenTelemetry.Enabled</code> and <code>OpenTelemetry.AllowContentInstrumentation</code> set to <code>true</code> by a server administrator. Elsewhere, the agent records only when a tracer provider is already installed. Logging also records the authenticated Shiny session user, when Connect supplies one, for attribution. <code>share_with</code> is a sequence of Connect usernames granted access to this content’s trajectories once logging is live. Reading traces needs editor-level access, so the named users are added as collaborators on the content, which is a wider grant than trace access. They need an account that can publish. <code>share_with</code> applies only when <code>log=True</code>.</p>
+<p>Construction raises a TypeError if <code>client</code> is not a <code>chatlas.Chat</code>, if <code>log</code> is not a bool, if <code>share_with</code> is not a sequence of strings, if an entry of <code>data_sources</code> is not a <a href="DataSource.html#commons.DataSource" class="gdls-link gdls-code">DataSource</a>, or if a layer is not the layer its argument claims; a ValueError if <code>data_sources</code> names no source, a measure asks for an injection no named source can fill, or <code>network</code> is neither <code>"none"</code> nor <code>"full"</code>; a FileNotFoundError if <code>instructions</code> names a file that does not exist; and a RuntimeError if this host cannot sandbox the session and the opt-in is not set.</p>
 </div>
 
 

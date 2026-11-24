@@ -8,7 +8,7 @@ This is the API documentation for the commons library.
 The main agent constructor, plus the building blocks for a commons agent.
 
 
-Commons(client: 'Chat', data_sources: 'DataSource | Mapping[str, DataSource]', semantic_layer: 'SemanticLayer | None' = None, context_layer: 'ContextLayer | None' = None, *, instructions: 'str | None' = None, network: "Literal['none', 'full']" = 'none') -> 'None'
+Commons(client: 'Chat', data_sources: 'DataSource | Mapping[str, DataSource]', semantic_layer: 'SemanticLayer | None' = None, context_layer: 'ContextLayer | None' = None, *, instructions: 'str | None' = None, network: "Literal['none', 'full']" = 'none', log: 'bool' = False, share_with: 'Sequence[str] | None' = None) -> 'None'
 
 A trustworthy agent that answers questions about its data.
 
@@ -47,7 +47,24 @@ For local development on another system, set the
 limited checks instead. Warning! These checks are not intended to be a
 security boundary.
 
+`log` requests trajectory capture with OpenTelemetry (default `False`).
+It needs the `tracing` extra (`pip install 'commons[tracing]'`), and warns
+without it. On Posit Connect, the agent warns when the server cannot
+record trajectories, and turns on the content's Content Observability
+setting when the process is not yet traced. Connect must be >= 2026.09.0,
+with `OpenTelemetry.Enabled` and `OpenTelemetry.AllowContentInstrumentation`
+set to `true` by a server administrator. Elsewhere, the agent records only
+when a tracer provider is already installed. Logging also records the
+authenticated Shiny session user, when Connect supplies one, for
+attribution. `share_with` is a sequence of Connect usernames granted
+access to this content's trajectories once logging is live. Reading
+traces needs editor-level access, so the named users are added as
+collaborators on the content, which is a wider grant than trace access.
+They need an account that can publish. `share_with` applies only when
+`log=True`.
+
 Construction raises a TypeError if `client` is not a `chatlas.Chat`, if
+`log` is not a bool, if `share_with` is not a sequence of strings, if
 an entry of `data_sources` is not a `DataSource`, or if a layer is not
 the layer its argument claims; a ValueError if `data_sources` names no
 source, a measure asks for an injection no named source can fill, or
@@ -351,6 +368,108 @@ dialect(self) -> 'str'
 A hint for the system prompt, not a contract.
 
 
+## Reading logged conversations
+
+Read back the conversations an agent logged with `log=True`.
+
+
+trajectory_read(source: str | os.PathLike[str] | None = None, *, n: int | None = None, since: datetime.datetime | datetime.date | str | None = None, until: datetime.datetime | datetime.date | str | None = None) -> dict[str, commons._trajectory._build.Trajectory]
+
+Read the conversations an agent logged with `log=True`.
+
+`source` is where to read from. With none, this content's own traces are
+read when it runs on Posit Connect. Off Connect, the deployed content's
+traces are read when the project has a deployment record, written by
+rsconnect-python under `rsconnect-python/` or by the R package rsconnect
+under `rsconnect/`. With several records, the most recently modified is
+read, and a warning names it. An rsconnect-python record that lists
+deployments to several servers does not say which is the latest, so
+`CONNECT_SERVER` picks one of them. Otherwise the directory the file
+exporter writes to is read: the directory of
+`OTEL_EXPORTER_OTLP_TRACES_FILE` when it is set, and otherwise
+`COMMONS_TRACES_DIR`, or `commons-traces` under the temporary directory.
+`source` can also be a Connect content GUID, a content URL
+(`.../content/<guid>/`), a vanity URL written as
+`<server>/content/<name>/` for content at `<server>/<name>/`, a
+dashboard URL (`.../connect/#/apps/<guid>/`), or a directory of OTLP
+JSON trace files: `trace.jsonl`, `trace-<n>.jsonl`, and files named from
+the `OTEL_EXPORTER_OTLP_TRACES_FILE` template.
+
+Reading from Connect (2026.09.0 or later) needs `CONNECT_API_KEY`, and
+`CONNECT_SERVER` when the server is not in the URL, the deployment
+record, or the one server registered with rsconnect-python. The key's
+user needs editor-level access to the content: they must own it or be a
+collaborator (see `share_with` on `Commons`). When Connect finds no
+traces and reports that the content's or the server's tracing setting is
+off, a warning names that setting.
+
+`since` and `until` keep the chat activity at or after `since` and
+before `until`. Each is a datetime, a date, or a string like
+"2026-07-22" or "2026-07-22 14:30:00". A date, a string, or a datetime
+without a time zone is read in local time. A conversation that continues
+past `until` is returned as it was at `until`. A conversation that
+started before `since` is returned with the history its latest call in
+the window recorded, and its exchanges take provenance only from calls
+in the window, so an exchange answered only before `since` has no
+record. `n` then keeps the `n` most recent conversations. On Connect,
+`since` and `until` are sent with the request, so Connect leaves out
+most traces outside the window. The per-job trace stores that older
+content can have are filtered by `since` only. When `since` is set and a
+chat span in the window has its ancestry cut off, the read is repeated
+once without `since`, and the job stores are then read unfiltered. `n`
+is not sent, and is applied after the read.
+
+Conversations whose spans record no message content are dropped. The
+result is keyed by conversation id, with the oldest conversation
+first.
+
+Raises `TypeError` when `source`, `n`, or a bound has an unsupported
+type; `ValueError` when there is no Connect server or API key, a
+deployment record does not settle which server to read, a URL is not
+recognised, or a bound or `n` has an invalid value; `LookupError` when
+a vanity URL is not found; and a `RuntimeError` when Connect refuses
+access, has no such content, or a request to it fails.
+
+Trajectory(turns: list[chatlas._turn.Turn], last_active: datetime.datetime, user: str | None, exchanges: list[commons._trajectory._build.Exchange]) -> None
+
+One logged conversation.
+
+`turns` are its chatlas turns as of its latest chat activity, and
+`last_active` is the time of that activity, in UTC. `user` is the
+authenticated user of the session, from the conversation's earliest
+recorded chat, or None when none was recorded. `exchanges` splits
+`turns` at each question the user asked, with the provenance recorded
+for each answer. Turns before the first question, such as the system
+prompt, are in no exchange.
+
+Exchange(turns: list[chatlas._turn.Turn], tag: commons._provenance.Tag | None, decisions: list[commons._citations.CitationDecision]) -> None
+
+One exchange of a conversation: a user's question and the turns that answer it.
+
+`turns` starts with the user's turn and runs to the turn before the next
+question. They are the same `Turn` objects as in `Trajectory.turns`.
+`tag` is the answer's provenance tag, or None when none was recorded.
+`decisions` are the `CitationDecision`s recorded for the answer.
+
+CitationDecision(quote: 'str | None', status: 'CitationStatus', label: 'str | None' = None, kind: 'CitationKind | None' = None) -> None
+
+One citation in an answer, and whether its quote was verified.
+
+`status` is `"accepted"` when the quote, after normalization, is found in
+the trusted text the agent was given (its documentation, measure
+definitions, and data dictionaries), and `"rejected"` when it is not or is
+too short to check. It is `"malformed"` when the citation does not have
+exactly one block quote, so there is no quote to check. `quote` is the
+quoted text, or None for a malformed citation. `label` names the trusted
+source that matched an accepted quote, and
+`kind` says what sort of source it is: `"prose"`, `"definition"`, or
+`"schema"`. Both are None unless the status is accepted.
+
+The agent records each decision to the `commons.citation.candidates` span
+attribute, and `trajectory_read()` returns them in
+`Exchange.decisions`.
+
+
 ## Shiny UI and server
 
 Put a commons agent inside of an interactive chat app. Needs the `shiny` extra.
@@ -466,7 +585,7 @@ The table below lists how each provenance outcome can occur:
 |---|---|
 | A trusted Python [measure](#semantic-layer) | `Trusted` <img class="commons-documentation-marker" src="assets/figs/trusted-icon.svg" alt=""> |
 | A [data dictionary metric](#definitions), possibly grouped or filtered with definitions | `Trusted` <img class="commons-documentation-marker" src="assets/figs/trusted-icon.svg" alt=""> |
-| A metric from a [Snowflake semantic view](#warehouse-semantic-layers), possibly grouped or filtered by its dimensions | `Trusted` <img class="commons-documentation-marker" src="assets/figs/trusted-icon.svg" alt=""> |
+| A metric from a [Snowflake semantic view or Databricks metric view](#warehouse-semantic-layers), possibly grouped or filtered by its dimensions | `Trusted` <img class="commons-documentation-marker" src="assets/figs/trusted-icon.svg" alt=""> |
 | A verified query from a [Snowflake semantic view](#warehouse-semantic-layers) | `Trusted` <img class="commons-documentation-marker" src="assets/figs/trusted-icon.svg" alt=""> |
 | Custom SQL, including SQL that uses [data dictionary definitions](#definitions) | `Cited` <img class="commons-documentation-marker" src="assets/figs/citation-mark.svg" alt=""> when the answer quotes a trusted source and `commons` verifies the quote; otherwise `Untrusted` <img class="commons-documentation-marker" src="assets/figs/warning-icon.svg" alt=""> |
 | Custom Python | `Cited` <img class="commons-documentation-marker" src="assets/figs/citation-mark.svg" alt=""> when the answer quotes a trusted source and `commons` verifies the quote; otherwise `Untrusted` <img class="commons-documentation-marker" src="assets/figs/warning-icon.svg" alt=""> |
@@ -482,7 +601,7 @@ The agent does not decide the provenance outcome. `commons` derives it from the 
 
 | Layer | Sources | Role |
 |---|---|---|
-| Semantic layer | Measures in `.py` files, [`definitions`](#definitions) in `data-dict.yaml`, and [Snowflake semantic views](#warehouse-semantic-layers) | Provides trusted calculations. |
+| Semantic layer | Measures in `.py` files, [`definitions`](#definitions) in `data-dict.yaml`, and [Snowflake semantic views or Databricks metric views](#warehouse-semantic-layers) | Provides trusted calculations. |
 | Context layer | Markdown files and descriptive fields in [`data-dict.yaml`](#data-dictionaries) | Informs custom SQL and guides interpretation. |
 
 ### Semantic layer
@@ -508,11 +627,11 @@ When a user asks "Which species were observed at Oak Bluff?", the model reads th
 
 ### Warehouse semantic layers
 
-If you have trusted metrics in [Snowflake semantic views](https://docs.snowflake.com/en/user-guide/views-semantic/overview), you can use those calculations directly with commons. It can also group or filter metrics by approved fields from the warehouse. Answers based on these warehouse-defined metrics have the `Trusted` provenance outcome and display the green check-shield provenance marker.
+If you have trusted metrics in [Snowflake semantic views](https://docs.snowflake.com/en/user-guide/views-semantic/overview) or [Databricks metric views](https://docs.databricks.com/aws/en/uc-semantics/metric-views), you can use those calculations directly with commons. It can also group or filter metrics by approved fields from the warehouse. Answers based on these warehouse-defined metrics have the `Trusted` provenance outcome and display the green check-shield provenance marker.
 
-A semantic view can also declare verified queries: fixed SQL that answers one question. The agent finds them beside the other trusted calculations and runs one exactly as the view declares it, with the `Trusted` outcome. commons reads a verified query only if it is one read-only `SELECT` or `WITH` statement. A view that declares any other kind of verified query cannot be read. If you name that view in `tables`, creating the source fails. If a database or schema selection reaches it, the agent gets the error when it first uses the view. If commons finds it over tables you named, commons skips it.
+A Snowflake semantic view can also declare verified queries: fixed SQL that answers one question. The agent finds them beside the other trusted calculations and runs one exactly as the view declares it, with the `Trusted` outcome. commons reads a verified query only if it is one read-only `SELECT` or `WITH` statement. A view that declares any other kind of verified query cannot be read. If you name that view in `tables`, creating the source fails. If a database or schema selection reaches it, the agent gets the error when it first uses the view. If commons finds it over tables you named, commons skips it.
 
-A Snowflake data source imports the semantic views its `tables` selection reaches. A view that you name in `tables` is read and checked for access when you create the source. A view that a database or schema selection reaches is read only when the agent first uses it. When you name tables exactly, commons also imports the views over them, but only when the selection includes every table that a view reads.
+A Snowflake or Databricks data source imports the semantic views or metric views its `tables` selection reaches. A view that you name in `tables` is read and checked for access when you create the source. A view that a database or schema selection reaches is read only when the agent first uses it. When you name tables exactly, commons also imports the views in those tables' schemas that read only selected tables. It skips a view whose definition it cannot read or does not support, and it does not check query access to these views. To use a view in another schema, or to have its access checked when you create the source, name it in `tables`.
 
 ### Context layer
 
@@ -704,15 +823,13 @@ agent.chat("How many species were observed at Oak Bluff?")
 
 `data_sources` is one `DataSource` or a mapping of name to `DataSource`. Name the sources when a measure takes an injected connection, because commons injects by name. `semantic_layer()` accepts measures, modules, or paths to `.py` files and directories. `context_layer()` accepts a list of file paths.
 
-The agent can also write and run Python code, for example to reshape a query result or draw a matplotlib chart. The code runs in a separate, sandboxed Python process. That process cannot reach the network unless you pass `network="full"`. On a host where `commons` cannot sandbox the process, `Commons()` raises an error. See [Security and governance](02-governance.qmd#python-code-execution) for what the sandbox does and how to run on such a host for local development.
+The agent can also write and run Python code, for example to reshape a query result or draw a matplotlib chart. The code runs in a separate, sandboxed Python process. See [Security and governance](02-governance.qmd#python-code-execution) for what the sandbox allows, how to give it network access, and what happens on a host where `commons` cannot sandbox it.
 
 Underneath, a `Commons` agent inherits from a `chatlas.Chat` object, but builds its own system prompt and tools. As such, it follows the `Chat` API and provides the `chat()` and `stream_async()` methods as ways to ask a question. The other `chatlas` entry points, such as `chat_async()`, `stream()`, and `chat_structured()`, are not supported and will raise `NotImplementedError` at this moment.
 
 ### Chat UI
 
-The above examples will build a terminal-based agent without any UI attached. If you want to
-use the agent in an interactive web UI, the `commons.ui` module will put the agent behind a 
-[Shiny](https://shiny.posit.co/py/) chat. This requires installing the `shiny` extra group.
+The above examples will build a terminal-based agent without any UI attached. If you want to use the agent in an interactive web UI, the `commons.ui` module will put the agent behind a [Shiny](https://shiny.posit.co/py/) chat. This requires installing the `shiny` extra group.
 
 When developing locally, you can use `commons.ui.app(agent)` to return a complete Shiny app:
 
@@ -720,9 +837,7 @@ When developing locally, you can use `commons.ui.app(agent)` to return a complet
 app = commons.ui.app(agent)
 ```
 
-`commons.ui.app()` shares one agent across every session, so it suits one visitor at a time.
-For a deployed app, you should instead build the page with `commons.ui.theme()` and construct
-the agent inside the Shiny server function, so each session gets its own agent:
+`commons.ui.app()` shares one agent across every session, so it suits one visitor at a time. For a deployed app, you should instead build the page with `commons.ui.theme()` and construct the agent inside the Shiny server function, so each session gets its own agent:
 
 ```python
 import shinychat
@@ -748,6 +863,54 @@ def app_server(input, output, session):
 
 app = App(app_ui, app_server)
 ```
+
+## Logging conversations
+
+Pass `log=True` to `commons.Commons()` to record each conversation with OpenTelemetry. The agent checks the tracing setup at the time it is built. On Posit Connect, it will warn about an unsupported server and turns on Content Observability for you. In a commons deployment running somewhere other than Posit Connect, it logs only when a tracer provider is already configured, and otherwise does nothing. To use tracing, install the extra dependency group that logging needs with `pip install 'commons[tracing]'`. The recorded spans can contain whole conversations, including query results and plots, so read [Security and governance](02-governance.qmd#logging-conversations) before you turn logging on.
+
+By default, commons configures no exporter, so where the telemetry spans go depends on your OpenTelemetry setup. To write them to local files, install a tracer provider with a file exporter before you build the agent:
+
+```python
+from pathlib import Path
+
+from opentelemetry import trace
+from opentelemetry.exporter.otlp.json.file import FileSpanExporter
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+trace_file = Path("traces") / "trace-1.jsonl"
+trace_file.parent.mkdir(exist_ok=True)
+
+provider = TracerProvider()
+provider.add_span_processor(BatchSpanProcessor(FileSpanExporter(path=str(trace_file))))
+trace.set_tracer_provider(provider)
+```
+
+On Posit Connect (version 2026.09.0 or later) the server exports the spans itself, so this recipe is not needed there. An administrator must set `OpenTelemetry.Enabled` and `OpenTelemetry.AllowContentInstrumentation` to `true`. When the agent runs on Connect in a process with no active tracer provider, it turns on the content's Content Observability setting itself and warns that logging begins once the content restarts; otherwise, use the content's Settings > Monitoring > Traces panel. Once logging is live, the `share_with=["username"]` argument adds the named Connect users as collaborators on the content, so that they can read its traces. 
+
+Read the files back with `commons.trajectory_read()`, as the next section describes. It groups turns into conversations by the conversation id the application sets, as shinychat does when chat history is enabled. A turn without one reads as a conversation of its own, so to group a script's turns, set `conversation_id` on the chatlas client before you pass it to `commons.Commons()`.
+
+## Reading logged conversations
+
+`commons.trajectory_read()` reads logged conversations back as chatlas turns, one entry per conversation. Pass it the directory of trace files, or a Posit Connect content GUID or URL to read the conversations of a deployed agent. The `BatchSpanProcessor` exports spans in batches, so to read in the process that logged them, call `provider.force_flush()` first.
+
+```python
+import commons
+
+recent = commons.trajectory_read("traces", n=20, since="2026-07-01")
+```
+
+A read from Connect also needs the `CONNECT_API_KEY` environment variable:
+
+```python
+import commons
+
+deployed = commons.trajectory_read(
+    "https://connect.example.com/content/01234567-89ab-cdef-0123-456789abcdef/"
+)
+```
+
+See the [`trajectory_read()` reference](../reference/trajectory_read.html) for the sources it accepts, the credentials and access a read from Connect needs, and how the time window applies, and the [`Trajectory` reference](../reference/Trajectory.html) for the fields of each conversation.
 
 ## Example application
 
@@ -824,9 +987,15 @@ The rows returned by SQL are not the only sensitive information available to an 
 
 Because of this, you should only include facts that you can share with both the application's viewers and its model provider. If one audience must not see a fact, use separate applications with separate context, or put the facts behind viewer credentials. Asking the model to hide the fact from that audience is not a reliable means of preventing unauthorized access to the information.
 
-## Telemetry
+## Logging conversations
 
-The Python implementation of `commons` currently does not support telemetry or conversation logging, though this feature is planned to be added in the near future. When it is added, it will generally follow the R package's [Logging trajectories](https://posit-dev.github.io/commons/r/articles/governance.html#logging-trajectories) design.
+Conversation logging is off by default. With `Commons(log=True)`, `commons` turns on message content capture in the OpenTelemetry spans that chatlas records. These spans can contain user messages, model responses, tool requests, and tool results, including query results and plots. Treat them as another copy of the data available to the agent. An agent built with `log=True` also records the signed-in user's name on each turn, if the Shiny session has one. It does this only if the process is tracing and content capture is not turned off when the agent is built. A conversation id is recorded only when the application sets one, as shinychat does when chat history is enabled. A tracing process records that id whether or not the agent logs.
+
+Capture is controlled for the whole process by the `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` environment variable, and the agent's `log` argument only sets it when nothing else has. Once the variable is on, whether `log=True` or the environment turned it on, chatlas records the conversations of every agent in a traced process, including agents built with `log=False`. The variable is on when it is `true` or `1`, in any case. Any other non-empty value turns capture off, and `log=True` leaves that value alone. An empty value counts as unset.
+
+On Posit Connect, both the server administrator and the application author must opt in before any conversation is recorded. The administrator must enable OpenTelemetry and allow content instrumentation. The author opts in by passing `log=True`, or by setting the capture variable. With `log=True`, `commons` also turns on [Content Observability](https://docs.posit.co/connect/user/content-settings/#content-observability) for the content item when the process started without tracing. Recording then begins after the content process restarts. A process that already has tracing records from the first conversation, unless content capture is turned off. Off Connect, nothing is recorded unless the application installs a tracer provider, and the spans then go wherever that provider exports them. See [Logging conversations](01-get-started.qmd#logging-conversations) for the setup.
+
+Content owners and collaborators can read the traces on Connect, for example with `commons.trajectory_read()` (see [Reading logged conversations](01-get-started.qmd#reading-logged-conversations)). `share_with` adds the named users as collaborators, which gives them more than access to the traces. Store any exported transcripts and review notes only in an appropriately protected location, and review traces only in an environment trusted to handle internal user data, such as [Posit Workbench](https://posit.co/products/enterprise/workbench). Connect or the configured exporter decides retention and access for the OpenTelemetry data, not `commons`.
 
 
 ### Feature parity with the R package
@@ -835,8 +1004,8 @@ While both Python and R packages are first-class implementations of `commons`, t
 
 | R-only feature | What a Python agent does instead |
 |---|---|
-| `trajectory_read()`, for reading logged conversations | No equivalent yet |
 | The commons agent skill for coding agents | Ships with the R package only |
+| Answering with trusted calculations only, with `agent(mode = "trusted only")` | Can always write its own SQL and Python |
 | Reports written as Quarto documents, shown in the chat's drawer and revised with `edit_artifact` | Answers in the chat only |
 | Sharing a conversation, document, plot, or table to Posit Connect | No equivalent yet ([#517](https://github.com/posit-dev/commons/issues/517)) |
 

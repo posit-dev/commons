@@ -73,6 +73,15 @@ Methods for the DataSource class
 - `DataSource.ensure_tables_loaded`
 - `DataSource.dialect`
 
+### Reading logged conversations
+
+Read back the conversations an agent logged with `log=True`.
+
+- `trajectory_read`: Read the conversations an agent logged with `log=True`
+- `Trajectory`: One logged conversation
+- `Exchange`: One exchange of a conversation: a user's question and the turns that answer it
+- `CitationDecision`: One citation in an answer, and whether its quote was verified
+
 ### Shiny UI and server
 
 Put a commons agent inside of an interactive chat app. Needs the `shiny` extra.

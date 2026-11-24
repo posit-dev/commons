@@ -31,6 +31,10 @@
       "dev",
       "0.1.0b2"
     ],
+    "reference/CitationDecision.html": [
+      "dev",
+      "0.1.0b2"
+    ],
     "reference/Commons.__deepcopy__.html": [
       "dev",
       "0.1.0b2"
@@ -135,6 +139,10 @@
       "dev",
       "0.1.0b2"
     ],
+    "reference/Exchange.html": [
+      "dev",
+      "0.1.0b2"
+    ],
     "reference/Injected.html": [
       "dev",
       "0.1.0b2"
@@ -148,6 +156,10 @@
       "0.1.0b2"
     ],
     "reference/Tag.html": [
+      "dev",
+      "0.1.0b2"
+    ],
+    "reference/Trajectory.html": [
       "dev",
       "0.1.0b2"
     ],
@@ -172,6 +184,10 @@
       "0.1.0b2"
     ],
     "reference/semantic_layer.html": [
+      "dev",
+      "0.1.0b2"
+    ],
+    "reference/trajectory_read.html": [
       "dev",
       "0.1.0b2"
     ],
