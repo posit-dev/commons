@@ -13,7 +13,9 @@ permissions: read-all
 jobs:
   check:
     runs-on: ${{ matrix.config.os }}
-    timeout-minutes: 15
+    # oldrel-2 compiles duckdb 2.0.1 (about 27 minutes), which Package Manager
+    # has no R 4.4 binary for.
+    timeout-minutes: ${{ matrix.config.r == 'oldrel-2' && 45 || 15 }}
     name: ${{ matrix.config.os }} (${{ matrix.config.r }})
     strategy:
       fail-fast: false
@@ -29,6 +31,9 @@ jobs:
     env:
       COMMONS_SKIP_BROWSER_TESTS: "true"
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      # Package Manager can lag on a new release for one R version. Compiling
+      # in parallel keeps a source build, such as duckdb's, within the timeout.
+      MAKEFLAGS: -j4
     steps:
       - uses: actions/checkout@v6
       - uses: r-lib/actions/setup-pandoc@v2
