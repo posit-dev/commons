@@ -28,8 +28,8 @@ def trajectory_turns(span: Span) -> list[Turn]:
     requests: dict[str, ContentToolRequest] = {}
     return [
         *system_turns(attributes.get(SYSTEM_INSTRUCTIONS)),
-        *_message_turns(attributes.get(INPUT_MESSAGES), requests),
-        *_message_turns(attributes.get(OUTPUT_MESSAGES), requests),
+        *message_turns(attributes.get(INPUT_MESSAGES), requests),
+        *message_turns(attributes.get(OUTPUT_MESSAGES), requests),
     ]
 
 
@@ -44,6 +44,20 @@ def _parse(text: object) -> list[Any] | None:
     return parsed if isinstance(parsed, list) else None
 
 
+def has_json(text: object) -> bool:
+    """Does the attribute record JSON other than null?
+
+    Any such JSON counts as recorded, so a recorder that wrote input is not
+    second-guessed.
+    """
+    if not isinstance(text, str) or not text:
+        return False
+    try:
+        return json.loads(text) is not None
+    except (ValueError, RecursionError):
+        return False
+
+
 def system_turns(text: object) -> list[Turn]:
     """The system turn a system-instructions attribute records, if any."""
     parts = _parse(text)
@@ -55,7 +69,7 @@ def system_turns(text: object) -> list[Turn]:
     return [SystemTurn(contents)] if contents else []
 
 
-def _message_turns(text: object, requests: dict[str, ContentToolRequest]) -> list[Turn]:
+def message_turns(text: object, requests: dict[str, ContentToolRequest]) -> list[Turn]:
     messages = _parse(text)
     if messages is None:
         return []

@@ -40,6 +40,15 @@ BUILD_MEMBERS = (
     "duplicate_records",
     "conflicting_records",
     "incomplete_call",
+    "restored_context",
+    "after_restore",
+    "switched_conversation",
+    "edited_paths",
+    "tool_loop",
+    "missing_latest_input",
+    "missing_later_input",
+    "missing_initial_input",
+    "missing_input_outside_turn",
 )
 READ_MEMBERS = ("contentless", "n", "window", "as_of")
 BOUND_MEMBERS = ("local_midnight", "complete_parse")

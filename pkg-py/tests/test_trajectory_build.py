@@ -25,6 +25,7 @@ from tests._trajectories import (
     BUILD_MEMBERS,
     assert_trajectories,
     cases,
+    described_turns,
     fixture_line,
     run_case,
 )
@@ -121,3 +122,33 @@ def test_an_unknown_tag_reads_as_none() -> None:
     trajectory = _recorded({"commons.provenance.tag": "Z"})
     assert trajectory.exchanges[0].tag is None
 
+
+def test_input_that_is_a_json_scalar_is_not_recovered() -> None:
+    """R aborts on this input; a read here keeps only what the span records."""
+    output = [{"role": "assistant", "parts": [{"type": "text", "content": "A2"}]}]
+    spans = [
+        {"trace": "t1", "span": "root", "name": "commons_conversation_turn"},
+        {
+            "trace": "t1",
+            "span": "chat1",
+            "parent": "root",
+            "chat": True,
+            "conversation": "conv-a",
+            "end": "10",
+            "input": [{"role": "user", "parts": [{"type": "text", "content": "Q1"}]}],
+        },
+        {
+            "trace": "t1",
+            "span": "chat2",
+            "parent": "root",
+            "chat": True,
+            "conversation": "conv-a",
+            "end": "20",
+            "input": "1",
+            "output": output,
+        },
+    ]
+    trajectory = build_trajectories(parse_otlp_lines([fixture_line(spans)]))["conv-a"]
+    assert described_turns(trajectory.turns) == [
+        {"role": "assistant", "contents": [{"type": "text", "text": "A2"}]}
+    ]
