@@ -13,8 +13,9 @@ permissions: read-all
 jobs:
   check:
     runs-on: ${{ matrix.config.os }}
-    # oldrel-2 compiles duckdb 2.0.1, which Package Manager has no R 4.4 binary for.
-    timeout-minutes: ${{ matrix.config.r == 'oldrel-2' && 30 || 15 }}
+    # oldrel-2 compiles duckdb 2.0.1 (about 27 minutes), which Package Manager
+    # has no R 4.4 binary for.
+    timeout-minutes: ${{ matrix.config.r == 'oldrel-2' && 45 || 15 }}
     name: ${{ matrix.config.os }} (${{ matrix.config.r }})
     strategy:
       fail-fast: false
