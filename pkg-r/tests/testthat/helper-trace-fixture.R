@@ -112,7 +112,7 @@ json_strings <- function(x) {
   if (!is.character(x)) {
     return(character())
   }
-  nested <- if (grepl("^\\s*[[{]", x)) {
+  nested <- if (grepl('^\\s*[[{"]', x)) {
     tryCatch(
       json_strings(jsonlite::fromJSON(x, simplifyVector = FALSE)),
       error = function(err) character()
@@ -123,8 +123,9 @@ json_strings <- function(x) {
 
 # Which of a file URL, the package's paths, and the login name appear in the
 # trace at `path`. The trace is decoded first, so a path is found however many
-# times it was JSON encoded. The login name counts only as a whole value or a
-# path part.
+# times it was JSON encoded. The login name counts only as a path part, since
+# as a whole value it can be an ordinary word such as "text";
+# tidy_trace_envelope() replaces process.owner, the value that names it.
 trace_private_strings <- function(
   path,
   user = Sys.info()[["user"]],
@@ -144,7 +145,8 @@ trace_private_strings <- function(
   )]
   generic <- c("root", "user", "admin", "runner", "developer")
   if (nchar(user) >= 3 && !tolower(user) %in% generic) {
-    if (user %in% unlist(strsplit(strings, "[/\\\\]"))) {
+    paths <- grep("[/\\\\]", strings, value = TRUE)
+    if (user %in% unlist(strsplit(paths, "[/\\\\]"))) {
       found <- c(found, user)
     }
   }

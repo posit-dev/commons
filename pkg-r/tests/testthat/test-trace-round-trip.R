@@ -261,7 +261,7 @@ test_that("the agent still writes the committed trace", {
   )
 })
 
-test_that("the privacy check finds a login name only as a path part or value", {
+test_that("the privacy check finds a login name only as a path part", {
   path <- withr::local_tempfile(fileext = ".jsonl")
   private <- function(line, ...) {
     writeLines(line, path)
@@ -278,7 +278,8 @@ test_that("the privacy check finds a login name only as a path part or value", {
   expect_identical(private(value("same"), user = "sam"), character())
   expect_identical(private(value("Ask sam"), user = "sam"), character())
 
-  expect_identical(private(value("sam"), user = "sam"), "sam")
+  expect_identical(private(value("sam"), user = "sam"), character())
+  expect_identical(private('{"type":"text"}', user = "text"), character())
   expect_identical(private(value("/home/sam/x.R"), user = "sam"), "sam")
   expect_identical(private(value("/home/sam"), user = "sam"), "sam")
   expect_identical(private(value("C:\\Users\\sam"), user = "sam"), "sam")
@@ -301,6 +302,8 @@ test_that("the privacy check finds a package path however it was encoded", {
 
   expect_identical(private("C:\\lib\\commons\\R\\x.R"), root)
   expect_identical(private(inner), root)
+  scalar <- as.character(jsonlite::toJSON(root, auto_unbox = TRUE))
+  expect_identical(private(scalar), root)
   expect_identical(private("C:/lib/commons/R"), "C:/lib/commons")
   expect_identical(private("file:///tmp/x"), "file://")
   expect_identical(private("C:\\lib\\other"), character())
