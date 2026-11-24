@@ -42,7 +42,7 @@ class ExchangeProvenance:
     """The provenance of one exchange: a user's question and the turns that answer it.
 
     `tag` is the answer's provenance tag, or None when none was recorded.
-    `decisions` are the citation decisions recorded for the answer.
+    `decisions` are the `CitationDecision`s recorded for the answer.
     """
 
     tag: Tag | None
