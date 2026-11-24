@@ -395,6 +395,22 @@ def test_connect_server_picks_a_server_whatever_its_hosts_case(
     assert found.guid == other
 
 
+def test_one_deployment_written_in_two_cases_is_not_ambiguous(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    connect_env(monkeypatch, {})
+    _write_python_record(
+        tmp_path / "rsconnect-python" / "app.json",
+        _python_record("https://one.example.com"),
+        _python_record("https://ONE.example.com"),
+    )
+
+    found = find_deployment(tmp_path, quiet=True)
+
+    assert found is not None
+    assert found.guid == GUID
+
+
 def test_connect_server_picks_from_a_python_record_for_two_servers(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -532,8 +548,10 @@ def test_sources_resolve_as_the_shared_fixture_pins(
     if "error" in expected:
         with pytest.raises(
             (ValueError, LookupError), match=re.escape(expected["error"])
-        ):
+        ) as raised:
             resolve_trajectory_source(case["source"])
+        for text in expected.get("mentions", []):
+            assert text in str(raised.value)
         return
     resolved, notices = read_case(lambda: resolve_trajectory_source(case["source"]))
     assert notices == case.get("notice", [])
@@ -564,6 +582,7 @@ def test_the_deployment_warning_points_at_the_caller(
         trajectory_read()
 
     assert [w.filename for w in caught] == [__file__]
+    assert case["expected"]["guid"] in str(caught[0].message)
 
 
 @pytest.mark.parametrize(("member", "case"), cases(("enough", "enough_ancestry")))

@@ -13,7 +13,7 @@ import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlsplit
 
 from .._connect import normalize_server
 
@@ -73,7 +73,7 @@ def find_deployment(
 def _latest_in_file(deployments: list[Deployment]) -> Deployment:
     # rsconnect-python keeps one entry per server in a file and records no
     # time, so a file's entries cannot be ordered by when they were deployed.
-    distinct = list({(d.guid, d.server): d for d in deployments}.values())
+    distinct = list({(d.guid, _server_key(d.server)): d for d in deployments}.values())
     if len(distinct) == 1:
         return distinct[0]
     server = _server_key(os.environ.get("CONNECT_SERVER", ""))
@@ -90,8 +90,8 @@ def _latest_in_file(deployments: list[Deployment]) -> Deployment:
 
 def _server_key(server: str) -> tuple[str, str, str]:
     # A URL's scheme and host are case-insensitive; its path is not.
-    parsed = urlparse(normalize_server(server))
-    return (parsed.scheme.lower(), parsed.netloc.lower(), parsed.path)
+    parts = urlsplit(normalize_server(server))
+    return (parts.scheme.lower(), parts.netloc.lower(), parts.path)
 
 
 def deployment_record_files(directory: Path, max_depth: int = 3) -> list[Path]:

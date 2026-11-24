@@ -219,10 +219,10 @@ expect_source_member <- function(member) {
       expected <- case[["expected"]]
       if (!is.null(expected[["error"]])) {
         err <- expect_error(resolve_trajectory_source(case[["source"]]), info = info)
-        expect_true(
-          grepl(expected[["error"]], gsub("\\s+", " ", conditionMessage(err)), fixed = TRUE),
-          info = info
-        )
+        message <- gsub("\\s+", " ", conditionMessage(err))
+        for (text in c(expected[["error"]], unlist(expected[["mentions"]]))) {
+          expect_true(grepl(text, message, fixed = TRUE), info = info)
+        }
         return()
       }
       resolved <- record_notices(resolve_trajectory_source(case[["source"]]))

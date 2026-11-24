@@ -729,6 +729,21 @@ test_that("deployment records are found in project subdirectories", {
   expect_deployment_member(connect_cases$record_search)
 })
 
+test_that("the deployment warning names the content it reads", {
+  case <- Filter(
+    function(case) !is.null(case[["notice"]]),
+    connect_cases$record_search$cases
+  )[[1]]
+  dir <- withr::local_tempdir()
+  write_fixture_files(dir, case)
+
+  expect_warning(
+    find_rsconnect_deployment(dir),
+    case[["expected"]][["guid"]],
+    fixed = TRUE
+  )
+})
+
 test_that("read_deployment_record skips records without a GUID", {
   expect_deployment_member(connect_cases$record_fields)
 })
