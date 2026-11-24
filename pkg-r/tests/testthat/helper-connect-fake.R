@@ -6,8 +6,8 @@ connect_fixture_window <- function(x) {
   if (is.null(x)) NULL else as.numeric(as.POSIXct(x, format = "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"))
 }
 
-# A Connect server double for httr2::local_mocked_responses(), as
-# tests/shared/connect.json's `traces.double` describes it.
+# A fake Connect server for httr2::local_mocked_responses(), as
+# tests/shared/connect.json's `traces.fake` describes it.
 connect_fixture_responses <- function(server, state, content = list(), settings = list(), search = NULL) {
   state$requests <- list()
   json_response <- function(req, body) {

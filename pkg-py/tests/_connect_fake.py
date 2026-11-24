@@ -106,7 +106,7 @@ def connect_fixture_server(
     settings: Any = ...,
     search: list[dict[str, Any]] | None = None,
 ) -> tuple[Callable[[httpx.Request], httpx.Response], list[httpx.Request]]:
-    """A Connect server as connect.json's `traces.double` describes it.
+    """A Connect server as connect.json's `traces.fake` describes it.
 
     `content` and `settings` answer the content item and the server settings:
     absent is an empty object, and None fails with 500. `search` lists the
