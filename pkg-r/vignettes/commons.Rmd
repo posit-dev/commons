@@ -199,6 +199,20 @@ biodiversity <- data_source(
 )
 ```
 
+### Supported databases
+
+commons can use any DBI connection. The agent writes SQL for the connected database, and commons runs that SQL through the connection. Some features are available only for some databases:
+
+| Feature | DuckDB | Snowflake | Databricks | Other databases |
+|---|---|---|---|---|
+| The agent queries tables with SQL | Yes | Yes | Yes | Yes |
+| Compile [`definitions`](#definitions) from a data dictionary | Yes | Yes | Yes | No |
+| Import [warehouse semantic layers](#warehouse-semantic-layers) | No | Semantic views | Metric views | No |
+| Omit objects by name with `exclude` | No | Yes | Yes | No |
+| Reject queries after the connection's identity changes (see `vignette("governance")`) | No | Yes | Yes | No |
+
+Data frames and pins boards always use DuckDB. If a data dictionary declares `definitions` and the connection is to another database, `data_source()` fails.
+
 ### Data dictionaries
 
 Data dictionaries provide structured, source-specific documentation for a data source. Use a data dictionary to specify what each table represents, column meanings and types, relationships between tables, glossary terms, and trusted `definitions`. commons supports the [`data-dict.yaml` specification](https://data-dict.tidyverse.org/).

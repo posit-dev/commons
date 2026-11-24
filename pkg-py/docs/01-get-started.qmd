@@ -187,6 +187,20 @@ warehouse = commons.data_source(engine, exclude=["TMP_*"])
 
 If the catalog is too large for the system prompt, the agent gets a `search_catalog` tool instead of a table listing. The system prompt reports only the number of selected catalog objects and tells the agent to call `search_catalog` before `describe_table`. The agent then searches the catalog for objects that match the question and describes only those before it writes SQL.
 
+### Supported databases
+
+`commons` can use any SQLAlchemy `Engine`. The agent writes SQL for the connected database, and `commons` runs that SQL through the engine. Some features are available only for some databases:
+
+| Feature | DuckDB | Snowflake | Databricks | Other databases |
+|---|---|---|---|---|
+| The agent queries tables with SQL | Yes | Yes | Yes | Yes |
+| Compile [`definitions`](#definitions) from a data dictionary | Yes | Yes | Yes | No |
+| Import [warehouse semantic layers](#warehouse-semantic-layers) | No | Semantic views | Metric views | No |
+| Omit objects by name with `exclude` | No | Yes | Yes | No |
+| Reject queries after the connection's identity changes (see [Security and governance](02-governance.qmd#sql-code-execution)) | No | Yes | Yes | No |
+
+Data frames and pins boards always use DuckDB. If a data dictionary declares `definitions` and the engine is for another database, `commons.data_source()` fails.
+
 ### Data dictionaries
 
 A data dictionary provides structured documentation for one data source. Use it to state what each table represents, the meaning and type of each column, relationships between tables, and glossary terms. It also holds trusted `definitions`. `commons` reads the [`data-dict.yaml` specification](https://data-dict.tidyverse.org/).
