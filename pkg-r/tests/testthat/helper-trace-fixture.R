@@ -103,28 +103,55 @@ tidy_trace_envelope <- function(envelope) {
   envelope
 }
 
-# Which of a file URL, the package's paths, and the login name (as a path
-# component, the end of a path, or a whole JSON string value) appear in the
-# trace at `path`. The trace is JSON text, and some attributes are JSON
-# encoded again, so a path may end in an escaped quote and a package path is
-# also looked for with forward slashes and with its backslashes escaped.
-trace_private_strings <- function(path, user = Sys.info()[["user"]]) {
-  roots <- c(trace_fixture_source(), system.file(package = "commons"))
-  roots <- normalizePath(roots[nzchar(roots)])
+# Every string in a JSON value, including the strings inside a string that
+# is itself JSON, as some attributes are.
+json_strings <- function(x) {
+  if (is.list(x)) {
+    return(unlist(lapply(x, json_strings), use.names = FALSE))
+  }
+  if (!is.character(x)) {
+    return(character())
+  }
+  nested <- if (grepl("^\\s*[[{]", x)) {
+    tryCatch(
+      json_strings(jsonlite::fromJSON(x, simplifyVector = FALSE)),
+      error = function(err) character()
+    )
+  }
+  c(x, nested)
+}
+
+# Which of a file URL, the package's paths, and the login name appear in the
+# trace at `path`. The trace is decoded first, so a path is found however many
+# times it was JSON encoded. The login name counts only as a whole value or a
+# path part.
+trace_private_strings <- function(
+  path,
+  user = Sys.info()[["user"]],
+  roots = trace_package_roots()
+) {
+  strings <- unlist(
+    lapply(readLines(path, warn = FALSE), function(line) {
+      json_strings(jsonlite::fromJSON(line, simplifyVector = FALSE))
+    }),
+    use.names = FALSE
+  )
+  private <- unique(c("file://", roots, gsub("\\", "/", roots, fixed = TRUE)))
+  found <- private[vapply(
+    private,
+    function(text) any(grepl(text, strings, fixed = TRUE)),
+    logical(1)
+  )]
   generic <- c("root", "user", "admin", "runner", "developer")
-  private <- unique(c(
-    "file://",
-    roots,
-    gsub("\\", "/", roots, fixed = TRUE),
-    gsub("\\", "\\\\", roots, fixed = TRUE),
-    if (nchar(user) >= 3 && !tolower(user) %in% generic) {
-      c(
-        paste0("/", user, c("/", "\\")),
-        paste0("\\", user, "\\"),
-        paste0(c("/", "\\", ":\""), user, "\"")
-      )
+  if (nchar(user) >= 3 && !tolower(user) %in% generic) {
+    if (user %in% unlist(strsplit(strings, "[/\\\\]"))) {
+      found <- c(found, user)
     }
-  ))
-  text <- paste(readLines(path, warn = FALSE), collapse = "\n")
-  private[vapply(private, grepl, logical(1), x = text, fixed = TRUE)]
+  }
+  found
+}
+
+trace_package_roots <- function() {
+  roots <- c(trace_fixture_source(), system.file(package = "commons"))
+  normalizePath(roots[nzchar(roots)])
 }
