@@ -554,8 +554,8 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../reference/ExchangeProvenance.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">ExchangeProvenance</span></a>
+  <a href="../reference/Exchange.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Exchange</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -645,18 +645,18 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </div>
 <div class="doc-usage-source">
 <p>Usage</p>
-<p><a href="https://github.com/posit-dev/commons/blob/main/pkg-py/src/commons/_trajectory/_build.py#L52-L66" target="_blank" rel="noopener">Source</a></p>
+<p><a href="https://github.com/posit-dev/commons/blob/main/pkg-py/src/commons/_trajectory/_build.py#L55-L71" target="_blank" rel="noopener">Source</a></p>
 </div>
 <div class="doc-signature doc-Kind.CLASS">
 <div class="sourceCode" id="cb1"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="sig-name">Trajectory</span>(
     <span class="va">turns</span>,
     <span class="va">last_active</span>,
     <span class="va">user</span>,
-    <span class="va">provenance</span>,
+    <span class="va">exchanges</span>,
 )</span></code></pre></div>
 </div>
 <div class="doc-text">
-<p><code>turns</code> are its chatlas turns as of its latest chat activity, and <code>last_active</code> is the time of that activity, in UTC. <code>user</code> is the authenticated user of the session, from the conversation’s earliest recorded chat, or None when none was recorded. <code>provenance</code> has one record per exchange, in order.</p>
+<p><code>turns</code> are its chatlas turns as of its latest chat activity, and <code>last_active</code> is the time of that activity, in UTC. <code>user</code> is the authenticated user of the session, from the conversation’s earliest recorded chat, or None when none was recorded. <code>exchanges</code> splits <code>turns</code> at each question the user asked, with the provenance recorded for each answer. Turns before the first question, such as the system prompt, are in no exchange.</p>
 </div>
 <section id="parameter-attributes" class="level2 doc-parameter-attributes">
 <h2 class="doc-parameter-attributes">Parameter Attributes</h2>
@@ -674,7 +674,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <dd>
 
 </dd>
-<dt><code><span class="doc-parameter-name">provenance</span><span class="doc-parameter-annotation-sep">:</span> <span class="doc-parameter-annotation">list[ExchangeProvenance]</span></code></dt>
+<dt><code><span class="doc-parameter-name">exchanges</span><span class="doc-parameter-annotation-sep">:</span> <span class="doc-parameter-annotation">list[Exchange]</span></code></dt>
 <dd>
 
 </dd>
