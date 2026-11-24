@@ -30,7 +30,8 @@ trajectory_read(source = NULL, ..., n = NULL, from = NULL, to = NULL)
     writes to.
 
   - A Connect content GUID, a content URL (`.../content/<guid>/`), a
-    vanity URL (`.../content/<name>/`), or a dashboard URL
+    vanity URL written as `<server>/content/<name>/` for content at
+    `<server>/<name>/`, or a dashboard URL
     (`.../connect/#/apps/<guid>/`).
 
   - A directory of OTLP NDJSON trace files (`trace-*.jsonl`).
@@ -50,7 +51,11 @@ trajectory_read(source = NULL, ..., n = NULL, from = NULL, to = NULL)
   before `to`. Each is a `POSIXct`, a `Date`, or a single string in a
   standard format like `"2026-07-22"` or `"2026-07-22 14:30:00"`; dates
   and strings are interpreted in local time. A conversation that
-  continues past `to` is returned with its history as of `to`.
+  continues past `to` is returned with its history as of `to`. A
+  conversation that started before `from` is returned with the history
+  its latest call in the window recorded, and its exchanges take
+  provenance only from calls in the window, so an exchange answered only
+  before `from` has no record.
 
 ## Value
 

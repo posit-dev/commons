@@ -13,7 +13,7 @@ that a coding agent already controls."><meta property="og:image" content="https:
 
     <a class="navbar-brand me-2" href="../index.html">commons</a>
 
-    <small class="nav-text text-danger me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="In-development version">0.1.1.9000</small>
+    <small class="nav-text text-danger me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="In-development version">0.2.0.9000</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -167,9 +167,10 @@ of the exported description:</p>
 so add the sentence to the end of <code>tool.instructions</code> as well.</p>
 <p><code>$context()</code> needs one more step for now. This applies even without a
 context layer when a data source has a data dictionary or semantic model,
-since <code>$context()</code> searches those too. It relies on DuckDB's <code>fts</code> extension, which MCP Console's sandbox
-can't download. MCP Console can install the extension itself, but only
-into its own cache, which R's duckdb doesn't read by default. Point R at
+since <code>$context()</code> searches those too. It loads DuckDB's <code>fts</code> and <code>vss</code>
+extensions, which MCP Console's sandbox can't download. MCP Console can
+install the extensions itself, but only into its own cache, which R's
+duckdb doesn't read by default. Point R at
 that cache with an absolute path (<code>~</code> and environment variables aren't
 expanded):</p>
 <p></p><div class="sourceCode yaml"><pre><code><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="fu">environment</span><span class="kw">:</span></span>
@@ -177,9 +178,9 @@ expanded):</p>
 <span id="cb1-3"><a href="#cb1-3" tabindex="-1"></a><span class="at">  </span><span class="fu">DUCKDB_R_HOME</span><span class="kw">:</span><span class="at"> /Users/you/Library/Caches/mcp-console/dependencies/duckdb</span></span></code></pre><p></p></div>
 <p>Then add one more sentence to both <code>tool.description</code> and
 <code>tool.instructions</code>, so the agent asks MCP Console to install the
-extension:</p>
+extensions:</p>
 <p></p><div class="sourceCode markdown"><pre><code><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a>The first time you run <span class="in">`commons$context()`</span>, include</span>
-<span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a><span class="in">`"requirements": {"duckdb": ["fts"]}`</span> in the same call.</span></code></pre><p></p></div>
+<span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a><span class="in">`"requirements": {"duckdb": ["fts", "vss"]}`</span> in the same call.</span></code></pre><p></p></div>
 <p>In either setup, <code>$run_sql()</code> refuses queries that write, but that check
 isn't a security boundary. Code that the agent runs in the same R session
 can reach anything the session can, including the connections behind

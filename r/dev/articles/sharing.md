@@ -57,8 +57,7 @@ biodiversity_commons <- function(observations) {
 ```
 
 Add commons and DBI to `Imports` in `DESCRIPTION`, then run
-[`devtools::document()`](https://devtools.r-lib.org/reference/document.html)
-and install the package. [R
+`devtools::document()` and install the package. [R
 Packages](https://r-pkgs.org/whole-game.html) walks through these steps
 if they’re new to you.
 

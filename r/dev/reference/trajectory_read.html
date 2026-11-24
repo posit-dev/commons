@@ -17,7 +17,7 @@ This feature requires Connect &amp;gt;= 2026.09.0."><meta property="og:image" co
 
     <a class="navbar-brand me-2" href="../index.html">commons</a>
 
-    <small class="nav-text text-danger me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="In-development version">0.1.1.9000</small>
+    <small class="nav-text text-danger me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="In-development version">0.2.0.9000</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -74,8 +74,8 @@ content's own traces; in a project that has been deployed with
 rsconnect, the deployed content's traces; otherwise, the local trace
 directory that <code><a href="agent.html">agent()</a></code> writes to.</p></li>
 <li><p>A Connect content GUID, a content URL (<code>.../content/&lt;guid&gt;/</code>), a
-vanity URL (<code>.../content/&lt;name&gt;/</code>), or a dashboard URL
-(<code>.../connect/#/apps/&lt;guid&gt;/</code>).</p></li>
+vanity URL written as <code>&lt;server&gt;/content/&lt;name&gt;/</code> for content at
+<code>&lt;server&gt;/&lt;name&gt;/</code>, or a dashboard URL (<code>.../connect/#/apps/&lt;guid&gt;/</code>).</p></li>
 <li><p>A directory of OTLP NDJSON trace files (<code>trace-*.jsonl</code>).</p></li>
 </ul></dd>
 
@@ -95,7 +95,10 @@ filtering. <code>NULL</code> (the default) keeps all of them.</p></dd>
 string in a standard format like <code>"2026-07-22"</code> or
 <code>"2026-07-22 14:30:00"</code>; dates and strings are interpreted in local
 time. A conversation that continues past <code>to</code> is returned with its
-history as of <code>to</code>.</p></dd>
+history as of <code>to</code>. A conversation that started before <code>from</code> is
+returned with the history its latest call in the window recorded, and
+its exchanges take provenance only from calls in the window, so an
+exchange answered only before <code>from</code> has no record.</p></dd>
 
 </dl></div>
     <div class="section level2">

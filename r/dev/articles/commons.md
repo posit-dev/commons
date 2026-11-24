@@ -308,7 +308,7 @@ expressions as filters, and other row-level expressions as derived
 values.
 
 See the [DevRel Agent
-`data-dict.yaml`](https://github.com/posit-dev/devrel-agent/blob/main/dictionaries/devrel.data-dict.yaml)
+`data-dict.yaml`](https://github.com/posit-dev/devrel-agent/blob/8e77e78b2eb986fe320ad0e288363cc8186fc6eb/dictionaries/devrel.data-dict.yaml)
 for examples of definitions.
 
 When a data source is constructed, commons validates each definition and
