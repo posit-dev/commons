@@ -90,26 +90,30 @@ def test_json_nested_past_the_recursion_limit_gives_no_turns() -> None:
     assert trajectory_turns(_span({"gen_ai.input.messages": nested})) == []
 
 
-TRACE = SHARED_DIR / "traces" / "python"
-EXPECTED = json.loads((TRACE / "expected.json").read_text(encoding="utf-8"))
+TRACES = SHARED_DIR / "traces"
+WRITERS = ("python", "r")
 
 
-def test_the_committed_python_trace_decodes_to_the_expected_roles(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize("writer", WRITERS)
+def test_each_committed_trace_decodes_to_the_expected_roles(
+    writer: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.delenv("OTEL_EXPORTER_OTLP_TRACES_FILE", raising=False)
+    expected = json.loads(
+        (TRACES / writer / "expected.json").read_text(encoding="utf-8")
+    )
     chats: dict[str, list[Span]] = {}
-    for span in read_local_spans(TRACE):
+    for span in read_local_spans(TRACES / writer):
         if span.attributes.get("gen_ai.operation.name") == "chat":
             chats.setdefault(span.attributes["gen_ai.conversation.id"], []).append(span)
 
-    assert len(chats) == len(EXPECTED["conversations"])
+    assert len(chats) == len(expected["conversations"])
     # expected.json lists conversations oldest first.
     oldest_first = sorted(
         chats.values(), key=lambda spans: min(s.start_time_unix_nano for s in spans)
     )
-    for spans, expected in zip(oldest_first, EXPECTED["conversations"], strict=True):
-        roles = expected["roles"]
+    for spans, want in zip(oldest_first, expected["conversations"], strict=True):
+        roles = want["roles"]
         for span in spans:
             decoded = [turn.role for turn in trajectory_turns(span)]
             assert decoded == roles[: len(decoded)]
@@ -122,10 +126,10 @@ def test_the_committed_python_trace_decodes_to_the_expected_roles(
         results = [
             c for t in turns for c in t.contents if isinstance(c, ContentToolResult)
         ]
-        if expected["tool"] is None:
+        if want["tool"] is None:
             assert requests == [] and results == []
         else:
             (request,) = requests
             (result,) = results
-            assert request.name == expected["tool"]["name"]
-            assert (result.request is request) == expected["tool"]["linked"]
+            assert request.name == want["tool"]["name"]
+            assert (result.request is request) == want["tool"]["linked"]

@@ -245,16 +245,20 @@ def test_a_bound_of_another_type_is_rejected(tmp_path: Path) -> None:
         trajectory_read(tmp_path, since=["2026-07-22"])  # type: ignore[arg-type]
 
 
-TRACE = SHARED_DIR / "traces" / "python"
-EXPECTED = json.loads((TRACE / "expected.json").read_text(encoding="utf-8"))
+TRACES = SHARED_DIR / "traces"
+WRITERS = ("python", "r")
 
 
-def test_the_committed_python_trace_reads_as_expected() -> None:
-    trajectories = commons.trajectory_read(str(TRACE))
+@pytest.mark.parametrize("writer", WRITERS)
+def test_each_committed_trace_reads_as_expected(writer: str) -> None:
+    expected = json.loads(
+        (TRACES / writer / "expected.json").read_text(encoding="utf-8")
+    )
+    trajectories = commons.trajectory_read(str(TRACES / writer))
 
-    assert len(trajectories) == len(EXPECTED["conversations"])
+    assert len(trajectories) == len(expected["conversations"])
     for trajectory, want in zip(
-        trajectories.values(), EXPECTED["conversations"], strict=True
+        trajectories.values(), expected["conversations"], strict=True
     ):
         turns = trajectory.turns
         assert [turn.role for turn in turns] == want["roles"]
