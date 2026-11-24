@@ -168,7 +168,9 @@ COMMONS_SPANS = Counter(
 @pytest.mark.parametrize("writer", WRITERS)
 def test_each_committed_trace_reads_as_its_spans(writer: str) -> None:
     spans = read_local_spans(TRACES / writer)
-    named = [span for span in spans if span.name in COMMONS_SPANS]
+    # R's DBI records a database client span for each call; the agent's own
+    # spans are the same in both traces.
+    named = [span for span in spans if "db.system.name" not in span.attributes]
 
     assert Counter(span.name for span in named) == COMMONS_SPANS
     by_id = {span.span_id: span for span in spans}
