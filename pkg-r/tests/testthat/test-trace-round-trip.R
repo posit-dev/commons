@@ -75,50 +75,39 @@ test_that("trajectory_read() reads the trace the R agent wrote", {
   expect_trace_reads_as_expected("r")
 })
 
-prose <- "<prose>"
-
-mask_descriptions <- function(x) {
-  if (!is.list(x)) {
-    return(x)
-  }
-  if (is.character(x[["description"]])) {
-    x[["description"]] <- prose
-  }
-  x[] <- lapply(x, mask_descriptions)
-  x
-}
-
-as_json <- function(x) {
-  as.character(jsonlite::toJSON(x, auto_unbox = TRUE, null = "null"))
-}
+# commons owns every commons.* attribute. Of the gen_ai.* attributes ellmer
+# records, these are the ones the readers decode.
+read_attributes <- c(
+  "gen_ai.conversation.id",
+  "gen_ai.input.messages",
+  "gen_ai.operation.name",
+  "gen_ai.output.messages",
+  "gen_ai.system_instructions"
+)
 
 masked_attribute <- function(key, value, ordinal) {
   switch(
     key,
     "gen_ai.conversation.id" = ordinal(value),
-    "gen_ai.system_instructions" = as_json(lapply(
-      jsonlite::fromJSON(value, simplifyVector = FALSE),
-      function(part) {
-        if (is.character(part[["content"]])) part[["content"]] <- prose
-        part
-      }
-    )),
-    "gen_ai.tool.description" = prose,
-    "gen_ai.tool.definitions" = as_json(mask_descriptions(
-      jsonlite::fromJSON(value, simplifyVector = FALSE)
+    "gen_ai.system_instructions" = as.character(jsonlite::toJSON(
+      lapply(
+        jsonlite::fromJSON(value, simplifyVector = FALSE),
+        function(part) {
+          if (is.character(part[["content"]])) part[["content"]] <- "<prose>"
+          part
+        }
+      ),
+      auto_unbox = TRUE,
+      null = "null"
     )),
     value
   )
 }
 
-timing_attributes <- c(
-  "gen_ai.response.time_to_first_chunk",
-  "gen_ai.invoke_agent.duration"
-)
-
-# The spans in file order, keeping only the fields commons and the readers
-# use, with what varies between runs replaced. Other span fields, such as
-# flags and kind, belong to the SDK and are not compared.
+# The spans in file order, keeping the scope, name, ids, error status, and the
+# attributes commons records or the readers decode, with what varies between
+# runs replaced. Other attributes and span fields belong to ellmer or the SDK
+# and are not compared.
 normalized_trace <- function(path) {
   ordinals <- character()
   ordinal <- function(value) {
@@ -145,7 +134,10 @@ normalized_trace <- function(path) {
             }
           )
           kept <- Filter(
-            function(attribute) !attribute$key %in% timing_attributes,
+            function(attribute) {
+              startsWith(attribute$key, "commons.") ||
+                attribute$key %in% read_attributes
+            },
             span$attributes
           )
           attributes <- lapply(kept, function(attribute) {
@@ -185,13 +177,42 @@ test_that("the trace comparison ignores SDK fields and keeps an error", {
     writeLines(jsonlite::toJSON(envelope, auto_unbox = TRUE), path)
     normalized_trace(path)
   }
-  plain <- normalized_span(flags = 1L, kind = 1L)
+  attribute <- function(key, value) {
+    list(key = key, value = list(stringValue = value))
+  }
+  plain <- normalized_span(
+    flags = 1L,
+    kind = 1L,
+    attributes = list(attribute("commons.provenance.tag", "B"))
+  )
   expect_identical(
-    normalized_span(flags = 3L, kind = 3L, status = list(code = 1L)),
+    normalized_span(
+      flags = 3L,
+      kind = 3L,
+      status = list(code = 1L),
+      attributes = list(
+        attribute("commons.provenance.tag", "B"),
+        attribute("server.port", "443"),
+        attribute("gen_ai.request.stream", "TRUE")
+      )
+    ),
     plain
   )
   expect_false(identical(
-    normalized_span(flags = 1L, kind = 1L, status = list(code = 2L)),
+    normalized_span(
+      flags = 1L,
+      kind = 1L,
+      attributes = list(attribute("commons.provenance.tag", "C"))
+    ),
+    plain
+  ))
+  expect_false(identical(
+    normalized_span(
+      flags = 1L,
+      kind = 1L,
+      status = list(code = 2L),
+      attributes = list(attribute("commons.provenance.tag", "B"))
+    ),
     plain
   ))
 })
@@ -216,14 +237,10 @@ test_that("the agent still writes the committed trace", {
   expect_identical(
     normalized_trace(written),
     want,
-    info = paste0(
-      "The agent no longer writes the committed trace. If the change is ",
-      "intended, regenerate it from the repository root:\n\n",
-      "  find tests/shared/traces/r -name '*.jsonl' -delete && cd pkg-r && ",
-      "Rscript -e 'devtools::load_all(quiet = TRUE); ",
-      "write_trace_fixture(\"../tests/shared/traces/r\")' && cd .. && ",
-      "scripts/sync-shared.sh\n\n",
-      "Then run the Python suite."
+    info = paste(
+      "The agent no longer writes the committed trace. If the change is",
+      "intended, regenerate it as the comment on write_trace_fixture() in",
+      "helper-trace-fixture.R says, then run the Python suite."
     )
   )
 })
@@ -238,4 +255,8 @@ test_that("the privacy check finds a login name only as a path part or value", {
   expect_identical(trace_private_strings(path, user = "sam"), ':"sam"')
   writeLines('{"key":"code.filepath","value":{"stringValue":"/home/sam/x.R"}}', path)
   expect_identical(trace_private_strings(path, user = "sam"), "/sam/")
+  writeLines('{"key":"process.cwd","value":{"stringValue":"/home/sam"}}', path)
+  expect_identical(trace_private_strings(path, user = "sam"), '/sam"')
+  writeLines('{"key":"process.cwd","value":{"stringValue":"C:\\\\Users\\\\sam"}}', path)
+  expect_identical(trace_private_strings(path, user = "sam"), '\\sam"')
 })
