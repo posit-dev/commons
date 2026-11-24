@@ -52,8 +52,9 @@ def trajectory_read(
     "2026-07-22" or "2026-07-22 14:30:00". A date, a string, or a
     datetime without a time zone is read in local time. A conversation
     that continues past `until` is returned as it was at `until`. A
-    conversation that started before `since` keeps its earlier turns, but
-    the exchanges answered before `since` have no provenance record. `n`
+    conversation that started before `since` keeps the earlier turns its
+    later calls recorded, but an exchange answered by a call that started
+    before `since` has no provenance record. `n`
     then keeps the `n` most recent conversations.
 
     Conversations whose spans record no message content are dropped. The

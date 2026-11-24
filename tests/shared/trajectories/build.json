@@ -708,7 +708,7 @@
     ]
   },
   "window": {
-    "description": "`since` keeps the chat spans that start at or after it, and `until` the chat spans that start before it. Other spans are kept whatever their time, so a turn span outside the window still gives its record. A call whose chat span starts before `since` is left out, so an exchange it answered keeps its turns, from a later call's history, but has no record. A conversation left with no chat span is not returned.",
+    "description": "`since` keeps the chat spans that start at or after it, and `until` the chat spans that start before it. Other spans are kept whatever their time, so a turn span outside the window still gives its record. A call whose chat span starts before `since` is left out, so an exchange it answered keeps the turns a later call's history records, but has no record. A conversation left with no chat span is not returned.",
     "spans": [
       {"trace": "t100", "span": "s1", "chat": true, "input": [{"role": "user", "parts": [{"type": "text", "content": "Hi."}]}], "start": "100000000000", "end": "101000000000"},
       {"trace": "t200", "span": "s2", "chat": true, "input": [{"role": "user", "parts": [{"type": "text", "content": "Hi."}]}], "start": "200000000000", "end": "201000000000"},
@@ -755,7 +755,7 @@
         "trajectories": [{"id": "conv-a", "provenance": [{"tag": "A", "decisions": []}]}]
       },
       {
-        "name": "an exchange answered before since keeps its turns but has no record",
+        "name": "an exchange answered by a call before since keeps its turns but has no record",
         "since": 100,
         "spans": [
           {"trace": "t1", "span": "turn", "name": "commons_conversation_turn", "attributes": {"commons.provenance.tag": "A"}},
