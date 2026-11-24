@@ -1,5 +1,7 @@
 # commons (development version)
 
+* `trajectory_read()` now ignores the query string of a Connect URL, so a GUID in a query string no longer names the content, and it reads a content API URL (`<server>/__api__/v1/content/<guid>`) from its server (#540).
+
 # commons 0.2.0
 
 commons 0.2.0 introduces three big features in addition to a number of minor improvements and big fixes.

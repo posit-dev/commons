@@ -13,7 +13,7 @@
     ]
   },
   "content_url": {
-    "description": "The server and GUID in a content or dashboard URL, or null when the URL has neither form. The server is everything before the first `/content/<guid>`, or before `#/apps/<guid>` without a trailing `/connect`, the dashboard's default path.",
+    "description": "The server and GUID in a content or dashboard URL, or null when the URL has neither form. A query string is not part of the URL's path, so it is ignored. The server is everything before the first `/content/<guid>` without a trailing `/__api__/v1`, the API's path, or before `#/apps/<guid>` without a trailing `/connect`, the dashboard's default path.",
     "cases": [
       {"name": "a content URL", "url": "https://connect.example.com/content/ea3c1445-cb71-42df-a2f2-bdb18874ef41/", "expected": {"server": "https://connect.example.com", "guid": "ea3c1445-cb71-42df-a2f2-bdb18874ef41"}},
       {"name": "a content URL under a path, with a trailing page", "url": "https://connect.example.com/rsc/content/ea3c1445-cb71-42df-a2f2-bdb18874ef41/foo", "expected": {"server": "https://connect.example.com/rsc", "guid": "ea3c1445-cb71-42df-a2f2-bdb18874ef41"}},
@@ -22,6 +22,10 @@
       {"name": "an uppercase GUID is kept as written", "url": "https://connect.example.com/content/EA3C1445-CB71-42DF-A2F2-BDB18874EF41/", "expected": {"server": "https://connect.example.com", "guid": "EA3C1445-CB71-42DF-A2F2-BDB18874EF41"}},
       {"name": "a dashboard URL drops the dashboard path", "url": "https://connect.example.com/connect/#/apps/ea3c1445-cb71-42df-a2f2-bdb18874ef41/logs", "expected": {"server": "https://connect.example.com", "guid": "ea3c1445-cb71-42df-a2f2-bdb18874ef41"}},
       {"name": "a dashboard URL without a dashboard path", "url": "https://connect.example.com/#/apps/ea3c1445-cb71-42df-a2f2-bdb18874ef41", "expected": {"server": "https://connect.example.com", "guid": "ea3c1445-cb71-42df-a2f2-bdb18874ef41"}},
+      {"name": "a content URL with a query string", "url": "https://connect.example.com/content/ea3c1445-cb71-42df-a2f2-bdb18874ef41/?view=logs", "expected": {"server": "https://connect.example.com", "guid": "ea3c1445-cb71-42df-a2f2-bdb18874ef41"}},
+      {"name": "a GUID in a query string names no content", "url": "https://connect.example.com/my-app/?next=/content/ea3c1445-cb71-42df-a2f2-bdb18874ef41", "expected": null},
+      {"name": "an API URL drops the API path", "url": "https://connect.example.com/__api__/v1/content/ea3c1445-cb71-42df-a2f2-bdb18874ef41", "expected": {"server": "https://connect.example.com", "guid": "ea3c1445-cb71-42df-a2f2-bdb18874ef41"}},
+      {"name": "a dashboard URL with a query string", "url": "https://connect.example.com/connect/?view=1#/apps/ea3c1445-cb71-42df-a2f2-bdb18874ef41/logs", "expected": {"server": "https://connect.example.com", "guid": "ea3c1445-cb71-42df-a2f2-bdb18874ef41"}},
       {"name": "a URL with neither form", "url": "https://connect.example.com/other", "expected": null},
       {"name": "a vanity URL", "url": "https://connect.example.com/content/my-agent/", "expected": null},
       {"name": "a string that is not a URL", "url": "plain-string", "expected": null}

@@ -409,8 +409,13 @@ content_url_guid <- function(x) {
   if (!grepl("^https?://", x)) {
     return(NULL)
   }
+  # Drop the query, but keep the fragment, where a dashboard URL names the GUID.
+  x <- sub("\\?[^#]*", "", x)
   guid <- "([0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12})"
-  match <- regmatches(x, regexec(paste0("^(.*?)/content/", guid), x))[[1]]
+  match <- regmatches(
+    x,
+    regexec(paste0("^(.*?)(?:/__api__/v1)?/content/", guid), x)
+  )[[1]]
   if (length(match) > 0) {
     return(list(server = match[2], guid = match[3]))
   }

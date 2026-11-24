@@ -34,7 +34,7 @@ EMPTY_READ_MESSAGE = "No traces were found for this content."
 
 _CONTENT_GUID = re.compile(GUID_PATTERN)
 _GUID = "(" + GUID_PATTERN + ")"
-_CONTENT_URL = re.compile(r"(.*?)/content/" + _GUID)
+_CONTENT_URL = re.compile(r"(.*?)(?:/__api__/v1)?/content/" + _GUID)
 # A dashboard's path, by default /connect, is not part of the server's URL.
 _DASHBOARD_URL = re.compile(r"(.*?)(?:/connect)?/#/apps/" + _GUID)
 _VANITY_URL = re.compile(r"(.*?)/content/(.+?)/?$")
@@ -60,6 +60,8 @@ def content_url_guid(url: str) -> tuple[str, str] | None:
     """The server and GUID in a content or dashboard URL."""
     if not _URL.match(url):
         return None
+    # Drop the query, but keep the fragment, where a dashboard URL names the GUID.
+    url = re.sub(r"\?[^#]*", "", url, count=1)
     match = _CONTENT_URL.match(url) or _DASHBOARD_URL.match(url)
     return None if match is None else (match.group(1), match.group(2))
 
