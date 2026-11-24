@@ -30,7 +30,7 @@
     Condition
       Warning:
       This server is running Connect 2026.08.0, but trajectory logging requires Connect >= 2026.09.0.
-      i Please ask your server administration to upgrade.
+      i Please ask your server administrator to upgrade.
 
 ---
 

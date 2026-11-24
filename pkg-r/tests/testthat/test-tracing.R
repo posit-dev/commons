@@ -28,54 +28,81 @@ test_that("log = TRUE warns without the otel package", {
   expect_false(.res)
 })
 
-test_that("the Connect tracing warning checks version before settings", {
-  skip_on_cran()
+# What the server warning checks, and in which order, is shared with pkg-py;
+# see tests/shared/connect.json. The warning text is snapshotted below.
+local_connect_settings <- function(settings, env = parent.frame()) {
   withr::local_envvar(
     CONNECT_SERVER = "https://connect.example.com",
     CONNECT_API_KEY = "key",
-    CONNECT_CONTENT_GUID = "guid"
+    CONNECT_CONTENT_GUID = "guid",
+    .local_envir = env
   )
-  settings <- list(
-    version = "2026.08.0",
-    allow_content_instrumentation = FALSE
-  )
-  httr2::local_mocked_responses(function(req) {
-    expect_equal(httr2::url_parse(req$url)$path, "/__api__/server_settings")
-    if (inherits(settings, "condition")) {
-      return(httr2::new_response(
+  httr2::local_mocked_responses(
+    function(req) {
+      expect_equal(req$url, "https://connect.example.com/__api__/server_settings")
+      if (is.null(settings)) {
+        return(httr2::new_response(
+          "GET",
+          req$url,
+          500L,
+          list(),
+          raw(),
+          request = req
+        ))
+      }
+      httr2::new_response(
         "GET",
         req$url,
-        500L,
-        list(),
-        raw(),
+        200L,
+        list(`Content-Type` = "application/json"),
+        charToRaw(jsonlite::toJSON(settings, auto_unbox = TRUE)),
         request = req
-      ))
+      )
+    },
+    env = env
+  )
+}
+
+test_that("the Connect tracing warning follows the shared cases", {
+  skip_on_cran()
+  observability <- shared_fixture("connect")$observability
+  spec <- observability$server_settings
+  expect_gt(length(spec$cases), 0)
+  expect_equal(
+    parse_connect_version(observability$minimum_version),
+    numeric_version("2026.09.0")
+  )
+  patterns <- c(
+    version = "requires Connect >= 2026.09.0",
+    disabled = "disabled by this Posit Connect server"
+  )
+
+  for (case in spec$cases) {
+    local_connect_settings(case$settings)
+    if (is.null(case$warns)) {
+      expect_no_warning(warn_if_connect_tracing_unsupported())
+    } else {
+      expect_warning(
+        warn_if_connect_tracing_unsupported(),
+        patterns[[case$warns]],
+        info = case$name
+      )
     }
-    httr2::new_response(
-      "GET",
-      req$url,
-      200L,
-      list(`Content-Type` = "application/json"),
-      charToRaw(jsonlite::toJSON(settings, auto_unbox = TRUE)),
-      request = req
-    )
-  })
+  }
+})
 
+test_that("the Connect tracing warning checks version before settings", {
+  skip_on_cran()
+  local_connect_settings(list(
+    version = "2026.08.0",
+    allow_content_instrumentation = FALSE
+  ))
   expect_snapshot(warn_if_connect_tracing_unsupported())
-  settings$version <- "2026.09.0"
+  local_connect_settings(list(
+    version = "2026.09.0",
+    allow_content_instrumentation = FALSE
+  ))
   expect_snapshot(warn_if_connect_tracing_unsupported())
-
-  settings$allow_content_instrumentation <- TRUE
-  expect_no_warning(warn_if_connect_tracing_unsupported())
-
-  settings <- list()
-  expect_no_warning(warn_if_connect_tracing_unsupported())
-
-  settings <- "unexpected response"
-  expect_no_warning(warn_if_connect_tracing_unsupported())
-
-  settings <- rlang::error_cnd("unavailable")
-  expect_no_warning(warn_if_connect_tracing_unsupported())
 })
 
 test_that("the content-capture deployment warning is limited to Connect", {
@@ -120,6 +147,93 @@ test_that("log = TRUE points at Content Observability on Connect", {
 
   expect_snapshot(.res <- new_trajectory_tracing(TRUE))
   expect_false(.res)
+})
+
+# The requests themselves are shared with pkg-py; see tests/shared/connect.json.
+test_that("the observability requests match the shared fixture", {
+  spec <- shared_fixture("connect")$observability
+  client <- list(server = "https://connect.example.com", api_key = "k")
+  seen <- list()
+  httr2::local_mocked_responses(function(req) {
+    seen[[length(seen) + 1]] <<- req
+    httr2::new_response(
+      "GET",
+      req$url,
+      200L,
+      list(`Content-Type` = "application/json"),
+      charToRaw("{}"),
+      request = req
+    )
+  })
+  endpoint <- function(parts) {
+    vapply(parts, sub, character(1), pattern = "{guid}", replacement = "g",
+           fixed = TRUE)
+  }
+
+  connect_server_settings(client)
+  expect_equal(
+    seen[[1]]$url,
+    sub("{server}", client$server, spec$server_settings$url, fixed = TRUE)
+  )
+  expect_equal(seen[[1]]$method %||% "GET", spec$server_settings$method)
+
+  connect_content(client, "g")
+  expect_equal(
+    seen[[2]]$url,
+    paste(
+      c(paste0(client$server, "/__api__/v1"), endpoint(spec$enable$read$endpoint)),
+      collapse = "/"
+    )
+  )
+  expect_equal(seen[[2]]$method %||% "GET", spec$enable$read$method)
+
+  connect_enable_otel(client, "g")
+  expect_equal(
+    seen[[3]]$url,
+    paste(
+      c(paste0(client$server, "/__api__/v1"), endpoint(spec$enable$write$endpoint)),
+      collapse = "/"
+    )
+  )
+  expect_equal(seen[[3]]$method, spec$enable$write$method)
+  expect_equal(seen[[3]]$body$data, spec$enable$write$body)
+})
+
+test_that("content observability enablement follows the shared cases", {
+  withr::local_envvar(CONNECT_CONTENT_GUID = "guid")
+  patterns <- c(
+    toggled = "Enabled Content Observability for this content",
+    already_on = "Content Observability is enabled for this content",
+    failed = "OpenTelemetry tracing is not active"
+  )
+
+  cases <- shared_fixture("connect")$observability$enable$cases
+  expect_gt(length(cases), 0)
+
+  for (case in cases) {
+    clear_observability_attempted()
+    state <- new.env()
+    state$patched <- 0
+    local_mocked_bindings(
+      connect_client = function(...) list(server = "s", api_key = "k"),
+      connect_content = function(client, guid) {
+        if (is.null(case$content)) rlang::abort("read failed")
+        case$content
+      },
+      connect_enable_otel = function(client, guid) {
+        state$patched <- state$patched + 1
+        if (isTRUE(case$patch_fails)) rlang::abort("write failed")
+        invisible(NULL)
+      }
+    )
+
+    expect_warning(
+      enable_content_observability(),
+      patterns[[case$outcome]],
+      info = case$name
+    )
+    expect_equal(state$patched, as.numeric(case$patched), info = case$name)
+  }
 })
 
 test_that("tracing disabled on Connect flips the observability setting on", {
