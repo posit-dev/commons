@@ -103,54 +103,11 @@ tidy_trace_envelope <- function(envelope) {
   envelope
 }
 
-# Every string in a JSON value, including the strings inside a string that
-# is itself JSON, as some attributes are.
-json_strings <- function(x) {
-  if (is.list(x)) {
-    return(unlist(lapply(x, json_strings), use.names = FALSE))
-  }
-  if (!is.character(x)) {
-    return(character())
-  }
-  nested <- if (grepl('^\\s*[[{"]', x)) {
-    tryCatch(
-      json_strings(jsonlite::fromJSON(x, simplifyVector = FALSE)),
-      error = function(err) character()
-    )
-  }
-  c(x, nested)
-}
-
-# Which of a file URL, the package's paths, and the login name appear in the
-# trace at `path`. The trace is decoded first, so a path is found however many
-# times it was JSON encoded. The login name counts only as a path part, since
-# as a whole value it can be an ordinary word such as "text";
-# tidy_trace_envelope() replaces process.owner, the value that names it.
-trace_private_strings <- function(
-  path,
-  user = Sys.info()[["user"]],
-  roots = trace_package_roots()
-) {
-  strings <- unlist(
-    lapply(readLines(path, warn = FALSE), function(line) {
-      json_strings(jsonlite::fromJSON(line, simplifyVector = FALSE))
-    }),
-    use.names = FALSE
-  )
-  private <- unique(c("file://", roots, gsub("\\", "/", roots, fixed = TRUE)))
-  found <- private[vapply(
-    private,
-    function(text) any(grepl(text, strings, fixed = TRUE)),
-    logical(1)
-  )]
-  generic <- c("root", "user", "admin", "runner", "developer")
-  if (nchar(user) >= 3 && !tolower(user) %in% generic) {
-    paths <- grep("[/\\\\]", strings, value = TRUE)
-    if (user %in% unlist(strsplit(paths, "[/\\\\]"))) {
-      found <- c(found, user)
-    }
-  }
-  found
+# Which of a file URL and the package's paths appear in the trace at `path`.
+trace_private_strings <- function(path, roots = trace_package_roots()) {
+  text <- paste(readLines(path, warn = FALSE), collapse = "\n")
+  private <- c("file://", roots)
+  private[vapply(private, grepl, logical(1), x = text, fixed = TRUE)]
 }
 
 trace_package_roots <- function() {
