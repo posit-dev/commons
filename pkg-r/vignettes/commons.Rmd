@@ -327,6 +327,6 @@ Once conversations have been logged, you can read them into R with `trajectory_r
 trajectories <- trajectory_read(n = 25, from = Sys.Date() - 7)
 ```
 
-Then, use your coding agent with the [commons skill](#working-with-the-agent-skill) installed to analyze the trajectories. You can ask the agent to summarize recurring questions or build a small interactive reviewer app for you to inspect questions, answers, and trust levels.
+Then, use your coding agent with the [commons skill](#working-with-the-agent-skill) installed to [analyze the trajectories](https://github.com/posit-dev/commons/blob/main/pkg-r/inst/skills/commons/references/iterating-from-trajectories.md). You can ask the agent to summarize recurring questions or [build a small interactive reviewer app](https://github.com/posit-dev/commons/blob/main/pkg-r/inst/skills/commons/references/reviewing-trajectories.md) for you to inspect questions, answers, and trust levels.
 
 Use the review to understand how people are using the agent, identify recurring calculations that belong in the semantic layer, and find context that would help the agent write analysis code and interpret results.
