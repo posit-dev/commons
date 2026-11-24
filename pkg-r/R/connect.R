@@ -145,7 +145,7 @@ connect_trace_lines <- function(
     page <- resp_trace_lines(resp)
     lines <- c(lines, page)
     total <- suppressWarnings(
-      as.integer(httr2::resp_header(resp, "X-Total-Count"))
+      as.integer(httr2::resp_header(resp, "X-Total-Count", default = NA))
     )
     offset <- offset + length(page)
     if (
@@ -175,14 +175,27 @@ connect_job_trace_lines <- function(
   call,
   lines = character()
 ) {
-  jobs <- tryCatch(
+  resp <- tryCatch(
     connect_req(client, "content", guid, "jobs") |>
-      httr2::req_perform() |>
-      httr2::resp_body_json(),
+      httr2::req_perform(),
     httr2_http_401 = function(err) trace_access_abort(err, call),
-    httr2_http_403 = function(err) trace_access_abort(err, call)
+    httr2_http_403 = function(err) trace_access_abort(err, call),
+    httr2_http_404 = function(err) trace_missing_abort(err, client, guid, call)
   )
-  job_keys <- vapply(jobs, function(job) job$key, character(1))
+  jobs <- tryCatch(httr2::resp_body_json(resp), error = function(err) NULL)
+  # Skipping a job Connect lists would leave its traces out of the read
+  # without a sign, so a list that cannot be read fails it instead.
+  if (!is_connect_job_list(jobs)) {
+    cli::cli_abort(
+      c(
+        "Posit Connect returned an unexpected list of jobs.",
+        i = "{.url {client$server}} did not answer with a list of jobs, each
+             with a key, for content {.val {guid}}."
+      ),
+      call = call
+    )
+  }
+  job_keys <- vapply(jobs, function(job) job[["key"]], character(1))
   offsets <- integer(length(job_keys))
   max_active <- 20
 
@@ -222,7 +235,7 @@ connect_job_trace_lines <- function(
       page <- resp_trace_lines(resp)
       lines <- c(lines, page)
       total <- suppressWarnings(
-        as.integer(httr2::resp_header(resp, "X-Total-Count"))
+        as.integer(httr2::resp_header(resp, "X-Total-Count", default = NA))
       )
       offset <- offsets[[i]] + length(page)
       if (length(page) > 0 && !is.na(total) && offset < total) {
@@ -234,6 +247,13 @@ connect_job_trace_lines <- function(
     offsets <- next_offsets
   }
   lines
+}
+
+is_connect_job_list <- function(jobs) {
+  is.list(jobs) && is.null(names(jobs)) &&
+    all(vapply(jobs, function(job) {
+      is.list(job) && rlang::is_string(job[["key"]])
+    }, logical(1)))
 }
 
 connect_job_trace_req <- function(
@@ -311,6 +331,21 @@ trace_access_abort <- function(err, call) {
       i = "Reading traces requires editor access: the {.envvar
            CONNECT_API_KEY} user must own the content or be a collaborator.
            See the {.arg share_with} argument of {.fn commons}."
+    ),
+    parent = err,
+    call = call
+  )
+}
+
+# The traces endpoint answered 404 too, or a read would not reach the jobs
+# endpoint on a server that has it, so the GUID is not on this server.
+trace_missing_abort <- function(err, client, guid, call) {
+  cli::cli_abort(
+    c(
+      "Can't find this content on Posit Connect.",
+      i = "{.url {client$server}} has no content {.val {guid}}.",
+      i = "Check the GUID, or pass the content's URL
+           ({.code <server>/content/<guid>/})."
     ),
     parent = err,
     call = call

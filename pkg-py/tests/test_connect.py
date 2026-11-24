@@ -10,26 +10,37 @@ URLs requests land on, is pinned for both in ``tests/shared/connect.json``.
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+import re
+import threading
+from collections.abc import Callable, Iterator
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from typing import Any
 
 import httpx
 import pytest
 
+import commons._connect
 from commons._connect import (
+    LEGACY_TRACE_STORE_BEFORE,
     MINIMUM_TRACING_VERSION,
+    TRACE_PAGE_SIZE,
     ConnectClient,
     ConnectError,
     connect_content_guid,
+    connect_trace_lines,
     content,
     enable_otel,
     is_connect_runtime,
     parse_connect_version,
     server_settings,
+    vanity_guid,
     version_is_older,
 )
 
+from ._connect_fake import connect_fixture_server
 from ._shared import load_shared_fixture
+from ._trajectories import _instant
 
 SPEC = load_shared_fixture("connect")
 ENVIRONMENT: dict[str, str] = SPEC["environment"]
@@ -38,6 +49,14 @@ DETECTION: list[dict[str, Any]] = SPEC["runtime_detection"]["cases"]
 API_REQUEST: dict[str, Any] = SPEC["api_request"]
 OBSERVABILITY: dict[str, Any] = SPEC["observability"]
 SETTINGS_CASES: list[dict[str, Any]] = OBSERVABILITY["server_settings"]["cases"]
+TRACES: dict[str, Any] = SPEC["traces"]
+TRACE_GROUPS = ("pages", "stores", "fallback", "access")
+TRACE_CASES = [
+    pytest.param(case, id=f"{group}: {case['name']}")
+    for group in TRACE_GROUPS
+    for case in TRACES[group]["cases"]
+]
+VANITY_SEARCH: dict[str, Any] = SPEC["vanity_search"]
 
 CONNECT_ENV = (
     ENVIRONMENT["product"],
@@ -78,6 +97,8 @@ def test_the_shared_fixture_carries_the_cases_it_promises() -> None:
     assert len(NORMALIZATION) >= 2
     assert len(API_REQUEST["cases"]) >= 1
     assert {case["warns"] for case in SETTINGS_CASES} == {"version", "disabled", None}
+    assert all(TRACES[group]["cases"] for group in TRACE_GROUPS)
+    assert VANITY_SEARCH["cases"]
     assert {case["outcome"] for case in OBSERVABILITY["enable"]["cases"]} == {
         "toggled",
         "already_on",
@@ -370,3 +391,167 @@ def test_a_malformed_server_url_is_a_connect_error() -> None:
 
     with pytest.raises(ConnectError, match="GET /__api__/v1/content"):
         client.request("GET", "content")
+
+
+def test_from_env_prefers_the_given_server(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(ENVIRONMENT["server"], "https://connect.example.com")
+    monkeypatch.setenv(ENVIRONMENT["api_key"], "the-api-key")
+
+    client = ConnectClient.from_env(server="https://other.example.com/__api__")
+
+    assert client.server == "https://other.example.com"
+
+
+@contextmanager
+def _trace_client(
+    route: Callable[[httpx.Request], httpx.Response],
+    server: str = "https://connect.example.com",
+) -> Iterator[ConnectClient]:
+    with httpx.Client(transport=httpx.MockTransport(route)) as http:
+        yield ConnectClient(server, "key", http=http)
+
+
+def _request_key(request: httpx.Request) -> tuple[str, tuple[tuple[str, str], ...]]:
+    prefix = f"/__api__/v1/content/{TRACES['guid']}/"
+    path = request.url.path.removeprefix(prefix)
+    return path, tuple(sorted(request.url.params.multi_items()))
+
+
+def _fixture_key(request: dict[str, Any]) -> tuple[str, tuple[tuple[str, str], ...]]:
+    return request["path"], tuple(sorted(request["query"].items()))
+
+
+@pytest.mark.parametrize("case", TRACE_CASES)
+def test_trace_lines_match_the_shared_fixture(case: dict[str, Any]) -> None:
+    route, seen = connect_fixture_server(case["server"])
+
+    def read() -> list[str]:
+        with _trace_client(route, TRACES["server"]) as client:
+            return connect_trace_lines(
+                client,
+                TRACES["guid"],
+                since=_instant(case.get("since")),
+                until=_instant(case.get("until")),
+                enough=(lambda lines: True) if case.get("enough") else None,
+            )
+
+    if case.get("error") == "access":
+        with pytest.raises(ConnectError, match=re.escape(TRACES["access_error"])):
+            read()
+    elif case.get("error") == "missing":
+        with pytest.raises(
+            ConnectError, match=re.escape(TRACES["missing_error"])
+        ) as raised:
+            read()
+        assert TRACES["guid"] in str(raised.value)
+        assert TRACES["server"] in str(raised.value)
+    elif case.get("error") == "jobs":
+        with pytest.raises(
+            ConnectError, match=re.escape(TRACES["jobs_error"])
+        ) as raised:
+            read()
+        assert TRACES["guid"] in str(raised.value)
+        assert TRACES["server"] in str(raised.value)
+    elif case.get("error") == "failed":
+        with pytest.raises(ConnectError) as raised:
+            read()
+        assert not str(raised.value).startswith(TRACES["access_error"])
+    else:
+        assert read() == case["lines"]
+        assert sorted(_request_key(r) for r in seen) == sorted(
+            _fixture_key(r) for r in case["requests"]
+        )
+
+
+@pytest.mark.parametrize("case", VANITY_SEARCH["cases"], ids=lambda case: case["name"])
+def test_vanity_search_matches_the_shared_fixture(case: dict[str, Any]) -> None:
+    route, seen = connect_fixture_server({}, search=case["pages"])
+    url = f"{case['server']}/content/{case['query']}"
+
+    with _trace_client(route, case["server"]) as client:
+        if case["expected"] is None:
+            with pytest.raises(LookupError, match="Can't find content"):
+                vanity_guid(client, url, case["query"])
+        else:
+            assert vanity_guid(client, url, case["query"]) == case["expected"]
+
+    assert [int(r.url.params["page_number"]) for r in seen] == case["page_numbers"]
+    request = VANITY_SEARCH["request"]
+    first = seen[0]
+    assert first.url.path.endswith("/__api__/v1/" + "/".join(request["path"]))
+    assert {k: first.url.params[k] for k in request["query"]} == request["query"]
+    assert first.url.params["q"] == case["query"]
+
+
+def test_the_trace_page_size_and_store_version_match_the_shared_fixture() -> None:
+    assert TRACE_PAGE_SIZE == TRACES["page_size"]
+    assert LEGACY_TRACE_STORE_BEFORE == TRACES["legacy_store_before"]
+
+
+def test_an_access_error_names_the_share_with_argument() -> None:
+    route, _ = connect_fixture_server({"traces": {"status": 403}})
+
+    with (
+        _trace_client(route) as client,
+        pytest.raises(ConnectError, match="share_with") as raised,
+    ):
+        connect_trace_lines(client, GUID)
+
+    assert raised.value.status_code == 403
+    cause = raised.value.__cause__
+    assert isinstance(cause, ConnectError)
+    assert cause.status_code == 403
+
+
+def test_a_failed_job_request_cancels_the_queued_ones(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # job1 fails at once while the other running requests wait for `release`.
+    # Once the pool has cancelled the queued requests, a thread sets `release`
+    # as soon as the read returns, or after a pause when the read waits for the
+    # running requests, as it must: the caller closes the client they share.
+    # A request that finishes after the read returned has outlived it.
+    jobs = [{"key": f"job{i}"} for i in range(100)]
+    release = threading.Event()
+    returned = threading.Event()
+    outlived: list[str] = []
+    pools: list[ThreadPoolExecutor] = []
+    seen: list[httpx.Request] = []
+
+    class ReleasingPool(ThreadPoolExecutor):
+        def shutdown(self, wait: bool = True, *, cancel_futures: bool = False) -> None:
+            pools.append(self)
+            super().shutdown(wait=False, cancel_futures=cancel_futures)
+            threading.Thread(
+                target=lambda: (returned.wait(timeout=0.5), release.set())
+            ).start()
+            super().shutdown(wait=wait)
+
+    monkeypatch.setattr(commons._connect, "ThreadPoolExecutor", ReleasingPool)
+
+    def route(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        path = request.url.path
+        if path.endswith("/jobs"):
+            return httpx.Response(200, json=jobs)
+        if path.endswith("/jobs/job1/traces"):
+            return httpx.Response(500)
+        if "/jobs/" in path:
+            release.wait(timeout=10)
+            if returned.is_set():
+                outlived.append(path)
+            return httpx.Response(200, headers={"X-Total-Count": "1"}, text="x\n")
+        return httpx.Response(200, headers={"X-Total-Count": "0"}, text="")
+
+    try:
+        with _trace_client(route) as client, pytest.raises(ConnectError):
+            connect_trace_lines(client, GUID)
+        returned.set()
+    finally:
+        release.set()
+        for pool in pools:
+            ThreadPoolExecutor.shutdown(pool, wait=True)
+    assert outlived == []
+    # Only the requests already running when job1 failed are sent.
+    job_requests = [r for r in seen if "/jobs/" in r.url.path]
+    assert len(job_requests) < len(jobs) // 2

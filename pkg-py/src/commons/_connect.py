@@ -11,30 +11,71 @@ from __future__ import annotations
 import os
 import re
 import warnings
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager, nullcontext
+from datetime import UTC, datetime, timedelta
 from typing import Any, Self
+from urllib.parse import unquote
 
 import httpx
 
 __all__ = [
+    "FROM_PAD",
+    "JOBS_RESPONSE_MESSAGE",
+    "LEGACY_TRACE_STORE_BEFORE",
     "MINIMUM_TRACING_VERSION",
+    "MISSING_CONTENT_MESSAGE",
+    "TO_PAD",
+    "TRACE_ACCESS_MESSAGE",
+    "TRACE_PAGE_SIZE",
     "ConnectClient",
     "ConnectError",
     "connect_content_guid",
+    "connect_trace_lines",
     "content",
     "enable_otel",
     "is_connect_runtime",
+    "normalize_connect_url",
     "parse_connect_version",
     "server_settings",
     "share_trajectory_access",
+    "trace_access_error",
+    "vanity_guid",
     "version_is_older",
+    "window_param",
 ]
 
 # The first Connect release that records trajectories, as Connect writes it.
 MINIMUM_TRACING_VERSION = "2026.09.0"
 
 _VERSION = re.compile(r"([0-9]+(?:\.[0-9]+){1,2})")
+
+# The lines a traces request asks for.
+TRACE_PAGE_SIZE = 1000
+
+# The first Connect release with a second trace store beside each job's own.
+LEGACY_TRACE_STORE_BEFORE = "2026.07.0"
+
+TRACE_ACCESS_MESSAGE = (
+    "Couldn't read this content's traces from Posit Connect. Reading traces "
+    "requires editor access: the CONNECT_API_KEY user must own the content or "
+    "be a collaborator. See the share_with argument of commons.Commons."
+)
+
+MISSING_CONTENT_MESSAGE = "Can't find this content on Posit Connect."
+
+JOBS_RESPONSE_MESSAGE = "Posit Connect returned an unexpected list of jobs."
+
+# Jobs whose trace pages are requested at once.
+_JOB_WORKERS = 20
+
+# The results a content search returns per page.
+_SEARCH_PAGE_SIZE = 100
+
+# How far each bound of a read's window is widened before it is sent.
+FROM_PAD = timedelta(hours=-1)
+TO_PAD = timedelta(seconds=1)
 
 # Connect pages a prefix search over users; a short page is the last one.
 _USER_PAGE_SIZE = 500
@@ -99,8 +140,12 @@ class ConnectClient:
         self.close()
 
     @classmethod
-    def from_env(cls, *, http: httpx.Client | None = None) -> ConnectClient:
-        server = os.environ.get("CONNECT_SERVER", "")
+    def from_env(
+        cls, *, server: str | None = None, http: httpx.Client | None = None
+    ) -> ConnectClient:
+        """A client for `server`, or CONNECT_SERVER, with CONNECT_API_KEY."""
+        if server is None:
+            server = os.environ.get("CONNECT_SERVER", "")
         api_key = os.environ.get("CONNECT_API_KEY", "")
         if not server:
             raise ValueError(
@@ -180,6 +225,259 @@ def version_is_older(version: tuple[int, ...], minimum: str) -> bool:
     width = max(len(version), len(floor))
     padded = [(*parts, *([0] * (width - len(parts)))) for parts in (version, floor)]
     return padded[0] < padded[1]
+
+
+def window_param(at: datetime | None, pad: timedelta) -> str | None:
+    """A window bound as Connect's `from`, `to`, or `since` query value.
+
+    None when there is no bound, or when padding takes it out of the range of
+    datetime; the window is applied exactly after the read either way.
+    """
+    # Connect ignores a timestamp it cannot parse, so send UTC with a `Z`. The
+    # pads keep the parent spans that start before the window. Pad in UTC:
+    # arithmetic on an aware local time is wall-clock arithmetic.
+    if at is None:
+        return None
+    try:
+        padded = at.astimezone(UTC) + pad
+    except OverflowError:
+        return None
+    return padded.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def connect_trace_lines(
+    client: ConnectClient,
+    guid: str,
+    *,
+    since: datetime | None = None,
+    until: datetime | None = None,
+    enough: Callable[[Sequence[str]], bool] | None = None,
+    page_size: int = TRACE_PAGE_SIZE,
+) -> list[str]:
+    """The content's trace lines, as OTLP JSON, newest first.
+
+    `since` and `until` are sent padded, so the caller applies the window
+    exactly. `enough(lines)` may stop the read early on an older server.
+    """
+    window = {
+        key: value
+        for key, value in (
+            ("from", window_param(since, FROM_PAD)),
+            ("to", window_param(until, TO_PAD)),
+        )
+        if value is not None
+    }
+    lines: list[str] = []
+    offset = 0
+    version: tuple[int, ...] | None = None
+    while True:
+        try:
+            response = client.request(
+                "GET",
+                "content",
+                guid,
+                "traces",
+                params={"limit": page_size, "offset": offset, **window},
+            )
+        except ConnectError as error:
+            if error.status_code in (401, 403):
+                raise trace_access_error(error) from error
+            if error.status_code == 404:
+                return _job_trace_lines(
+                    client, guid, since=since, page_size=page_size, lines=[]
+                )
+            raise
+        if version is None:
+            version = parse_connect_version(response.headers.get("Server"))
+        page = _page_lines(response)
+        lines.extend(page)
+        total = _total(response)
+        offset += len(page)
+        # Stopping early is safe only on a server with a single trace store.
+        if (
+            version is not None
+            and version_is_older(version, LEGACY_TRACE_STORE_BEFORE)
+            and lines
+            and enough is not None
+            and enough(lines)
+        ):
+            return lines
+        if not page or total is None or offset >= total:
+            break
+    # Connect 2026.07 moved new traces without migrating the per-job files.
+    if version is None or not version_is_older(version, LEGACY_TRACE_STORE_BEFORE):
+        lines = _job_trace_lines(
+            client, guid, since=since, page_size=page_size, lines=lines
+        )
+    return list(dict.fromkeys(lines))
+
+
+def _job_trace_lines(
+    client: ConnectClient,
+    guid: str,
+    *,
+    since: datetime | None,
+    page_size: int,
+    lines: list[str],
+) -> list[str]:
+    """`lines`, then each job's trace lines, a page from each job in turn."""
+    try:
+        response = client.request("GET", "content", guid, "jobs")
+    except ConnectError as error:
+        if error.status_code in (401, 403):
+            raise trace_access_error(error) from error
+        if error.status_code == 404:
+            # The traces endpoint answered 404 too, or a read would not be here
+            # on a server that has it, so the GUID is not on this server.
+            raise ConnectError(
+                f"{MISSING_CONTENT_MESSAGE} {client.server} has no content "
+                f"{guid}. Check the GUID, or pass the content's URL "
+                "(<server>/content/<guid>/).",
+                status_code=404,
+            ) from error
+        raise
+    try:
+        jobs = response.json()
+    except ValueError:
+        jobs = None
+    # Skipping a job Connect lists would leave its traces out of the read
+    # without a sign, so a list that cannot be read fails it instead.
+    if not isinstance(jobs, list) or not all(
+        isinstance(job, dict) and isinstance(job.get("key"), str) for job in jobs
+    ):
+        raise ConnectError(
+            f"{JOBS_RESPONSE_MESSAGE} {client.server} did not answer with a "
+            f"list of jobs, each with a key, for content {guid}."
+        )
+    keys = [job["key"] for job in jobs]
+    lines = list(lines)
+    if not keys:
+        return lines
+    params: dict[str, Any] = {"limit": page_size}
+    since_param = window_param(since, FROM_PAD)
+    if since_param is not None:
+        params["since"] = since_param
+
+    def job_page(key: str, offset: int) -> httpx.Response:
+        return client.request(
+            "GET",
+            "content",
+            guid,
+            "jobs",
+            key,
+            "traces",
+            params={**params, "offset": offset},
+        )
+
+    pending = [(key, 0) for key in keys]
+    pool = ThreadPoolExecutor(max_workers=_JOB_WORKERS)
+    try:
+        while pending:
+            futures = [pool.submit(job_page, key, offset) for key, offset in pending]
+            # Fail on the first refused or failed request, whichever job it is.
+            for future in as_completed(futures):
+                error = future.exception()
+                if not isinstance(error, ConnectError):
+                    if error is None:
+                        continue
+                    raise error
+                if error.status_code == 404:
+                    continue
+                if error.status_code in (401, 403):
+                    raise trace_access_error(error) from error
+                raise error
+            unfinished: list[tuple[str, int]] = []
+            for (key, offset), future in zip(pending, futures, strict=True):
+                if future.exception() is not None:
+                    continue
+                page_response = future.result()
+                page = _page_lines(page_response)
+                lines.extend(page)
+                total = _total(page_response)
+                offset += len(page)
+                if page and total is not None and offset < total:
+                    unfinished.append((key, offset))
+            pending = unfinished
+    finally:
+        # A failure leaves the queued requests unsent and waits for the running
+        # ones, so none of them outlives the client the caller closes.
+        pool.shutdown(wait=True, cancel_futures=True)
+    return lines
+
+
+def _page_lines(response: httpx.Response) -> list[str]:
+    return [line for line in response.text.split("\n") if line]
+
+
+def _total(response: httpx.Response) -> int | None:
+    value = response.headers.get("X-Total-Count")
+    try:
+        return int(value.strip())
+    except (AttributeError, ValueError):
+        return None
+
+
+def trace_access_error(error: ConnectError) -> ConnectError:
+    """The error for a refused traces request, which names what access it needs."""
+    return ConnectError(TRACE_ACCESS_MESSAGE, status_code=error.status_code)
+
+
+def normalize_connect_url(url: str) -> str:
+    """A URL without its query, fragment, or trailing slashes, percent-decoded."""
+    return unquote(re.sub(r"[?#].*$", "", url, flags=re.DOTALL).rstrip("/"))
+
+
+def vanity_guid(client: ConnectClient, url: str, query: str) -> str:
+    """The GUID of the content whose vanity URL is `query` on the client's server.
+
+    The content search shows vanity URLs to anyone who can view the content,
+    unlike the endpoint that lists them all. Raises LookupError when no
+    result matches.
+    """
+    expected = normalize_connect_url(f"{client.server}/{query.lstrip('/')}")
+    page_number = 1
+    while True:
+        response = client.request(
+            "GET",
+            "search",
+            "content",
+            params={
+                "q": query,
+                "include": "vanity_url",
+                "page_number": page_number,
+                "page_size": _SEARCH_PAGE_SIZE,
+            },
+        )
+        try:
+            body = response.json()
+        except ValueError:
+            body = None
+        if not isinstance(body, dict):
+            body = {}
+        results = body.get("results")
+        for result in results if isinstance(results, list) else []:
+            if not isinstance(result, dict):
+                continue
+            vanity = result.get("vanity_url")
+            guid = result.get("guid")
+            if (
+                isinstance(vanity, str)
+                and isinstance(guid, str)
+                and normalize_connect_url(vanity) == expected
+            ):
+                return guid
+        total = body.get("total")
+        if (
+            not isinstance(total, int | float)
+            or isinstance(total, bool)
+            or page_number >= total
+        ):
+            break
+        page_number += 1
+    raise LookupError(
+        f"Can't find content for the Connect vanity URL {url}. Check that the "
+        "URL is correct and that your API key can access the content."
+    )
 
 
 def server_settings(client: ConnectClient) -> dict[str, Any]:

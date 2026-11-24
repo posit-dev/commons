@@ -308,7 +308,7 @@ test_that("share_trajectory_access warns off Connect", {
 # `guid-x` unless it is in `case$unknown`, and a grant for a principal in
 # `state$refused` gets a 400; it starts as `case$refused`. `state` records the
 # grants that went through and the usernames looked up.
-local_connect_double <- function(case, state, env = parent.frame()) {
+local_connect_fake <- function(case, state, env = parent.frame()) {
   withr::local_envvar(
     CONNECT_CONTENT_GUID = "content-guid",
     CONNECT_SERVER = "https://connect.example.com",
@@ -364,7 +364,7 @@ test_that("share_trajectory_access grants who the shared fixture says", {
   for (case in spec$cases) {
     clear_granted_access()
     state <- new.env()
-    local_connect_double(case, state)
+    local_connect_fake(case, state)
 
     if (isTRUE(case$warns)) {
       expect_warning(
@@ -387,7 +387,7 @@ test_that("a second share looks up who the shared fixture says", {
   for (case in shared_fixture("connect")$sharing_again$cases) {
     clear_granted_access()
     state <- new.env()
-    local_connect_double(case, state)
+    local_connect_fake(case, state)
 
     suppressWarnings(share_trajectory_access(unlist(case$usernames)))
     state$looked_up <- character()

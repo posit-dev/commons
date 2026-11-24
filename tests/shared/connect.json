@@ -109,7 +109,7 @@
     }
   },
   "sharing": {
-    "description": "Who gets a grant, given the usernames asked for and the permissions that already exist on the content. `permitted` is the permissions response, and `expected` lists the principals granted, in order. Connect answers a grant for a principal in `refused` with a 4xx, as it does for the content's owner or an account that cannot publish. A case with `warns` set expects a warning. Test doubles resolve username `x` to principal `guid-x`, except a username in `unknown`, which no Connect user has.",
+    "description": "Who gets a grant, given the usernames asked for and the permissions that already exist on the content. `permitted` is the permissions response, and `expected` lists the principals granted, in order. Connect answers a grant for a principal in `refused` with a 4xx, as it does for the content's owner or an account that cannot publish. A case with `warns` set expects a warning. Test fakes resolve username `x` to principal `guid-x`, except a username in `unknown`, which no Connect user has.",
     "cases": [
       {
         "name": "a user with no permission is granted one",
@@ -232,5 +232,81 @@
         { "name": "the write fails", "content": { "otel_enabled": false }, "patch_fails": true, "patched": true, "outcome": "failed" }
       ]
     }
+  },
+  "traces": {
+    "description": "Reading a content item's trace lines. A read pages through the content's `traces` endpoint with `limit` set to `page_size` and `offset` set to the number of lines read so far, until a page is empty, `X-Total-Count` is missing or not a number, or the offset reaches it. On a server older than `legacy_store_before`, as its `Server` header gives it, the read may stop paging once the caller has enough (see `enough` in trajectories/connect-source.json). Otherwise, and when the version is unknown, the read also reads each job's own store: the content's `jobs`, then each job's `jobs/<key>/traces` endpoint, paged the same way with `since` in place of `from` and no `to`, a page from each unfinished job in turn. A line read from both stores is kept once, at its first place. When the `traces` endpoint answers 404, the job stores alone are read. 401 or 403 from the `traces` or `jobs` endpoints, or from a job's traces endpoint, is an access error whose message begins with `access_error`. 404 from the `jobs` endpoint means the server has no such content, an error whose message begins with `missing_error` and names `guid` and `server`. A `jobs` body that is not a list of jobs, each with a string `key`, is an error whose message begins with `jobs_error`. A job whose traces endpoint answers 404 is skipped. Any other failure is an error. `since` and `until` are in seconds since the epoch and are sent as trajectories/connect-source.json's `window_param` gives. Each case reads the content `guid` from `server`, and paths are relative to `/__api__/v1/content/<guid>/`.",
+    "server": "https://connect.example.com",
+    "guid": "ea3c1445-cb71-42df-a2f2-bdb18874ef41",
+    "page_size": 1000,
+    "legacy_store_before": "2026.07.0",
+    "access_error": "Couldn't read this content's traces from Posit Connect.",
+    "missing_error": "Can't find this content on Posit Connect.",
+    "jobs_error": "Posit Connect returned an unexpected list of jobs.",
+    "fake": "The Connect fake a case reads from, given as each case's `server`. `version` sets the `Server` header to `Posit Connect v<version>`, or leaves it out when absent. `traces` lists the lines the `traces` endpoint serves, newest first, or gives `{status}` for an endpoint that answers with that status. A response holds the lines from the request's offset, at most `page_size` of them when it is set, each followed by a newline, with `X-Total-Count` set to the number of lines, or to `total` when the case gives it, or left out when `total` is null. `jobs` lists the content's jobs, each a `key` with `traces` served the same way, or gives `{status}`, or gives `{body}` for an endpoint that answers 200 with that JSON text; absent means no jobs. `enough` true means the caller always has enough. `requests` lists each request as its path and its query, compared without regard to order, since job pages may be fetched concurrently. `lines` is the result, in order, and `error` is `access`, `missing`, `jobs`, or `failed` when the read fails.",
+    "pages": {
+      "description": "Paging through the `traces` endpoint.",
+      "cases": [
+        {"name": "a read pages until the total is exhausted", "server": {"version": "2026.06.1", "page_size": 2, "traces": ["line1", "line2", "line3"]}, "requests": [{"path": "traces", "query": {"limit": "1000", "offset": "0"}}, {"path": "traces", "query": {"limit": "1000", "offset": "2"}}], "lines": ["line1", "line2", "line3"]},
+        {"name": "an empty page ends the read", "server": {"version": "2026.06.1", "page_size": 2, "total": 5, "traces": ["line1", "line2", "line3"]}, "requests": [{"path": "traces", "query": {"limit": "1000", "offset": "0"}}, {"path": "traces", "query": {"limit": "1000", "offset": "2"}}, {"path": "traces", "query": {"limit": "1000", "offset": "3"}}], "lines": ["line1", "line2", "line3"]},
+        {"name": "a total that is not a number ends the read after one page", "server": {"version": "2026.06.1", "page_size": 2, "total": "many", "traces": ["line1", "line2", "line3"]}, "requests": [{"path": "traces", "query": {"limit": "1000", "offset": "0"}}], "lines": ["line1", "line2"]},
+        {"name": "a missing total ends the read after one page", "server": {"version": "2026.06.1", "page_size": 2, "total": null, "traces": ["line1", "line2", "line3"]}, "requests": [{"path": "traces", "query": {"limit": "1000", "offset": "0"}}], "lines": ["line1", "line2"]},
+        {"name": "a missing total ends each job's read after one page", "server": {"version": "2026.09.0", "page_size": 2, "total": null, "traces": ["line1", "line2", "line3"], "jobs": [{"key": "job", "traces": ["a", "b", "c"]}]}, "requests": [{"path": "traces", "query": {"limit": "1000", "offset": "0"}}, {"path": "jobs", "query": {}}, {"path": "jobs/job/traces", "query": {"limit": "1000", "offset": "0"}}], "lines": ["line1", "line2", "a", "b"]},
+        {"name": "the window is sent padded", "since": 1784730600, "until": 1784734200, "server": {"version": "2026.06.1", "traces": ["line1"]}, "requests": [{"path": "traces", "query": {"limit": "1000", "offset": "0", "from": "2026-07-22T13:30:00Z", "to": "2026-07-22T15:30:01Z"}}], "lines": ["line1"]},
+        {"name": "an old server stops once the caller has enough", "enough": true, "server": {"version": "2026.06.1", "page_size": 1, "traces": ["line1", "line2"]}, "requests": [{"path": "traces", "query": {"limit": "1000", "offset": "0"}}], "lines": ["line1"]},
+        {"name": "a newer server reads every page whatever the caller has", "enough": true, "server": {"version": "2026.07.0", "page_size": 1, "traces": ["line1", "line2"], "jobs": []}, "requests": [{"path": "traces", "query": {"limit": "1000", "offset": "0"}}, {"path": "traces", "query": {"limit": "1000", "offset": "1"}}, {"path": "jobs", "query": {}}], "lines": ["line1", "line2"]}
+      ]
+    },
+    "stores": {
+      "description": "Reading the job stores as well as the `traces` endpoint.",
+      "cases": [
+        {"name": "connect_trace_lines reads collector and legacy stores", "enough": true, "server": {"version": "2026.07.0", "traces": ["current"], "jobs": [{"key": "job", "traces": ["legacy"]}]}, "requests": [{"path": "traces", "query": {"limit": "1000", "offset": "0"}}, {"path": "jobs", "query": {}}, {"path": "jobs/job/traces", "query": {"limit": "1000", "offset": "0"}}], "lines": ["current", "legacy"]},
+        {"name": "an unknown version reads both stores", "enough": true, "server": {"traces": ["current"], "jobs": [{"key": "job", "traces": ["legacy"]}]}, "requests": [{"path": "traces", "query": {"limit": "1000", "offset": "0"}}, {"path": "jobs", "query": {}}, {"path": "jobs/job/traces", "query": {"limit": "1000", "offset": "0"}}], "lines": ["current", "legacy"]},
+        {"name": "an old server reads only the traces endpoint", "server": {"version": "2026.06.1", "traces": ["current"], "jobs": [{"key": "job", "traces": ["legacy"]}]}, "requests": [{"path": "traces", "query": {"limit": "1000", "offset": "0"}}], "lines": ["current"]},
+        {"name": "a line in both stores is kept once", "server": {"version": "2026.09.0", "traces": ["a", "b"], "jobs": [{"key": "job", "traces": ["b", "c"]}]}, "requests": [{"path": "traces", "query": {"limit": "1000", "offset": "0"}}, {"path": "jobs", "query": {}}, {"path": "jobs/job/traces", "query": {"limit": "1000", "offset": "0"}}], "lines": ["a", "b", "c"]},
+        {"name": "jobs are paged in turn", "server": {"version": "2026.09.0", "page_size": 1, "traces": [], "jobs": [{"key": "j1", "traces": ["a1", "a2"]}, {"key": "j2", "traces": ["b1", "b2"]}]}, "requests": [{"path": "traces", "query": {"limit": "1000", "offset": "0"}}, {"path": "jobs", "query": {}}, {"path": "jobs/j1/traces", "query": {"limit": "1000", "offset": "0"}}, {"path": "jobs/j2/traces", "query": {"limit": "1000", "offset": "0"}}, {"path": "jobs/j1/traces", "query": {"limit": "1000", "offset": "1"}}, {"path": "jobs/j2/traces", "query": {"limit": "1000", "offset": "1"}}], "lines": ["a1", "b1", "a2", "b2"]},
+        {"name": "a job store is read from the padded start of the window", "since": 1784730600, "until": 1784734200, "server": {"version": "2026.09.0", "traces": ["current"], "jobs": [{"key": "job", "traces": ["legacy"]}]}, "requests": [{"path": "traces", "query": {"limit": "1000", "offset": "0", "from": "2026-07-22T13:30:00Z", "to": "2026-07-22T15:30:01Z"}}, {"path": "jobs", "query": {}}, {"path": "jobs/job/traces", "query": {"limit": "1000", "offset": "0", "since": "2026-07-22T13:30:00Z"}}], "lines": ["current", "legacy"]},
+        {"name": "a job whose traces endpoint is missing is skipped", "server": {"version": "2026.09.0", "traces": [], "jobs": [{"key": "gone", "traces": {"status": 404}}, {"key": "job", "traces": ["legacy"]}]}, "requests": [{"path": "traces", "query": {"limit": "1000", "offset": "0"}}, {"path": "jobs", "query": {}}, {"path": "jobs/gone/traces", "query": {"limit": "1000", "offset": "0"}}, {"path": "jobs/job/traces", "query": {"limit": "1000", "offset": "0"}}], "lines": ["legacy"]}
+      ]
+    },
+    "fallback": {
+      "description": "Reading the job stores alone when the `traces` endpoint is missing.",
+      "cases": [
+        {"name": "connect_trace_lines falls back when the content endpoint is absent", "server": {"traces": {"status": 404}, "jobs": [{"key": "job", "traces": ["legacy"]}]}, "requests": [{"path": "traces", "query": {"limit": "1000", "offset": "0"}}, {"path": "jobs", "query": {}}, {"path": "jobs/job/traces", "query": {"limit": "1000", "offset": "0"}}], "lines": ["legacy"]},
+        {"name": "the fallback keeps the start of the window", "since": 1784730600, "server": {"traces": {"status": 404}, "jobs": [{"key": "job", "traces": ["legacy"]}]}, "requests": [{"path": "traces", "query": {"limit": "1000", "offset": "0", "from": "2026-07-22T13:30:00Z"}}, {"path": "jobs", "query": {}}, {"path": "jobs/job/traces", "query": {"limit": "1000", "offset": "0", "since": "2026-07-22T13:30:00Z"}}], "lines": ["legacy"]},
+        {"name": "a fallback with no jobs reads nothing", "server": {"traces": {"status": 404}, "jobs": []}, "requests": [{"path": "traces", "query": {"limit": "1000", "offset": "0"}}, {"path": "jobs", "query": {}}], "lines": []}
+      ]
+    },
+    "access": {
+      "description": "How a refused or failed request, or an unexpected list of jobs, ends the read.",
+      "cases": [
+        {"name": "403 from the traces endpoint", "server": {"traces": {"status": 403}}, "error": "access"},
+        {"name": "401 from the traces endpoint", "server": {"traces": {"status": 401}}, "error": "access"},
+        {"name": "403 from the jobs endpoint", "server": {"version": "2026.09.0", "traces": ["current"], "jobs": {"status": 403}}, "error": "access"},
+        {"name": "403 from the jobs endpoint after a fallback", "server": {"traces": {"status": 404}, "jobs": {"status": 403}}, "error": "access"},
+        {"name": "403 from a job's traces endpoint", "server": {"version": "2026.09.0", "traces": [], "jobs": [{"key": "job", "traces": {"status": 403}}]}, "error": "access"},
+        {"name": "404 from both the traces and the jobs endpoints", "server": {"traces": {"status": 404}, "jobs": {"status": 404}}, "error": "missing"},
+        {"name": "500 from the traces endpoint", "server": {"traces": {"status": 500}}, "error": "failed"},
+        {"name": "500 from the jobs endpoint", "server": {"version": "2026.09.0", "traces": [], "jobs": {"status": 500}}, "error": "failed"},
+        {"name": "500 from a job's traces endpoint", "server": {"version": "2026.09.0", "traces": [], "jobs": [{"key": "job", "traces": {"status": 500}}]}, "error": "failed"},
+        {"name": "a jobs body that is not JSON", "server": {"version": "2026.09.0", "traces": [], "jobs": {"body": "not json"}}, "error": "jobs"},
+        {"name": "a jobs body that is an object", "server": {"version": "2026.09.0", "traces": [], "jobs": {"body": "{\"key\": \"job\"}"}}, "error": "jobs"},
+        {"name": "a job without a key", "server": {"version": "2026.09.0", "traces": [], "jobs": {"body": "[{\"key\": \"job\"}, {\"id\": 1}]"}}, "error": "jobs"},
+        {"name": "a job whose key is not a string", "server": {"version": "2026.09.0", "traces": [], "jobs": {"body": "[{\"key\": 1}]"}}, "error": "jobs"},
+        {"name": "a malformed jobs body after a fallback", "server": {"traces": {"status": 404}, "jobs": {"body": "not json"}}, "error": "jobs"}
+      ]
+    }
+  },
+  "vanity_search": {
+    "description": "Finding the content a vanity URL names. The read searches content at `search/content` with `request`'s query, `q` set to the name, and `page_number` counting from 1. It takes the guid of the first result whose `vanity_url` is the server joined to the name by one slash, comparing both without a query, a fragment, or trailing slashes, and percent-decoded. A result without a `vanity_url` never matches. It reads the next page until `page_number` reaches the answer's `total`, and stops when the answer has none. When nothing matches, the read fails (`expected` is null). `pages` are the search's answers, by page number. `page_numbers` lists the page each request asked for.",
+    "request": {"path": ["search", "content"], "query": {"include": "vanity_url", "page_size": "100"}},
+    "cases": [
+      {"name": "connect_vanity_guid matches the full vanity URL", "server": "https://connect.example.com", "query": "my-agent", "pages": [{"results": [{"guid": "wrong-guid", "vanity_url": "https://connect.example.com/my-agent-test/"}, {"guid": "right-guid", "vanity_url": "https://connect.example.com/my-agent/"}], "total": 1}], "page_numbers": [1], "expected": "right-guid"},
+      {"name": "connect_vanity_guid explains an inaccessible URL", "server": "https://connect.example.com", "query": "missing", "pages": [{"results": [], "total": 1}], "page_numbers": [1], "expected": null},
+      {"name": "a match on a later page is found", "server": "https://connect.example.com", "query": "my-agent", "pages": [{"results": [{"guid": "other-guid", "vanity_url": "https://connect.example.com/other/"}], "total": 2}, {"results": [{"guid": "right-guid", "vanity_url": "https://connect.example.com/my-agent/"}], "total": 2}], "page_numbers": [1, 2], "expected": "right-guid"},
+      {"name": "a result without a vanity URL does not match", "server": "https://connect.example.com", "query": "my-agent", "pages": [{"results": [{"guid": "no-vanity"}, {"guid": "right-guid", "vanity_url": "https://connect.example.com/my-agent"}], "total": 1}], "page_numbers": [1], "expected": "right-guid"},
+      {"name": "the URLs are compared decoded and without a trailing slash", "server": "https://connect.example.com", "query": "my agent", "pages": [{"results": [{"guid": "right-guid", "vanity_url": "https://connect.example.com/my%20agent/"}], "total": 1}], "page_numbers": [1], "expected": "right-guid"},
+      {"name": "a server under a path", "server": "https://connect.example.com/rsc", "query": "my-agent", "pages": [{"results": [{"guid": "root-guid", "vanity_url": "https://connect.example.com/my-agent/"}, {"guid": "right-guid", "vanity_url": "https://connect.example.com/rsc/my-agent/"}], "total": 1}], "page_numbers": [1], "expected": "right-guid"},
+      {"name": "an answer without a total ends the search", "server": "https://connect.example.com", "query": "my-agent", "pages": [{"results": [{"guid": "other-guid", "vanity_url": "https://connect.example.com/other/"}]}, {"results": [{"guid": "right-guid", "vanity_url": "https://connect.example.com/my-agent/"}]}], "page_numbers": [1], "expected": null}
+    ]
   }
 }

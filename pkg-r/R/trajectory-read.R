@@ -16,8 +16,8 @@
 #'     rsconnect, the deployed content's traces; otherwise, the local trace
 #'     directory that [agent()] writes to.
 #'   * A Connect content GUID, a content URL (`.../content/<guid>/`), a
-#'     vanity URL (`.../content/<name>/`), or a dashboard URL
-#'     (`.../connect/#/apps/<guid>/`).
+#'     vanity URL written as `<server>/content/<name>/` for content at
+#'     `<server>/<name>/`, or a dashboard URL (`.../connect/#/apps/<guid>/`).
 #'   * A directory of OTLP NDJSON trace files (`trace-*.jsonl`).
 #' @param ... These dots are for future extensions and must be empty.
 #' @param n Keep only the `n` most recent conversations, after `from`/`to`
@@ -320,7 +320,8 @@ trajectory_guid_server <- function(call = rlang::caller_env()) {
     return(server)
   }
 
-  deployment <- find_rsconnect_deployment()
+  # The GUID names the content, so which record is read needs no notice.
+  deployment <- find_rsconnect_deployment(quiet = TRUE)
   if (!is.null(deployment)) {
     return(deployment$server)
   }
@@ -408,8 +409,13 @@ content_url_guid <- function(x) {
   if (!grepl("^https?://", x)) {
     return(NULL)
   }
+  # Drop the query, but keep the fragment, where a dashboard URL names the GUID.
+  x <- sub("\\?[^#]*", "", x)
   guid <- "([0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12})"
-  match <- regmatches(x, regexec(paste0("^(.*?)/content/", guid), x))[[1]]
+  match <- regmatches(
+    x,
+    regexec(paste0("^(.*?)(?:/__api__/v1)?/content/", guid), x)
+  )[[1]]
   if (length(match) > 0) {
     return(list(server = match[2], guid = match[3]))
   }
@@ -438,8 +444,10 @@ content_vanity_url <- function(x) {
 }
 
 # Find the project's Connect deployment record (written by rsconnect under
-# rsconnect/). The record's `url` field carries the content GUID.
-find_rsconnect_deployment <- function(dir = getwd()) {
+# rsconnect/). The record's `url` field has the content GUID. With several
+# records naming more than one deployment, reports which one is read unless
+# `quiet`.
+find_rsconnect_deployment <- function(dir = getwd(), quiet = FALSE) {
   files <- rsconnect_record_files(dir)
   if (length(files) == 0) {
     return(NULL)
@@ -457,13 +465,31 @@ find_rsconnect_deployment <- function(dir = getwd()) {
       numeric(1)
     )
     deployments <- deployments[order(mtimes, decreasing = TRUE)]
-    cli::cli_inform(
-      "Reading trajectories for the most recent deployment,
-       {.val {deployments[[1]]$name}} on {.url {deployments[[1]]$server}}."
+    keys <- vapply(
+      deployments,
+      function(dep) paste(dep$guid, deployment_server_key(dep$server)),
+      character(1)
     )
+    if (!quiet && length(unique(keys)) > 1) {
+      cli::cli_inform(
+        "Reading trajectories for {.val {deployments[[1]]$name}}
+         ({deployments[[1]]$guid}) on {.url {deployments[[1]]$server}}, from
+         the most recently modified deployment record."
+      )
+    }
   }
 
   deployments[[1]]
+}
+
+# A server URL's scheme and host are case-insensitive; its path is not.
+deployment_server_key <- function(server) {
+  server <- sub("/+(__api__/*)?$", "", server)
+  parts <- regmatches(server, regexec("^([^:/]+://[^/]*)(.*)$", server))[[1]]
+  if (length(parts) == 0) {
+    return(server)
+  }
+  paste0(tolower(parts[[2]]), parts[[3]])
 }
 
 # Walk a few levels down looking for rsconnect/ directories rather than

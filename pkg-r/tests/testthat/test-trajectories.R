@@ -473,8 +473,24 @@ test_that("window bound strings must parse completely", {
   expect_window_bound_member(build$complete_parse)
 })
 
+connect_cases <- shared_fixture(file.path("trajectories", "connect-source"))
+
+test_that("every member of trajectories/connect-source.json is run", {
+  # A member that no test reads would pass silently.
+  source <- paste(readLines(test_path("test-trajectories.R")), collapse = "\n")
+  for (member in setdiff(names(connect_cases), "description")) {
+    used <- paste0("connect_cases$", member, c(")", "$"))
+    expect_true(
+      any(vapply(used, grepl, logical(1), x = source, fixed = TRUE)),
+      info = member
+    )
+  }
+})
+
 test_that("an empty Connect read diagnoses disabled tracing settings", {
   skip_on_cran()
+  expect_connect_read_member(connect_cases$empty_read)
+
   client <- list(server = "https://connect.example.com", api_key = "key")
   content_enabled <- FALSE
   instrumentation_allowed <- TRUE
@@ -501,189 +517,39 @@ test_that("an empty Connect read diagnoses disabled tracing settings", {
   content_enabled <- TRUE
   instrumentation_allowed <- FALSE
   expect_snapshot(warn_if_connect_tracing_disabled(client, "guid"))
-
-  instrumentation_allowed <- TRUE
-  expect_no_warning(warn_if_connect_tracing_disabled(client, "guid"))
 })
 
 test_that("a Connect read recovers a wrapper the `from` pushdown dropped", {
-  withr::local_envvar(
-    CONNECT_SERVER = "https://connect.example.com",
-    CONNECT_API_KEY = "key"
-  )
-  json <- test_turn_json()
-  wrapper <- conversation_test_span("t1", "root1")
-  chat <- chat_test_span(
-    "t1",
-    "chat1",
-    parent_span_id = "root1",
-    conversation_id = "conv-a",
-    input_messages = json$input,
-    start_time = "200000000000",
-    end_time = "201000000000"
-  )
-  state <- new.env()
-  state$froms <- list()
-  local_mocked_bindings(
-    connect_trace_lines = function(client, guid, from = NULL, to = NULL, ...) {
-      state$froms <- c(state$froms, list(from))
-      if (is.null(from)) {
-        otlp_test_line(list(wrapper, chat))
-      } else {
-        otlp_test_line(list(chat))
-      }
-    }
-  )
-
-  trajectories <- trajectory_read(
-    "ea3c1445-cb71-42df-a2f2-bdb18874ef41",
-    from = .POSIXct(150, tz = "UTC")
-  )
-
-  expect_length(state$froms, 2)
-  expect_null(state$froms[[2]])
-  expect_named(trajectories, "conv-a")
+  expect_connect_read_member(connect_cases$refetch)
 })
 
 test_that("a windowed Connect read with intact ancestry fetches once", {
-  withr::local_envvar(
-    CONNECT_SERVER = "https://connect.example.com",
-    CONNECT_API_KEY = "key"
-  )
-  json <- test_turn_json()
-  state <- new.env()
-  state$fetches <- 0
-  local_mocked_bindings(
-    connect_trace_lines = function(client, guid, from = NULL, to = NULL, ...) {
-      state$fetches <- state$fetches + 1
-      otlp_test_line(list(
-        conversation_test_span("t1", "root1"),
-        chat_test_span(
-          "t1",
-          "chat1",
-          parent_span_id = "root1",
-          conversation_id = "conv-a",
-          input_messages = json$input,
-          start_time = "200000000000",
-          end_time = "201000000000"
-        )
-      ))
-    }
-  )
-
-  trajectories <- trajectory_read(
-    "ea3c1445-cb71-42df-a2f2-bdb18874ef41",
-    from = .POSIXct(150, tz = "UTC")
-  )
-
-  expect_equal(state$fetches, 1)
-  expect_named(trajectories, "conv-a")
+  expect_connect_read_member(connect_cases$fetch_once)
 })
 
 test_that("enough_trace_lines is satisfied once n conversations have content", {
-  lines <- staggered_test_line()
-
-  enough <- enough_trace_lines(2, NULL, NULL)
-  expect_true(enough(lines))
-
-  enough <- enough_trace_lines(5, NULL, NULL)
-  expect_false(enough(lines))
-
-  enough <- enough_trace_lines(1, .POSIXct(250, tz = "UTC"), NULL)
-  expect_true(enough(lines))
+  expect_enough_member(connect_cases$enough)
 })
 
 test_that("only ancestry below the turn wrapper counts as severed", {
-  json <- test_turn_json()
-  spans <- parse_otlp_lines(otlp_test_line(list(
-    # The wrapper's own parent (added by an instrumented host) is missing,
-    # but turn-ancestor resolution stops at the wrapper.
-    conversation_test_span("t1", "root1", parent_span_id = "host1"),
-    chat_test_span(
-      "t1",
-      "chat1",
-      parent_span_id = "root1",
-      input_messages = json$input
+  cases <- connect_cases$severed$cases
+  expect_gt(length(cases), 0)
+  for (case in cases) {
+    spans <- parse_otlp_lines(connect_fixture_line(case[["spans"]]))
+    expect_identical(
+      has_severed_ancestry(spans),
+      case[["expected"]],
+      info = case[["name"]]
     )
-  )))
-  expect_false(has_severed_ancestry(spans))
-
-  severed <- parse_otlp_lines(otlp_test_line(list(
-    chat_test_span(
-      "t1",
-      "chat1",
-      parent_span_id = "root1",
-      input_messages = json$input
-    )
-  )))
-  expect_true(has_severed_ancestry(severed))
+  }
 })
 
 test_that("enough_trace_lines waits for a chat span's trailing wrapper", {
-  json <- test_turn_json()
-  chat_only <- otlp_test_line(list(
-    chat_test_span(
-      "t1",
-      "chat1",
-      parent_span_id = "root1",
-      input_messages = json$input
-    )
-  ))
-  with_wrapper <- c(
-    chat_only,
-    otlp_test_line(list(conversation_test_span("t1", "root1")))
-  )
-
-  enough <- enough_trace_lines(1, NULL, NULL)
-  expect_false(enough(chat_only))
-  expect_true(enough(with_wrapper))
+  expect_enough_member(connect_cases$enough_ancestry)
 })
 
 test_that("trajectory_read stops Connect paging after n conversations", {
-  withr::local_envvar(
-    CONNECT_SERVER = "https://connect.example.com",
-    CONNECT_API_KEY = "key"
-  )
-  json <- test_turn_json()
-  pages <- lapply(c("300", "200", "100"), function(seconds) {
-    otlp_test_line(list(chat_test_span(
-      paste0("t", seconds),
-      paste0("s", seconds),
-      input_messages = json$input,
-      start_time = paste0(seconds, "000000000"),
-      end_time = paste0(seconds, "500000000")
-    )))
-  })
-  state <- new.env()
-  state$served <- 0
-  local_mocked_bindings(
-    connect_trace_lines = function(
-      client,
-      guid,
-      from = NULL,
-      to = NULL,
-      enough = NULL,
-      ...
-    ) {
-      lines <- character()
-      for (page in pages) {
-        lines <- c(lines, page)
-        state$served <- state$served + 1
-        if (!is.null(enough) && enough(lines)) {
-          break
-        }
-      }
-      lines
-    }
-  )
-
-  trajectories <- trajectory_read(
-    "ea3c1445-cb71-42df-a2f2-bdb18874ef41",
-    n = 1
-  )
-
-  expect_equal(state$served, 1)
-  expect_named(trajectories, "t300")
+  expect_connect_read_member(connect_cases$early_stop)
 })
 
 test_that("trajectory_read returns an empty list for a missing directory", {
@@ -705,53 +571,11 @@ test_that("trajectory_read validates source", {
 })
 
 test_that("a GUID source resolves to a Connect read", {
-  withr::local_envvar(
-    CONNECT_SERVER = "https://connect.example.com",
-    CONNECT_API_KEY = "key"
-  )
-
-  resolved <- resolve_trajectory_source(
-    "ea3c1445-cb71-42df-a2f2-bdb18874ef41"
-  )
-
-  expect_equal(resolved$kind, "connect")
-  expect_equal(resolved$guid, "ea3c1445-cb71-42df-a2f2-bdb18874ef41")
-  expect_equal(resolved$client$server, "https://connect.example.com")
+  expect_source_member(connect_cases$guid_source)
 })
 
-test_that("a GUID source infers its server from rsconnect", {
-  withr::local_envvar(CONNECT_SERVER = NA, CONNECT_API_KEY = "key")
-  withr::local_dir(withr::local_tempdir())
-  local_mocked_bindings(
-    registered_connect_servers = function() "https://connect.example.com"
-  )
-
-  resolved <- resolve_trajectory_source(
-    "ea3c1445-cb71-42df-a2f2-bdb18874ef41"
-  )
-
-  expect_equal(resolved$client$server, "https://connect.example.com")
-})
-
-test_that("a GUID source prefers its environment and project deployment", {
-  withr::local_envvar(CONNECT_SERVER = "https://env.example.com")
-  expect_equal(trajectory_guid_server(), "https://env.example.com")
-
-  withr::local_envvar(CONNECT_SERVER = NA)
-  dir <- withr::local_tempdir()
-  record_dir <- file.path(dir, "rsconnect", "documents", "app.R", "server")
-  dir.create(record_dir, recursive = TRUE)
-  writeLines(
-    c(
-      "name: my-agent",
-      "hostUrl: https://project.example.com/__api__",
-      "url: https://project.example.com/content/ea3c1445-cb71-42df-a2f2-bdb18874ef41/"
-    ),
-    file.path(record_dir, "my-agent.dcf")
-  )
-  withr::local_dir(dir)
-
-  expect_equal(trajectory_guid_server(), "https://project.example.com")
+test_that("a GUID source finds its server in the environment, project, or rsconnect", {
+  expect_source_member(connect_cases$guid_server)
 })
 
 test_that("a GUID source requires an unambiguous server", {
@@ -770,48 +594,15 @@ test_that("a GUID source requires an unambiguous server", {
 })
 
 test_that("a content URL source carries its own server", {
-  withr::local_envvar(CONNECT_SERVER = NA, CONNECT_API_KEY = "key")
-
-  resolved <- resolve_trajectory_source(
-    "https://connect.example.com/content/ea3c1445-cb71-42df-a2f2-bdb18874ef41/"
-  )
-
-  expect_equal(resolved$kind, "connect")
-  expect_equal(resolved$guid, "ea3c1445-cb71-42df-a2f2-bdb18874ef41")
-  expect_equal(resolved$client$server, "https://connect.example.com")
+  expect_source_member(connect_cases$content_url_source)
 })
 
 test_that("a dashboard URL source carries its own server", {
-  withr::local_envvar(CONNECT_SERVER = NA, CONNECT_API_KEY = "key")
-
-  resolved <- resolve_trajectory_source(
-    "https://connect.example.com/connect/#/apps/ea3c1445-cb71-42df-a2f2-bdb18874ef41/access"
-  )
-
-  expect_equal(resolved$kind, "connect")
-  expect_equal(resolved$guid, "ea3c1445-cb71-42df-a2f2-bdb18874ef41")
-  expect_equal(resolved$client$server, "https://connect.example.com")
+  expect_source_member(connect_cases$dashboard_url_source)
 })
 
 test_that("a vanity URL is resolved through Connect", {
-  withr::local_envvar(CONNECT_SERVER = NA, CONNECT_API_KEY = "key")
-  state <- new.env()
-  local_mocked_bindings(
-    connect_vanity_guid = function(client, url, query, ...) {
-      state$client <- client
-      state$url <- url
-      state$query <- query
-      "ea3c1445-cb71-42df-a2f2-bdb18874ef41"
-    }
-  )
-
-  url <- "https://connect.example.com/content/my-agent"
-  resolved <- resolve_trajectory_source(url)
-
-  expect_equal(resolved$guid, "ea3c1445-cb71-42df-a2f2-bdb18874ef41")
-  expect_equal(state$client$server, "https://connect.example.com")
-  expect_equal(state$url, url)
-  expect_equal(state$query, "my-agent")
+  expect_source_member(connect_cases$vanity_source)
 })
 
 test_that("a vanity URL resolves against a configured Connect server", {
@@ -830,6 +621,8 @@ test_that("a vanity URL resolves against a configured Connect server", {
 })
 
 test_that("a URL without a recognizable GUID errors rather than reading locally", {
+  expect_source_member(connect_cases$unrecognized_url)
+
   expect_snapshot(
     resolve_trajectory_source("https://connect.example.com/other"),
     error = TRUE
@@ -837,46 +630,16 @@ test_that("a URL without a recognizable GUID errors rather than reading locally"
 })
 
 test_that("NULL source on Connect reads this content's traces", {
-  withr::local_envvar(
-    CONNECT_CONTENT_GUID = "ea3c1445-cb71-42df-a2f2-bdb18874ef41",
-    CONNECT_SERVER = "https://connect.example.com",
-    CONNECT_API_KEY = "key"
-  )
-
-  resolved <- resolve_trajectory_source(NULL)
-
-  expect_equal(resolved$kind, "connect")
-  expect_equal(resolved$guid, "ea3c1445-cb71-42df-a2f2-bdb18874ef41")
+  expect_source_member(connect_cases$null_on_connect)
 })
 
 test_that("NULL source uses the project deployment record", {
-  withr::local_envvar(
-    POSIT_PRODUCT = NA,
-    CONNECT_CONTENT_GUID = NA,
-    CONNECT_SERVER = NA,
-    CONNECT_API_KEY = "key"
-  )
-  dir <- withr::local_tempdir()
-  record_dir <- file.path(dir, "rsconnect", "documents", "app.R", "server")
-  dir.create(record_dir, recursive = TRUE)
-  writeLines(
-    c(
-      "name: my-agent",
-      "hostUrl: https://connect.example.com/__api__",
-      "url: https://connect.example.com/content/ea3c1445-cb71-42df-a2f2-bdb18874ef41/"
-    ),
-    file.path(record_dir, "my-agent.dcf")
-  )
-  withr::local_dir(dir)
-
-  resolved <- resolve_trajectory_source(NULL)
-
-  expect_equal(resolved$kind, "connect")
-  expect_equal(resolved$guid, "ea3c1445-cb71-42df-a2f2-bdb18874ef41")
-  expect_equal(resolved$client$server, "https://connect.example.com")
+  expect_source_member(connect_cases$null_deployment)
 })
 
 test_that("NULL source falls back to the local traces directory", {
+  expect_source_member(connect_cases$null_local)
+
   withr::local_envvar(
     POSIT_PRODUCT = NA,
     CONNECT_CONTENT_GUID = NA,
@@ -915,68 +678,57 @@ test_that("local_traces_dir follows the active file exporter", {
 })
 
 test_that("is_content_guid recognizes GUIDs", {
-  expect_true(is_content_guid("ea3c1445-cb71-42df-a2f2-bdb18874ef41"))
-  expect_false(is_content_guid("not-a-guid"))
-  expect_false(is_content_guid("/tmp/logs"))
+  cases <- connect_cases$content_guid$cases
+  expect_gt(length(cases), 0)
+  for (case in cases) {
+    expect_identical(
+      is_content_guid(case[["text"]]),
+      case[["expected"]],
+      info = case[["name"]]
+    )
+  }
 })
 
 test_that("content_url_guid extracts the server and GUID", {
-  parsed <- content_url_guid(
-    "https://connect.example.com/rsc/content/ea3c1445-cb71-42df-a2f2-bdb18874ef41/foo"
-  )
-  expect_equal(parsed$server, "https://connect.example.com/rsc")
-  expect_equal(parsed$guid, "ea3c1445-cb71-42df-a2f2-bdb18874ef41")
-
-  parsed <- content_url_guid(
-    "https://connect.example.com/connect/#/apps/ea3c1445-cb71-42df-a2f2-bdb18874ef41/logs"
-  )
-  expect_equal(parsed$server, "https://connect.example.com")
-  expect_equal(parsed$guid, "ea3c1445-cb71-42df-a2f2-bdb18874ef41")
-
-  parsed <- content_url_guid(
-    "https://connect.example.com/#/apps/ea3c1445-cb71-42df-a2f2-bdb18874ef41"
-  )
-  expect_equal(parsed$server, "https://connect.example.com")
-
-  expect_null(content_url_guid("https://connect.example.com/other"))
-  expect_null(content_url_guid("plain-string"))
+  cases <- connect_cases$content_url$cases
+  expect_gt(length(cases), 0)
+  for (case in cases) {
+    expect_identical(
+      content_url_guid(case[["url"]]),
+      case[["expected"]],
+      info = case[["name"]]
+    )
+  }
 })
 
 test_that("content_vanity_url extracts the server and search query", {
-  expect_equal(
-    content_vanity_url("https://connect.example.com/content/my-agent/"),
-    list(server = "https://connect.example.com", query = "my-agent")
-  )
-  expect_equal(
-    content_vanity_url("https://connect.example.com/rsc/content/my%20agent"),
-    list(server = "https://connect.example.com/rsc", query = "my agent")
-  )
-  expect_null(content_vanity_url("https://connect.example.com/other"))
+  cases <- connect_cases$vanity_url$cases
+  expect_gt(length(cases), 0)
+  for (case in cases) {
+    expect_identical(
+      content_vanity_url(case[["url"]]),
+      case[["expected"]],
+      info = case[["name"]]
+    )
+  }
+})
+
+test_that("connect_window_param pads and formats the window bounds", {
+  cases <- connect_cases$window_param$cases
+  expect_gt(length(cases), 0)
+  for (case in cases) {
+    expect_identical(
+      connect_window_param(.POSIXct(case[["at"]], tz = "UTC"), case[["pad"]]),
+      case[["expected"]],
+      info = case[["name"]]
+    )
+  }
 })
 
 test_that("deployment records are found in project subdirectories", {
-  dir <- withr::local_tempdir()
-  record_dir <- file.path(dir, "app", "rsconnect", "connect.example.com", "me")
-  dir.create(record_dir, recursive = TRUE)
-  writeLines(
-    c(
-      "name: my-agent",
-      "hostUrl: https://connect.example.com/__api__",
-      "url: https://connect.example.com/content/ea3c1445-cb71-42df-a2f2-bdb18874ef41/"
-    ),
-    file.path(record_dir, "my-agent.dcf")
-  )
-
-  deployment <- find_rsconnect_deployment(dir)
-
-  expect_equal(deployment$guid, "ea3c1445-cb71-42df-a2f2-bdb18874ef41")
+  expect_deployment_member(connect_cases$record_search)
 })
 
 test_that("read_deployment_record skips records without a GUID", {
-  file <- withr::local_tempfile(fileext = ".dcf")
-  writeLines(
-    c("name: old-style", "url: https://connect.example.com/my-agent/"),
-    file
-  )
-  expect_null(read_deployment_record(file))
+  expect_deployment_member(connect_cases$record_fields)
 })
