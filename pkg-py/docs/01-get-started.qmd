@@ -353,6 +353,11 @@ Read the files back with `commons.trajectory_read()`, as the next section descri
 import commons
 
 recent = commons.trajectory_read("traces", n=20, since="2026-07-01")
+```
+
+A read from Connect also needs the `CONNECT_API_KEY` environment variable:
+
+```python
 deployed = commons.trajectory_read(
     "https://connect.example.com/content/01234567-89ab-cdef-0123-456789abcdef/"
 )
