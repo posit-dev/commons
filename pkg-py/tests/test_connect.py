@@ -533,14 +533,17 @@ def test_malformed_jobs_read_as_no_jobs(jobs: object) -> None:
 
 
 def test_a_failed_job_request_cancels_the_queued_ones() -> None:
-    # job1 fails at once while job0 and the other running requests wait for
-    # `release`, which is set only after the read has failed.
+    # job1 fails at once while the other running requests wait for `release`,
+    # which a timer sets after the failure. The read must not return while they
+    # run, since the caller closes the client it shares with them.
     jobs = [{"key": f"job{i}"} for i in range(100)]
     release = threading.Event()
-    job0_answered = threading.Event()
+    lock = threading.Lock()
+    running = 0
     seen: list[httpx.Request] = []
 
     def route(request: httpx.Request) -> httpx.Response:
+        nonlocal running
         seen.append(request)
         path = request.url.path
         if path.endswith("/jobs"):
@@ -548,19 +551,23 @@ def test_a_failed_job_request_cancels_the_queued_ones() -> None:
         if path.endswith("/jobs/job1/traces"):
             return httpx.Response(500)
         if "/jobs/" in path:
+            with lock:
+                running += 1
             release.wait(timeout=10)
-            if path.endswith("/jobs/job0/traces"):
-                job0_answered.set()
+            with lock:
+                running -= 1
             return httpx.Response(200, headers={"X-Total-Count": "1"}, text="x\n")
         return httpx.Response(200, headers={"X-Total-Count": "0"}, text="")
 
+    timer = threading.Timer(0.2, release.set)
+    timer.start()
     try:
         with _trace_client(route) as client, pytest.raises(ConnectError):
             connect_trace_lines(client, GUID)
-        # The failure is reported without waiting for the earlier job.
-        assert not job0_answered.is_set()
+        assert running == 0
     finally:
         release.set()
+        timer.cancel()
     # Only the requests already running when job1 failed are sent.
     job_requests = [r for r in seen if "/jobs/" in r.url.path]
     assert len(job_requests) < len(jobs) // 2

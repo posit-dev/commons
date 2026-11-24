@@ -391,9 +391,9 @@ def _job_trace_lines(
                     unfinished.append((key, offset))
             pending = unfinished
     finally:
-        # A failure leaves the queued requests unsent and returns without
-        # waiting for the running ones.
-        pool.shutdown(wait=False, cancel_futures=True)
+        # A failure leaves the queued requests unsent and waits for the running
+        # ones, so none of them outlives the client the caller closes.
+        pool.shutdown(wait=True, cancel_futures=True)
     return lines
 
 
