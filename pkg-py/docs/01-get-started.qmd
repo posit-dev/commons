@@ -358,6 +358,8 @@ recent = commons.trajectory_read("traces", n=20, since="2026-07-01")
 A read from Connect also needs the `CONNECT_API_KEY` environment variable:
 
 ```python
+import commons
+
 deployed = commons.trajectory_read(
     "https://connect.example.com/content/01234567-89ab-cdef-0123-456789abcdef/"
 )
