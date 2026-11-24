@@ -62,8 +62,9 @@ def find_deployment(
     deployment = _latest_in_file([d for _, d in found if d.file == found[0][1].file])
     if len(found) > 1 and not quiet:
         warnings.warn(
-            f"Reading trajectories for the most recent deployment, "
-            f"{deployment.name!r} on {deployment.server}.",
+            f"Reading trajectories for {deployment.name!r} ({deployment.guid}) on "
+            f"{deployment.server}, from the most recently modified deployment "
+            "record.",
             stacklevel=stacklevel,
         )
     return deployment
@@ -75,8 +76,8 @@ def _latest_in_file(deployments: list[Deployment]) -> Deployment:
     distinct = list({(d.guid, d.server): d for d in deployments}.values())
     if len(distinct) == 1:
         return distinct[0]
-    server = normalize_server(os.environ.get("CONNECT_SERVER", ""))
-    chosen = [d for d in distinct if d.server == server]
+    server = _server_key(os.environ.get("CONNECT_SERVER", ""))
+    chosen = [d for d in distinct if _server_key(d.server) == server]
     if len(chosen) == 1:
         return chosen[0]
     servers = ", ".join(d.server for d in distinct)
@@ -85,6 +86,12 @@ def _latest_in_file(deployments: list[Deployment]) -> Deployment:
         f"it lists deployments to {servers}. Set CONNECT_SERVER to one of them, "
         "or pass a content URL."
     )
+
+
+def _server_key(server: str) -> tuple[str, str, str]:
+    # A URL's scheme and host are case-insensitive; its path is not.
+    parsed = urlparse(normalize_server(server))
+    return (parsed.scheme.lower(), parsed.netloc.lower(), parsed.path)
 
 
 def deployment_record_files(directory: Path, max_depth: int = 3) -> list[Path]:

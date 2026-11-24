@@ -466,8 +466,9 @@ find_rsconnect_deployment <- function(dir = getwd(), quiet = FALSE) {
     deployments <- deployments[order(mtimes, decreasing = TRUE)]
     if (!quiet) {
       cli::cli_warn(
-        "Reading trajectories for the most recent deployment,
-         {.val {deployments[[1]]$name}} on {.url {deployments[[1]]$server}}."
+        "Reading trajectories for {.val {deployments[[1]]$name}}
+         ({deployments[[1]]$guid}) on {.url {deployments[[1]]$server}}, from
+         the most recently modified deployment record."
       )
     }
   }

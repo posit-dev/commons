@@ -383,6 +383,18 @@ def test_a_python_record_for_two_servers_is_ambiguous(
     assert "https://one.example.com, https://two.example.com" in str(raised.value)
 
 
+def test_connect_server_picks_a_server_whatever_its_hosts_case(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    connect_env(monkeypatch, {"CONNECT_SERVER": "HTTPS://TWO.Example.com/"})
+    other = _write_two_server_record(tmp_path)
+
+    found = find_deployment(tmp_path, quiet=True)
+
+    assert found is not None
+    assert found.guid == other
+
+
 def test_connect_server_picks_from_a_python_record_for_two_servers(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -548,7 +560,7 @@ def test_the_deployment_warning_points_at_the_caller(
     route, _ = connect_fixture_server(_EMPTY)
     serve_connect(monkeypatch, route)
 
-    with pytest.warns(UserWarning, match="most recent deployment") as caught:
+    with pytest.warns(UserWarning, match="most recently modified") as caught:
         trajectory_read()
 
     assert [w.filename for w in caught] == [__file__]
