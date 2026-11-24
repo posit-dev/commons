@@ -1,6 +1,6 @@
 """Tests for reading trajectories from Posit Connect.
 
-The cases live in ``tests/shared/trajectories/connect.json``, and the R suite
+The cases live in ``tests/shared/trajectories/connect-source.json``, and the R suite
 runs the same cases, so a case belongs in the fixture rather than here. This
 module adds only what the fixture cannot pin.
 """
@@ -42,7 +42,7 @@ from tests._connect_fake import connect_fixture_server, serve_connect
 from tests._shared import load_shared_fixture
 from tests._trajectories import _instant, assert_trajectories, fixture_line, read_case
 
-CONNECT = load_shared_fixture("trajectories/connect")
+CONNECT = load_shared_fixture("trajectories/connect-source")
 GUID = "ea3c1445-cb71-42df-a2f2-bdb18874ef41"
 PARSE_MEMBERS = ("content_guid", "content_url", "vanity_url", "window_param")
 RECORD_MEMBERS = ("record_search", "record_fields")

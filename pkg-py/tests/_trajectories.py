@@ -1,6 +1,6 @@
 """Run the cases in ``tests/shared/trajectories/build.json`` and describe what they read.
 
-The Connect cases in ``trajectories/connect.json`` write their spans and expect
+The Connect cases in ``trajectories/connect-source.json`` write their spans and expect
 their trajectories in the same form, so they use the same helpers. The R
 suite's runner is ``trajectory_fixture_run()`` in
 ``pkg-r/tests/testthat/helper-otlp.R``.

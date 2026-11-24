@@ -473,9 +473,9 @@ test_that("window bound strings must parse completely", {
   expect_window_bound_member(build$complete_parse)
 })
 
-connect_cases <- shared_fixture(file.path("trajectories", "connect"))
+connect_cases <- shared_fixture(file.path("trajectories", "connect-source"))
 
-test_that("every member of trajectories/connect.json is run", {
+test_that("every member of trajectories/connect-source.json is run", {
   # A member that no test reads would pass silently.
   source <- paste(readLines(test_path("test-trajectories.R")), collapse = "\n")
   for (member in setdiff(names(connect_cases), "description")) {

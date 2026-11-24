@@ -209,7 +209,7 @@ record_notices <- function(expr) {
   list(value = value, notices = notices, texts = texts)
 }
 
-# The environment trajectories/connect.json starts each case with, then `env`.
+# The environment trajectories/connect-source.json starts each case with, then `env`.
 connect_fixture_env <- function(env = list()) {
   values <- c(
     POSIT_PRODUCT = NA,
