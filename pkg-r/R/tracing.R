@@ -145,7 +145,7 @@ commons_span_set_attribute <- function(span, name, value) {
   invisible(NULL)
 }
 
-# Connect can snapshot attributes when a span starts, before late mutations.
+# Both attributes are set as the span starts, where samplers can see them.
 record_provenance_span <- function(tag, decisions) {
   attributes <- list(
     "commons.citation.candidates" = jsonlite::toJSON(

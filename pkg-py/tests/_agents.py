@@ -42,6 +42,7 @@ def logging_agent_over(
     responses: Iterable[Sequence[Content]] = (),
     *,
     conversation_id: str | None = None,
+    **options: Any,
 ) -> Commons:
     """An agent with trajectory logging live.
 
@@ -50,6 +51,6 @@ def logging_agent_over(
     """
     client = scripted_chat(responses)
     client.conversation_id = conversation_id
-    agent = Commons(client, source, log=True)
+    agent = Commons(client, source, log=True, **options)
     assert agent._tracing, "trajectory logging is not live"
     return agent

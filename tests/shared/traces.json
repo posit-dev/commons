@@ -159,5 +159,38 @@
       { "name": "an authenticated user", "session_user": "alice", "recorded": "alice" },
       { "name": "a module session", "session_user": "alice", "module": true, "recorded": "alice" }
     ]
+  },
+  "provenance": {
+    "description": "The span each package records once per completed answer when trajectory logging is live, as a child of the turn span, with both attributes set when the span starts. The turn span records neither attribute. The tag attribute is absent when the answer has no provenance tag. The candidates attribute is a JSON string: each package serializes `decisions` and the parsed result must equal `expected`.",
+    "span": "commons_provenance",
+    "tag_attribute": "commons.provenance.tag",
+    "candidates_attribute": "commons.citation.candidates",
+    "tag_cases": [
+      { "name": "no tag", "tag": null, "recorded": null },
+      { "name": "a tag", "tag": "B", "recorded": "B" }
+    ],
+    "candidates_cases": [
+      { "name": "no citations", "decisions": [], "expected": [] },
+      {
+        "name": "an accepted citation names its source",
+        "decisions": [{ "quote": "Orders are one row per placed order.", "status": "accepted", "label": "orders notes", "kind": "prose" }],
+        "expected": [{ "quote": "Orders are one row per placed order.", "status": "accepted", "label": "orders notes", "kind": "prose" }]
+      },
+      {
+        "name": "a rejected citation has no source",
+        "decisions": [{ "quote": "Orders are perfect.", "status": "rejected" }],
+        "expected": [{ "quote": "Orders are perfect.", "status": "rejected" }]
+      },
+      {
+        "name": "a malformed body has no quote",
+        "decisions": [{ "quote": null, "status": "malformed" }],
+        "expected": [{ "quote": null, "status": "malformed" }]
+      },
+      {
+        "name": "decisions keep their order",
+        "decisions": [{ "quote": "b", "status": "rejected" }, { "quote": "a", "status": "rejected" }],
+        "expected": [{ "quote": "b", "status": "rejected" }, { "quote": "a", "status": "rejected" }]
+      }
+    ]
   }
 }
