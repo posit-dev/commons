@@ -60,8 +60,7 @@ def find_deployment(
         return None
     found.sort(key=lambda item: item[0], reverse=True)
     deployment = _latest_in_file([d for _, d in found if d.file == found[0][1].file])
-    several = len({(d.guid, _server_key(d.server)) for _, d in found}) > 1
-    if several and not quiet:
+    if not quiet and len({(d.guid, _server_key(d.server)) for _, d in found}) > 1:
         warnings.warn(
             f"Reading trajectories for {deployment.name!r} ({deployment.guid}) on "
             f"{deployment.server}, from the most recently modified deployment "
@@ -91,7 +90,11 @@ def _latest_in_file(deployments: list[Deployment]) -> Deployment:
 
 def _server_key(server: str) -> tuple[str, str, str]:
     # A URL's scheme and host are case-insensitive; its path is not.
-    parts = urlsplit(normalize_server(server))
+    server = normalize_server(server)
+    try:
+        parts = urlsplit(server)
+    except ValueError:
+        return ("", "", server)
     return (parts.scheme.lower(), parts.netloc.lower(), parts.path)
 
 

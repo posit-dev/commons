@@ -416,6 +416,23 @@ def test_one_deployment_written_in_two_cases_is_not_ambiguous(
     assert notices == []
 
 
+def test_an_older_record_with_a_malformed_server_is_not_compared_as_a_url(
+    tmp_path: Path,
+) -> None:
+    older = tmp_path / "old" / "rsconnect-python" / "app.json"
+    _write_python_record(older, _python_record("https://["))
+    os.utime(older, (1784000000, 1784000000))
+    newer = tmp_path / "rsconnect-python" / "app.json"
+    _write_python_record(newer, _python_record())
+    os.utime(newer, (1784700000, 1784700000))
+
+    found, notices = read_case(lambda: find_deployment(tmp_path))
+
+    assert found is not None
+    assert found.server == "https://connect.example.com"
+    assert notices == ["warning"]
+
+
 def test_connect_server_matches_a_servers_whole_path(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

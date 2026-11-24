@@ -412,7 +412,8 @@ def _trace_client(
 
 
 def _request_key(request: httpx.Request) -> tuple[str, tuple[tuple[str, str], ...]]:
-    path = re.sub(r"^/__api__/v1/content/[^/]+/", "", request.url.path)
+    prefix = f"/__api__/v1/content/{TRACES['guid']}/"
+    path = request.url.path.removeprefix(prefix)
     return path, tuple(sorted(request.url.params.multi_items()))
 
 

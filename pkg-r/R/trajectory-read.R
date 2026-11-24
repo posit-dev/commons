@@ -467,7 +467,7 @@ find_rsconnect_deployment <- function(dir = getwd(), quiet = FALSE) {
     deployments <- deployments[order(mtimes, decreasing = TRUE)]
     keys <- vapply(
       deployments,
-      function(dep) paste(dep$guid, sub("/+(__api__/*)?$", "", dep$server)),
+      function(dep) paste(dep$guid, deployment_server_key(dep$server)),
       character(1)
     )
     if (!quiet && length(unique(keys)) > 1) {
@@ -480,6 +480,16 @@ find_rsconnect_deployment <- function(dir = getwd(), quiet = FALSE) {
   }
 
   deployments[[1]]
+}
+
+# A server URL's scheme and host are case-insensitive; its path is not.
+deployment_server_key <- function(server) {
+  server <- sub("/+(__api__/*)?$", "", server)
+  parts <- regmatches(server, regexec("^([^:/]+://[^/]*)(.*)$", server))[[1]]
+  if (length(parts) == 0) {
+    return(server)
+  }
+  paste0(tolower(parts[[2]]), parts[[3]])
 }
 
 # Walk a few levels down looking for rsconnect/ directories rather than
