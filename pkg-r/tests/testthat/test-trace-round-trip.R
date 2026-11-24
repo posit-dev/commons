@@ -215,6 +215,22 @@ test_that("the trace comparison ignores SDK fields and keeps an error", {
     ),
     plain
   ))
+  for (key in read_attributes) {
+    expect_false(
+      identical(
+        normalized_span(
+          flags = 1L,
+          kind = 1L,
+          attributes = list(
+            attribute("commons.provenance.tag", "B"),
+            attribute(key, "[]")
+          )
+        ),
+        plain
+      ),
+      info = key
+    )
+  }
 })
 
 test_that("the agent still writes the committed trace", {
@@ -257,6 +273,8 @@ test_that("the privacy check finds a login name only as a path part or value", {
   expect_identical(trace_private_strings(path, user = "sam"), "/sam/")
   writeLines('{"key":"process.cwd","value":{"stringValue":"/home/sam"}}', path)
   expect_identical(trace_private_strings(path, user = "sam"), '/sam"')
+  writeLines('{"key":"m","value":{"stringValue":"[\\"/home/sam\\"]"}}', path)
+  expect_identical(trace_private_strings(path, user = "sam"), "/sam\\")
   writeLines('{"key":"process.cwd","value":{"stringValue":"C:\\\\Users\\\\sam"}}', path)
   expect_identical(trace_private_strings(path, user = "sam"), '\\sam"')
 })
