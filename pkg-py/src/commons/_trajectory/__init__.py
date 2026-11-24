@@ -46,7 +46,11 @@ def trajectory_read(
     are read when it runs on Posit Connect. Off Connect, the deployed
     content's traces are read when the project has a deployment record,
     written by rsconnect-python under `rsconnect-python/` or by the R
-    package rsconnect under `rsconnect/`. Otherwise the directory the file
+    package rsconnect under `rsconnect/`. With several records, the most
+    recently modified is read, and a warning names it. An rsconnect-python
+    record that lists deployments to several servers does not say which is
+    the latest, so `CONNECT_SERVER` picks one of them. Otherwise the
+    directory the file
     exporter writes to is read: the directory of
     `OTEL_EXPORTER_OTLP_TRACES_FILE` when it is set, and otherwise
     `COMMONS_TRACES_DIR`, or `commons-traces` under the temporary
@@ -61,8 +65,8 @@ def trajectory_read(
     record, or the one server registered with rsconnect-python. The key's
     user needs editor-level access to the content: they must own it or be
     a collaborator (see `share_with` on `Commons`). When Connect finds no
-    traces, a warning names the content's or the server's tracing setting
-    when it can tell that one is off.
+    traces and the content's or the server's tracing setting is off, a
+    warning names that setting.
 
     `since` and `until` keep the chat activity at or after `since` and
     before `until`. Each is a datetime, a date, or a string like
@@ -85,10 +89,11 @@ def trajectory_read(
     first.
 
     Raises `TypeError` when `source`, `n`, or a bound has an unsupported
-    type; `ValueError` when there is no Connect server or API key, a URL
-    is not recognised, or a bound or `n` has an invalid value;
-    `LookupError` when a vanity URL is not found; and a `RuntimeError`
-    when Connect refuses access.
+    type; `ValueError` when there is no Connect server or API key, a
+    deployment record does not settle which server to read, a URL is not
+    recognised, or a bound or `n` has an invalid value; `LookupError` when
+    a vanity URL is not found; and a `RuntimeError` when Connect refuses
+    access, has no such content, or a request to it fails.
     """
     keep = _check_n(n)
     low = window_bound(since, "since")
