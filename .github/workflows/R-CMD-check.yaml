@@ -49,10 +49,12 @@ jobs:
         with:
           r-version: ${{ matrix.config.r }}
           use-public-rspm: true
-      # pak finds no Posit Package Manager binaries for R-devel, whatever the
-      # user agent, but R-universe builds them.
-      - name: Use R-universe binaries on R-devel
-        if: matrix.config.r == 'devel'
+      # Package Manager has no R-devel binaries and can lag on new releases
+      # for other R versions, so jobs compile from source and time out.
+      # This replaces Package Manager because pak sees R-universe's Linux
+      # binaries as source packages and would still prefer Package Manager.
+      - name: Use R-universe binaries on Linux
+        if: runner.os == 'Linux'
         shell: Rscript {0}
         run: |
           codename <- system2("lsb_release", c("--short", "--codename"), stdout = TRUE)
