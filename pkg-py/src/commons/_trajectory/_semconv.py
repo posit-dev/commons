@@ -48,9 +48,9 @@ def _system_turns(text: object) -> list[Turn]:
     parts = _parse(text)
     if parts is None:
         return []
-    # System instructions take no part in linking: a tool call recorded here
-    # is never a request that a later response answers.
-    contents = _contents(parts, {})
+    # System instructions take no part in linking, so each part gets an empty
+    # registry: no response here or later is linked to a tool call here.
+    contents = [c for part in parts if (c := _part_content(part, {})) is not None]
     return [SystemTurn(contents)] if contents else []
 
 

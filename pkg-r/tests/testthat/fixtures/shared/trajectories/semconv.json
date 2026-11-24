@@ -106,6 +106,25 @@
         ]
       },
       {
+        "name": "a tool call in the system instructions is never linked",
+        "attributes": {
+          "gen_ai.system_instructions": [
+            {"type": "tool_call", "id": "c1", "name": "run_sql", "arguments": {"sql": "SELECT 1"}},
+            {"type": "tool_call_response", "id": "c1", "response": "in system"}
+          ],
+          "gen_ai.input.messages": [
+            {"role": "tool", "parts": [{"type": "tool_call_response", "id": "c1", "response": "in input"}]}
+          ]
+        },
+        "turns": [
+          {"role": "system", "contents": [
+            {"type": "tool_request", "id": "c1", "name": "run_sql", "arguments": {"sql": "SELECT 1"}},
+            {"type": "tool_result", "value": "in system", "request": null}
+          ]},
+          {"role": "user", "contents": [{"type": "tool_result", "value": "in input", "request": null}]}
+        ]
+      },
+      {
         "name": "a response without an id is unlinked",
         "attributes": {
           "gen_ai.input.messages": [
