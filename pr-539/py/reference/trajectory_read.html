@@ -558,6 +558,12 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
  <span class="menu-text">ExchangeProvenance</span></a>
   </div>
 </li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../reference/CitationDecision.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">CitationDecision</span></a>
+  </div>
+</li>
       </ul>
   </li>
         <li class="sidebar-item sidebar-item-section">
@@ -633,7 +639,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </div>
 <div class="doc-usage-source">
 <p>Usage</p>
-<p><a href="https://github.com/posit-dev/commons/blob/main/pkg-py/src/commons/_trajectory/__init__.py#L31-L69" target="_blank" rel="noopener">Source</a></p>
+<p><a href="https://github.com/posit-dev/commons/blob/main/pkg-py/src/commons/_trajectory/__init__.py#L31-L73" target="_blank" rel="noopener">Source</a></p>
 </div>
 <div class="doc-signature doc-Kind.FUNCTION">
 <div class="sourceCode" id="cb1"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="sig-name">trajectory_read</span>(
@@ -646,7 +652,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </div>
 <div class="doc-text">
 <p><code>source</code> is a directory of OTLP JSON trace files: <code>trace.jsonl</code>, <code>trace-&lt;n&gt;.jsonl</code>, and files named from the <code>OTEL_EXPORTER_OTLP_TRACES_FILE</code> template. With none, the directory the file exporter writes to is read: the directory of <code>OTEL_EXPORTER_OTLP_TRACES_FILE</code> when it is set, and otherwise <code>COMMONS_TRACES_DIR</code>, or <code>commons-traces</code> under the temporary directory. Reading from Posit Connect is not supported yet, so a content GUID or URL, or no source on Connect, raises NotImplementedError.</p>
-<p><code>since</code> and <code>until</code> keep the chat activity at or after <code>since</code> and before <code>until</code>. Each is a datetime, a date, or a string like “2026-07-22” or “2026-07-22 14:30:00”. A date, a string, or a datetime without a time zone is read in local time. A conversation that continues past <code>until</code> is returned as it was at <code>until</code>. <code>n</code> then keeps the <code>n</code> most recent conversations.</p>
+<p><code>since</code> and <code>until</code> keep the chat activity at or after <code>since</code> and before <code>until</code>. Each is a datetime, a date, or a string like “2026-07-22” or “2026-07-22 14:30:00”. A date, a string, or a datetime without a time zone is read in local time. A conversation that continues past <code>until</code> is returned as it was at <code>until</code>. A conversation that started before <code>since</code> is returned with the history its latest call in the window recorded, and its exchanges take provenance only from calls in the window, so an exchange answered only before <code>since</code> has no record. <code>n</code> then keeps the <code>n</code> most recent conversations.</p>
 <p>Conversations whose spans record no message content are dropped. The result is keyed by conversation id, with the oldest conversation first.</p>
 </div>
 

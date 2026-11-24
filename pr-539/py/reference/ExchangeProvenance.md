@@ -14,7 +14,7 @@ ExchangeProvenance(
 ```
 
 
-`tag` is the answer's provenance tag, or None when none was recorded. `decisions` are the citation decisions recorded for the answer.
+`tag` is the answer's provenance tag, or None when none was recorded. `decisions` are the [CitationDecision](CitationDecision.md#commons.CitationDecision)s recorded for the answer.
 
 
 ## Parameter Attributes

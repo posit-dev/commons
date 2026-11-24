@@ -391,7 +391,11 @@ NotImplementedError.
 before `until`. Each is a datetime, a date, or a string like
 "2026-07-22" or "2026-07-22 14:30:00". A date, a string, or a
 datetime without a time zone is read in local time. A conversation
-that continues past `until` is returned as it was at `until`. `n`
+that continues past `until` is returned as it was at `until`. A
+conversation that started before `since` is returned with the history
+its latest call in the window recorded, and its exchanges take
+provenance only from calls in the window, so an exchange answered only
+before `since` has no record. `n`
 then keeps the `n` most recent conversations.
 
 Conversations whose spans record no message content are dropped. The
@@ -413,7 +417,25 @@ ExchangeProvenance(tag: commons._provenance.Tag | None, decisions: list[commons.
 The provenance of one exchange: a user's question and the turns that answer it.
 
 `tag` is the answer's provenance tag, or None when none was recorded.
-`decisions` are the citation decisions recorded for the answer.
+`decisions` are the `CitationDecision`s recorded for the answer.
+
+CitationDecision(quote: 'str | None', status: 'CitationStatus', label: 'str | None' = None, kind: 'CitationKind | None' = None) -> None
+
+One citation in an answer, and whether its quote was verified.
+
+`status` is `"accepted"` when the quote, after normalization, is found in
+the trusted text the agent was given (its documentation, measure
+definitions, and data dictionaries), and `"rejected"` when it is not or is
+too short to check. It is `"malformed"` when the citation does not have
+exactly one block quote, so there is no quote to check. `quote` is the
+quoted text, or None for a malformed citation. `label` names the trusted
+source that matched an accepted quote, and
+`kind` says what sort of source it is: `"prose"`, `"definition"`, or
+`"schema"`. Both are None unless the status is accepted.
+
+The agent records each decision to the `commons.citation.candidates` span
+attribute, and `trajectory_read()` returns them in
+`ExchangeProvenance.decisions`.
 
 
 ## Shiny UI and server
@@ -852,9 +874,9 @@ for conversation_id, trajectory in trajectories.items():
     print(conversation_id, trajectory.last_active, len(trajectory.turns))
 ```
 
-The result is a dictionary keyed by conversation id, with the oldest conversation first. Each `Trajectory` has the conversation's `turns`, the time of its last chat activity as `last_active`, and the authenticated `user` of the session when Connect recorded one. It also has one `ExchangeProvenance` per exchange (a user's question and the turns that answer it), which gives the answer's provenance tag and its citation decisions. With no directory, `trajectory_read()` reads the directory of `OTEL_EXPORTER_OTLP_TRACES_FILE` when that variable is set.
+The result is a dictionary keyed by conversation id, with the oldest conversation first. Each `Trajectory` has the conversation's `turns`, the time of its last chat activity as `last_active`, and the authenticated `user` of the session when Connect recorded one. It also has one `ExchangeProvenance` per exchange (a user's question and the turns that answer it), which gives the answer's provenance tag and its citation decisions. With no directory, `trajectory_read()` reads the directory of `OTEL_EXPORTER_OTLP_TRACES_FILE` when that variable is set, and otherwise it usually reads nothing, so pass the directory.
 
-Use `n` to keep only the most recent conversations, and `since` and `until` to keep the chat activity in a time window. Each bound is a `datetime`, a `date`, or a string like `"2026-07-22"` or `"2026-07-22 14:30"`, and a date or a string is read in local time. A conversation that continues past `until` is returned as it was at `until`.
+Use `n` to keep only the most recent conversations, and `since` and `until` to keep the chat activity in a time window. Each bound is a `datetime`, a `date`, or a string like `"2026-07-22"` or `"2026-07-22 14:30"`, and a date or a string is read in local time. A conversation that continues past `until` is returned as it was at `until`. A conversation that started before `since` is returned with the history its latest call in the window recorded, and its exchanges take provenance only from calls in the window, so an exchange answered only before `since` has no record.
 
 ```python
 recent = commons.trajectory_read("traces", n=20, since="2026-07-01")
