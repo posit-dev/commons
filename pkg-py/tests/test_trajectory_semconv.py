@@ -112,6 +112,15 @@ def test_each_role_decodes_to_its_chatlas_turn_class() -> None:
     assert [type(turn) for turn in turns] == [SystemTurn, UserTurn, AssistantTurn]
 
 
+def test_json_nested_past_the_recursion_limit_gives_no_turns() -> None:
+    """Python's parser raises RecursionError on input this deep, where R's
+    parser fails with an ordinary error; both must read it as unparseable.
+    The input is too large for the shared fixture."""
+    depth = 100_000
+    nested = "[" * depth + "]" * depth
+    assert trajectory_turns(_span({"gen_ai.input.messages": nested})) == []
+
+
 TRACE = SHARED_DIR / "traces" / "python"
 EXPECTED = json.loads((TRACE / "expected.json").read_text(encoding="utf-8"))
 
@@ -126,7 +135,11 @@ def test_the_committed_python_trace_decodes_to_the_expected_roles(
             chats.setdefault(span.attributes["gen_ai.conversation.id"], []).append(span)
 
     assert len(chats) == len(EXPECTED["conversations"])
-    for spans, expected in zip(chats.values(), EXPECTED["conversations"], strict=True):
+    # expected.json lists conversations oldest first.
+    oldest_first = sorted(
+        chats.values(), key=lambda spans: min(s.start_time_unix_nano for s in spans)
+    )
+    for spans, expected in zip(oldest_first, EXPECTED["conversations"], strict=True):
         roles = expected["roles"]
         for span in spans:
             decoded = [turn.role for turn in trajectory_turns(span)]

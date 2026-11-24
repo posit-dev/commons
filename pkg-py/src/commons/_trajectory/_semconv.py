@@ -1,7 +1,7 @@
 """Rebuild chatlas turns from the GenAI semantic-convention message attributes.
 
 chatlas' ``as_otel_message()`` writes these attributes on a chat span;
-``pkg-r/R/trajectory-read.R`` holds the R counterpart.
+``pkg-r/R/trajectory-read.R`` is the R counterpart.
 """
 
 import json
@@ -48,7 +48,9 @@ def _system_turns(text: object) -> list[Turn]:
     parts = _parse(text)
     if parts is None:
         return []
-    contents = _contents(parts)
+    # System instructions take no part in linking: a tool call recorded here
+    # is never a request that a later response answers.
+    contents = _contents(parts, {})
     return [SystemTurn(contents)] if contents else []
 
 
@@ -61,7 +63,7 @@ def _message_turns(text: object, requests: dict[str, ContentToolRequest]) -> lis
 
 
 def _contents(
-    parts: list[Any], requests: dict[str, ContentToolRequest] | None = None
+    parts: list[Any], requests: dict[str, ContentToolRequest]
 ) -> list[Content]:
     contents = (_part_content(part, requests) for part in parts)
     return [content for content in contents if content is not None]
@@ -87,7 +89,7 @@ def _turn(message: object, requests: dict[str, ContentToolRequest]) -> Turn | No
 
 
 def _part_content(
-    part: object, requests: dict[str, ContentToolRequest] | None = None
+    part: object, requests: dict[str, ContentToolRequest]
 ) -> Content | None:
     if not isinstance(part, dict):
         return None
@@ -102,7 +104,7 @@ def _part_content(
 
 
 def _tool_request(
-    part: dict[str, Any], requests: dict[str, ContentToolRequest] | None
+    part: dict[str, Any], requests: dict[str, ContentToolRequest]
 ) -> ContentToolRequest:
     arguments = part.get("arguments")
     request = ContentToolRequest(
@@ -110,17 +112,15 @@ def _tool_request(
         name=_text(part.get("name")),
         arguments={} if arguments is None else arguments,
     )
-    if requests is not None and request.id:
+    if request.id:
         requests[request.id] = request
     return request
 
 
 def _tool_result(
-    part: dict[str, Any], requests: dict[str, ContentToolRequest] | None
+    part: dict[str, Any], requests: dict[str, ContentToolRequest]
 ) -> ContentToolResult:
-    request = None
-    if requests is not None and part.get("id") is not None:
-        request = requests.get(str(part["id"]))
+    request = None if part.get("id") is None else requests.get(str(part["id"]))
     return ContentToolResult(value=part.get("response"), request=request)
 
 
