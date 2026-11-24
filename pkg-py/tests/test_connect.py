@@ -412,7 +412,7 @@ def _trace_client(
 
 
 def _request_key(request: httpx.Request) -> tuple[str, tuple[tuple[str, str], ...]]:
-    path = re.sub(rf"^/__api__/v1/content/{GUID}/", "", request.url.path)
+    path = re.sub(r"^/__api__/v1/content/[^/]+/", "", request.url.path)
     return path, tuple(sorted(request.url.params.multi_items()))
 
 
@@ -425,10 +425,10 @@ def test_trace_lines_match_the_shared_fixture(case: dict[str, Any]) -> None:
     route, seen = connect_fixture_server(case["server"])
 
     def read() -> list[str]:
-        with _trace_client(route) as client:
+        with _trace_client(route, TRACES["server"]) as client:
             return connect_trace_lines(
                 client,
-                GUID,
+                TRACES["guid"],
                 since=_instant(case.get("since")),
                 until=_instant(case.get("until")),
                 enough=(lambda lines: True) if case.get("enough") else None,
@@ -442,8 +442,8 @@ def test_trace_lines_match_the_shared_fixture(case: dict[str, Any]) -> None:
             ConnectError, match=re.escape(TRACES["missing_error"])
         ) as raised:
             read()
-        assert GUID in str(raised.value)
-        assert "https://connect.example.com" in str(raised.value)
+        assert TRACES["guid"] in str(raised.value)
+        assert TRACES["server"] in str(raised.value)
     elif case.get("error") == "failed":
         with pytest.raises(ConnectError) as raised:
             read()
@@ -542,25 +542,29 @@ def test_a_failed_job_request_cancels_the_queued_ones(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # job1 fails at once while the other running requests wait for `release`.
-    # The pool releases them once it has cancelled the queued requests, and
-    # the read must not return while they run, since the caller closes the
-    # client it shares with them.
+    # Once the pool has cancelled the queued requests, a thread sets `release`
+    # as soon as the read returns, or after a pause when the read waits for the
+    # running requests, as it must: the caller closes the client they share.
+    # A request that finishes after the read returned has outlived it.
     jobs = [{"key": f"job{i}"} for i in range(100)]
     release = threading.Event()
-    lock = threading.Lock()
-    running = 0
+    returned = threading.Event()
+    outlived: list[str] = []
+    pools: list[ThreadPoolExecutor] = []
     seen: list[httpx.Request] = []
 
     class ReleasingPool(ThreadPoolExecutor):
         def shutdown(self, wait: bool = True, *, cancel_futures: bool = False) -> None:
+            pools.append(self)
             super().shutdown(wait=False, cancel_futures=cancel_futures)
-            release.set()
+            threading.Thread(
+                target=lambda: (returned.wait(timeout=0.5), release.set())
+            ).start()
             super().shutdown(wait=wait)
 
     monkeypatch.setattr(commons._connect, "ThreadPoolExecutor", ReleasingPool)
 
     def route(request: httpx.Request) -> httpx.Response:
-        nonlocal running
         seen.append(request)
         path = request.url.path
         if path.endswith("/jobs"):
@@ -568,20 +572,21 @@ def test_a_failed_job_request_cancels_the_queued_ones(
         if path.endswith("/jobs/job1/traces"):
             return httpx.Response(500)
         if "/jobs/" in path:
-            with lock:
-                running += 1
             release.wait(timeout=10)
-            with lock:
-                running -= 1
+            if returned.is_set():
+                outlived.append(path)
             return httpx.Response(200, headers={"X-Total-Count": "1"}, text="x\n")
         return httpx.Response(200, headers={"X-Total-Count": "0"}, text="")
 
     try:
         with _trace_client(route) as client, pytest.raises(ConnectError):
             connect_trace_lines(client, GUID)
-        assert running == 0
+        returned.set()
     finally:
         release.set()
+        for pool in pools:
+            ThreadPoolExecutor.shutdown(pool, wait=True)
+    assert outlived == []
     # Only the requests already running when job1 failed are sent.
     job_requests = [r for r in seen if "/jobs/" in r.url.path]
     assert len(job_requests) < len(jobs) // 2

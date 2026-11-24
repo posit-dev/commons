@@ -94,8 +94,8 @@ expect_trace_lines_member <- function(member, spec) {
     httr2::local_mocked_responses(connect_fixture_responses(case[["server"]], state))
     read <- function() {
       connect_trace_lines(
-        list(server = "https://connect.example.com", api_key = "key"),
-        "ea3c1445-cb71-42df-a2f2-bdb18874ef41",
+        list(server = spec[["server"]], api_key = "key"),
+        spec[["guid"]],
         from = fixture_instant(case[["since"]]),
         to = fixture_instant(case[["until"]]),
         enough = if (isTRUE(case[["enough"]])) function(lines) TRUE
@@ -108,8 +108,8 @@ expect_trace_lines_member <- function(member, spec) {
     if (identical(case[["error"]], "missing")) {
       err <- expect_error(read(), spec[["missing_error"]], fixed = TRUE, info = info)
       message <- conditionMessage(err)
-      expect_match(message, "ea3c1445-cb71-42df-a2f2-bdb18874ef41", fixed = TRUE, info = info)
-      expect_match(message, "https://connect.example.com", fixed = TRUE, info = info)
+      expect_match(message, spec[["guid"]], fixed = TRUE, info = info)
+      expect_match(message, spec[["server"]], fixed = TRUE, info = info)
       next
     }
     if (identical(case[["error"]], "failed")) {

@@ -325,7 +325,8 @@ trace_missing_abort <- function(err, client, guid, call) {
     c(
       "Can't find this content on Posit Connect.",
       i = "{.url {client$server}} has no content {.val {guid}}.",
-      i = "Check the GUID, or pass the content's URL."
+      i = "Check the GUID, or pass the content's URL
+           ({.code <server>/content/<guid>/})."
     ),
     parent = err,
     call = call
