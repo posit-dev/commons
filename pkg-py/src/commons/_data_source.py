@@ -18,6 +18,7 @@ from . import _duckdb
 from ._backends import Backend, DuckDBBackend, EngineBackend
 from ._frames import is_frame
 from ._sql_guard import check_query, is_single_select
+from ._tracing import commons_span
 
 if TYPE_CHECKING:
     from ._catalog import Manifest, Relation, SessionSnapshot
@@ -137,27 +138,44 @@ class DataSource:
     @classmethod
     def from_frames(cls, **frames: Any) -> DataSource:
         """Load named data frames into a locked-down in-process DuckDB."""
-        _check_named_frames(frames)
-        _check_labels_distinct(list(frames))
-        con = _duckdb.connect()
-        for position, (name, frame) in enumerate(frames.items()):
-            # The registered relation gets a generated name rather than one
-            # derived from the caller's, so nothing user-supplied is ever
-            # spliced into SQL unquoted.
-            staging = f"_commons_input_{position}"
-            con.register(staging, frame)
-            con.execute(
-                f"CREATE TABLE {_duckdb.quote_identifier(name)} AS SELECT * FROM {staging}"
-            )
-            con.unregister(staging)
-        _duckdb.lock_down(con)
+        return cls._from_frames(frames, None)
 
-        tables = list(frames)
-        return cls(
-            backend=DuckDBBackend(con),
-            tables=tables,
-            table_ids={name: TableId(table=name) for name in tables},
-        )
+    @classmethod
+    def _from_frames(
+        cls, frames: dict[str, Any], dictionary: DataDictionary | None
+    ) -> DataSource:
+        with commons_span(
+            "commons_data_source_create", {"commons.data_source.kind": "frames"}
+        ):
+            _check_named_frames(frames)
+            _check_labels_distinct(list(frames))
+            with commons_span(
+                "commons_data_source_load_frames",
+                {"commons.data_source.n_tables": len(frames)},
+            ):
+                con = _duckdb.connect()
+                for position, (name, frame) in enumerate(frames.items()):
+                    # The registered relation gets a generated name rather than one
+                    # derived from the caller's, so nothing user-supplied is ever
+                    # spliced into SQL unquoted.
+                    staging = f"_commons_input_{position}"
+                    con.register(staging, frame)
+                    con.execute(
+                        f"CREATE TABLE {_duckdb.quote_identifier(name)} AS SELECT * FROM {staging}"
+                    )
+                    con.unregister(staging)
+                _duckdb.lock_down(con)
+
+            tables = list(frames)
+            source = cls(
+                backend=DuckDBBackend(con),
+                tables=tables,
+                table_ids={name: TableId(table=name) for name in tables},
+            )
+            # Attached here rather than in the constructor, so this is where
+            # the dictionary's definitions can be lowered.
+            source.dictionary = dictionary
+            return _with_compiled_definitions(source)
 
     @classmethod
     def from_engine(
@@ -191,11 +209,30 @@ class DataSource:
         """
         from ._catalog._import import is_warehouse
 
-        backend = EngineBackend(engine)
-        if is_warehouse(backend):
-            return _with_compiled_definitions(
-                cls._from_warehouse(backend, tables, exclude, dictionary)
-            )
+        with commons_span(
+            "commons_data_source_create", {"commons.data_source.kind": "connection"}
+        ):
+            backend = EngineBackend(engine)
+            with commons_span("commons_data_source_list_tables") as listing:
+                if is_warehouse(backend):
+                    source = cls._from_warehouse(backend, tables, exclude, dictionary)
+                else:
+                    source = cls._from_listed_engine(
+                        backend, tables, exclude, dictionary
+                    )
+                listing.set_attribute(
+                    "commons.data_source.n_tables", len(source.tables)
+                )
+            return _with_compiled_definitions(source)
+
+    @classmethod
+    def _from_listed_engine(
+        cls,
+        backend: Backend,
+        tables: Any,
+        exclude: list[str] | None,
+        dictionary: DataDictionary | None,
+    ) -> DataSource:
         if exclude is not None:
             raise ValueError(
                 "exclude selects out of a warehouse catalog listing, and is "
@@ -204,24 +241,20 @@ class DataSource:
             )
         if tables is None:
             discovered = backend.list_tables()
-            return _with_compiled_definitions(
-                cls(
-                    backend=backend,
-                    tables=discovered,
-                    table_ids={name: TableId(table=name) for name in discovered},
-                    dictionary=dictionary,
-                )
+            return cls(
+                backend=backend,
+                tables=discovered,
+                table_ids={name: TableId(table=name) for name in discovered},
+                dictionary=dictionary,
             )
 
         registry = normalize_table_registry(tables)
         _check_tables_exist(backend, registry)
-        return _with_compiled_definitions(
-            cls(
-                backend=backend,
-                tables=list(registry),
-                table_ids=registry,
-                dictionary=dictionary,
-            )
+        return cls(
+            backend=backend,
+            tables=list(registry),
+            table_ids=registry,
+            dictionary=dictionary,
         )
 
     @classmethod
@@ -267,33 +300,42 @@ class DataSource:
         if not tables:
             raise ValueError("tables must name at least one pin.")
 
-        # One listing call validates every pin name, so a typo fails
-        # construction rather than a conversation.
-        available = set(board.pin_list())
-        missing = sorted({pin for pin in tables.values() if pin not in available})
-        if missing:
-            raise ValueError(
-                f"The board has no pins named: {', '.join(missing)}. "
-                f"Available pins: {', '.join(sorted(available))}."
-            )
+        with commons_span(
+            "commons_data_source_create", {"commons.data_source.kind": "board"}
+        ):
+            with commons_span(
+                "commons_data_source_list_pins",
+                {"commons.data_source.n_tables": len(tables)},
+            ):
+                # One listing call validates every pin name, so a typo fails
+                # construction rather than a conversation.
+                available = set(board.pin_list())
+                missing = sorted(
+                    {pin for pin in tables.values() if pin not in available}
+                )
+                if missing:
+                    raise ValueError(
+                        f"The board has no pins named: {', '.join(missing)}. "
+                        f"Available pins: {', '.join(sorted(available))}."
+                    )
 
-        # Lock down before any writes: lock_configuration() only freezes SET
-        # statements, so a deferred read still lands its table afterwards.
-        con = _duckdb.connect()
-        _duckdb.lock_down(con)
+            # Lock down before any writes: lock_configuration() only freezes SET
+            # statements, so a deferred read still lands its table afterwards.
+            con = _duckdb.connect()
+            _duckdb.lock_down(con)
 
-        labels = list(tables)
-        _check_labels_distinct(labels)
-        _check_labels_free(con, labels)
-        return _with_compiled_definitions(
-            cls(
-                backend=DuckDBBackend(con),
-                tables=labels,
-                table_ids={label: TableId(table=label) for label in labels},
-                pending=_PendingPins(board=board, pins=dict(tables)),
-                dictionary=dictionary,
+            labels = list(tables)
+            _check_labels_distinct(labels)
+            _check_labels_free(con, labels)
+            return _with_compiled_definitions(
+                cls(
+                    backend=DuckDBBackend(con),
+                    tables=labels,
+                    table_ids={label: TableId(table=label) for label in labels},
+                    pending=_PendingPins(board=board, pins=dict(tables)),
+                    dictionary=dictionary,
+                )
             )
-        )
 
     def query(self, sql: str) -> list[dict[str, Any]]:
         """Run one read-only statement, rejecting anything else first.
@@ -417,23 +459,27 @@ class DataSource:
         assert self.pending is not None
         backend = self.backend
         assert isinstance(backend, DuckDBBackend)
-        for position, label in enumerate(labels):
-            pin = self.pending.pins[label]
-            value = self.pending.board.pin_read(pin)
-            if not is_frame(value):
-                raise TypeError(
-                    f"Pin {pin!r} is a {type(value).__name__}, not a data frame, "
-                    f"so it cannot become the table {label!r}."
+        with commons_span(
+            "commons_data_source_read_board",
+            {"commons.data_source.n_tables": len(labels)},
+        ):
+            for position, label in enumerate(labels):
+                pin = self.pending.pins[label]
+                value = self.pending.board.pin_read(pin)
+                if not is_frame(value):
+                    raise TypeError(
+                        f"Pin {pin!r} is a {type(value).__name__}, not a data frame, "
+                        f"so it cannot become the table {label!r}."
+                    )
+                staging = f"_commons_pin_{position}"
+                backend.connection.register(staging, value)
+                backend.connection.execute(
+                    f"CREATE TABLE {_duckdb.quote_identifier(label)} AS "
+                    f"SELECT * FROM {staging}"
                 )
-            staging = f"_commons_pin_{position}"
-            backend.connection.register(staging, value)
-            backend.connection.execute(
-                f"CREATE TABLE {_duckdb.quote_identifier(label)} AS "
-                f"SELECT * FROM {staging}"
-            )
-            backend.connection.unregister(staging)
-            # Only after the write succeeds, so a failure is retried.
-            del self.pending.pins[label]
+                backend.connection.unregister(staging)
+                # Only after the write succeeds, so a failure is retried.
+                del self.pending.pins[label]
 
     def dialect(self) -> str:
         """A hint for the system prompt, not a contract."""
@@ -506,12 +552,7 @@ def data_source(
                 "`exclude` drops relations from a warehouse catalog listing; "
                 "with named frames there is no listing to drop them from."
             )
-        source = DataSource.from_frames(**frames)
-        source.dictionary = resolved
-
-        # The frames form attaches its dictionary here rather than in the
-        # constructor, so this is where its definitions can be lowered.
-        source = _with_compiled_definitions(source)
+        source = DataSource._from_frames(frames, resolved)
     return source
 
 

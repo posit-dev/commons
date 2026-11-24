@@ -53,5 +53,96 @@
         "after": "yes"
       }
     ]
+  },
+  "setup_spans": {
+    "description": "The spans each package records while it sets up, whether or not trajectory logging is on. Span and attribute names are visible to anyone who reads a trace store. Each scenario names a setup both suites know how to run; a span recorded by it must have exactly the listed attributes, and a span named in `absent` must not be recorded. Sources have two tables, `orders` and `customers`. The context layer has two documents and no on-disk cache; `context prewarm cache hit` records the second of two prewarms. In `agent create`, the agent has one source, the context layer, and no semantic layer or dictionary. In `agent create with measures`, it has no context layer, one measure, and one source whose dictionary declares two definitions on `orders`. Semantic members and calculations come only from warehouse semantic views, so no scenario here has any.",
+    "scenarios": [
+      {
+        "name": "frames source",
+        "spans": [
+          { "name": "commons_data_source_create", "attributes": { "commons.data_source.kind": "frames" } },
+          { "name": "commons_data_source_load_frames", "attributes": { "commons.data_source.n_tables": 2 } }
+        ]
+      },
+      {
+        "name": "connection source",
+        "spans": [
+          { "name": "commons_data_source_create", "attributes": { "commons.data_source.kind": "connection" } },
+          { "name": "commons_data_source_list_tables", "attributes": { "commons.data_source.n_tables": 2 } }
+        ]
+      },
+      {
+        "name": "board source",
+        "spans": [
+          { "name": "commons_data_source_create", "attributes": { "commons.data_source.kind": "board" } },
+          { "name": "commons_data_source_list_pins", "attributes": { "commons.data_source.n_tables": 2 } }
+        ],
+        "absent": ["commons_data_source_read_board"]
+      },
+      {
+        "name": "board read",
+        "spans": [
+          { "name": "commons_data_source_read_board", "attributes": { "commons.data_source.n_tables": 2 } }
+        ]
+      },
+      {
+        "name": "context search",
+        "spans": [
+          { "name": "commons_context_store_build", "attributes": { "commons.context.n_docs": 2, "commons.context.persistent": false } }
+        ]
+      },
+      {
+        "name": "context prewarm",
+        "spans": [
+          { "name": "commons_context_prewarm", "attributes": { "commons.context.n_docs": 2, "commons.context.cache_hit": false } },
+          { "name": "commons_context_store_build", "attributes": { "commons.context.n_docs": 2, "commons.context.persistent": false } }
+        ]
+      },
+      {
+        "name": "context prewarm cache hit",
+        "spans": [
+          { "name": "commons_context_prewarm", "attributes": { "commons.context.n_docs": 2, "commons.context.cache_hit": true } }
+        ],
+        "absent": ["commons_context_store_build"]
+      },
+      {
+        "name": "agent create",
+        "spans": [
+          {
+            "name": "commons_agent_create",
+            "attributes": {
+              "commons.agent.n_data_sources": 1,
+              "commons.agent.has_context_layer": true,
+              "commons.agent.n_measures": 0,
+              "commons.agent.n_definitions": 0,
+              "commons.agent.n_semantic_members": 0,
+              "commons.agent.n_calculations": 0
+            }
+          }
+        ]
+      },
+      {
+        "name": "agent create with measures",
+        "spans": [
+          {
+            "name": "commons_agent_create",
+            "attributes": {
+              "commons.agent.n_data_sources": 1,
+              "commons.agent.has_context_layer": false,
+              "commons.agent.n_measures": 1,
+              "commons.agent.n_definitions": 2,
+              "commons.agent.n_semantic_members": 0,
+              "commons.agent.n_calculations": 0
+            }
+          }
+        ]
+      },
+      {
+        "name": "chat server",
+        "spans": [
+          { "name": "commons_server_start", "attributes": { "commons.server.id": "chat" } }
+        ]
+      }
+    ]
   }
 }
