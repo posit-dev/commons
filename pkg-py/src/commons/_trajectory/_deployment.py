@@ -6,18 +6,16 @@ deployed entry point, and the R package rsconnect writes ``.dcf`` files under
 """
 
 import json
-import logging
 import os
 import re
 import sys
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
 from .._connect import normalize_server
-
-_logger = logging.getLogger(__name__)
 
 SKIPPED_DIRECTORIES = frozenset(
     {"rsconnect", "rsconnect-python", "renv", "packrat", "node_modules"}
@@ -37,8 +35,14 @@ class Deployment:
     file: Path
 
 
-def find_deployment(directory: Path | None = None) -> Deployment | None:
-    """The most recently modified deployment record in the project, or None."""
+def find_deployment(
+    directory: Path | None = None, *, quiet: bool = False, stacklevel: int = 2
+) -> Deployment | None:
+    """The most recently modified deployment record in the project, or None.
+
+    Warns which record is read when there are several, unless `quiet`;
+    `stacklevel` is as `warnings.warn` takes it, counted from this function.
+    """
     directory = Path.cwd() if directory is None else directory
     found: list[tuple[float, Deployment]] = []
     for file in deployment_record_files(directory):
@@ -54,11 +58,11 @@ def find_deployment(directory: Path | None = None) -> Deployment | None:
         return None
     found.sort(key=lambda item: item[0], reverse=True)
     deployment = found[0][1]
-    if len(found) > 1:
-        _logger.info(
-            "Reading trajectories for the most recent deployment, %r on %s.",
-            deployment.name,
-            deployment.server,
+    if len(found) > 1 and not quiet:
+        warnings.warn(
+            f"Reading trajectories for the most recent deployment, "
+            f"{deployment.name!r} on {deployment.server}.",
+            stacklevel=stacklevel,
         )
     return deployment
 

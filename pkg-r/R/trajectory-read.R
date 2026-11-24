@@ -320,7 +320,8 @@ trajectory_guid_server <- function(call = rlang::caller_env()) {
     return(server)
   }
 
-  deployment <- find_rsconnect_deployment()
+  # The GUID names the content, so which record is read needs no warning.
+  deployment <- find_rsconnect_deployment(quiet = TRUE)
   if (!is.null(deployment)) {
     return(deployment$server)
   }
@@ -438,8 +439,9 @@ content_vanity_url <- function(x) {
 }
 
 # Find the project's Connect deployment record (written by rsconnect under
-# rsconnect/). The record's `url` field carries the content GUID.
-find_rsconnect_deployment <- function(dir = getwd()) {
+# rsconnect/). The record's `url` field has the content GUID. With several
+# records, warns which one is read unless `quiet`.
+find_rsconnect_deployment <- function(dir = getwd(), quiet = FALSE) {
   files <- rsconnect_record_files(dir)
   if (length(files) == 0) {
     return(NULL)
@@ -457,10 +459,12 @@ find_rsconnect_deployment <- function(dir = getwd()) {
       numeric(1)
     )
     deployments <- deployments[order(mtimes, decreasing = TRUE)]
-    cli::cli_inform(
-      "Reading trajectories for the most recent deployment,
-       {.val {deployments[[1]]$name}} on {.url {deployments[[1]]$server}}."
-    )
+    if (!quiet) {
+      cli::cli_warn(
+        "Reading trajectories for the most recent deployment,
+         {.val {deployments[[1]]$name}} on {.url {deployments[[1]]$server}}."
+      )
+    }
   }
 
   deployments[[1]]

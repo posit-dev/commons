@@ -98,7 +98,8 @@ def resolve_trajectory_source(
 def _default_source() -> LocalSource | ConnectSource:
     if is_connect_runtime():
         return ConnectSource(ConnectClient.from_env(), connect_content_guid())
-    deployment = find_deployment()
+    # Point a warning at the caller of trajectory_read().
+    deployment = find_deployment(stacklevel=5)
     if deployment is not None:
         client = ConnectClient.from_env(server=deployment.server)
         return ConnectSource(client, deployment.guid)
@@ -134,7 +135,8 @@ def guid_server() -> str:
     server = os.environ.get("CONNECT_SERVER", "")
     if server:
         return server
-    deployment = find_deployment()
+    # The GUID names the content, so which record is read needs no warning.
+    deployment = find_deployment(quiet=True)
     if deployment is not None:
         return deployment.server
     servers = registered_connect_servers()

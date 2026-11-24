@@ -6,7 +6,6 @@ module adds only what the fixture cannot pin.
 """
 
 import json
-import logging
 import os
 import sys
 import warnings
@@ -171,21 +170,17 @@ def test_a_bound_padded_out_of_range_is_not_sent() -> None:
 
 @pytest.mark.parametrize(("member", "case"), cases(RECORD_MEMBERS))
 def test_deployment_records_match_the_shared_fixture(
-    member: dict[str, Any],
-    case: dict[str, Any],
-    tmp_path: Path,
-    caplog: pytest.LogCaptureFixture,
+    member: dict[str, Any], case: dict[str, Any], tmp_path: Path
 ) -> None:
     write_fixture_files(tmp_path, case)
-    with caplog.at_level(logging.INFO, logger="commons._trajectory"):
-        found = find_deployment(tmp_path)
+    found, notices = read_case(lambda: find_deployment(tmp_path))
     expected = case["expected"]
     assert (
         None
         if found is None
         else {"guid": found.guid, "server": normalize_server(found.server)}
     ) == expected
-    assert ["message"] * len(caplog.records) == case.get("notice", [])
+    assert notices == case.get("notice", [])
 
 
 def _python_record(
@@ -330,7 +325,7 @@ def test_a_python_record_beside_its_entry_point_only(tmp_path: Path) -> None:
 
 
 def test_records_of_both_tools_are_ordered_by_modification_time(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
+    tmp_path: Path,
 ) -> None:
     other = "01234567-89ab-cdef-0123-456789abcdef"
     dcf = "rsconnect/connect.example.com/me/r-agent.dcf"
@@ -351,22 +346,18 @@ def test_records_of_both_tools_are_ordered_by_modification_time(
 
     os.utime(tmp_path / dcf, (1784000000, 1784000000))
     os.utime(python, (1784700000, 1784700000))
-    with caplog.at_level(logging.INFO, logger="commons._trajectory"):
-        found = find_deployment(tmp_path)
+    found = find_deployment(tmp_path, quiet=True)
     assert found is not None
     assert found.guid == GUID
-    assert len(caplog.records) == 1
 
     os.utime(tmp_path / dcf, (1784700000, 1784700000))
     os.utime(python, (1784000000, 1784000000))
-    found = find_deployment(tmp_path)
+    found = find_deployment(tmp_path, quiet=True)
     assert found is not None
     assert found.guid == other
 
 
-def test_a_python_record_for_two_servers_reports_one(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_a_python_record_for_two_servers_reports_one(tmp_path: Path) -> None:
     other = "01234567-89ab-cdef-0123-456789abcdef"
     _write_python_record(
         tmp_path / "rsconnect-python" / "app.json",
@@ -374,12 +365,11 @@ def test_a_python_record_for_two_servers_reports_one(
         _python_record("https://two.example.com", guid=other),
     )
 
-    with caplog.at_level(logging.INFO, logger="commons._trajectory"):
-        found = find_deployment(tmp_path)
+    found, notices = read_case(lambda: find_deployment(tmp_path))
 
     assert found is not None
     assert (found.guid, found.server) == (GUID, "https://one.example.com")
-    assert len(caplog.records) == 1
+    assert notices == ["warning"]
 
 
 def _store_dir() -> Path:
@@ -458,7 +448,8 @@ def test_sources_resolve_as_the_shared_fixture_pins(
         with pytest.raises((ValueError, LookupError)):
             resolve_trajectory_source(case["source"])
         return
-    resolved = resolve_trajectory_source(case["source"])
+    resolved, notices = read_case(lambda: resolve_trajectory_source(case["source"]))
+    assert notices == case.get("notice", [])
     if expected["kind"] == "local":
         assert isinstance(resolved, LocalSource)
     else:
@@ -468,6 +459,24 @@ def test_sources_resolve_as_the_shared_fixture_pins(
             expected["server"],
         )
         resolved.client.close()
+
+
+def test_the_deployment_warning_points_at_the_caller(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (case,) = [
+        c for c in CONNECT["null_deployment"]["cases"] if c.get("notice") == ["warning"]
+    ]
+    write_fixture_files(tmp_path, case)
+    monkeypatch.chdir(tmp_path)
+    connect_env(monkeypatch, {})
+    route, _ = connect_fixture_server(_EMPTY)
+    serve_connect(monkeypatch, route)
+
+    with pytest.warns(UserWarning, match="most recent deployment") as caught:
+        trajectory_read()
+
+    assert [w.filename for w in caught] == [__file__]
 
 
 def test_several_registered_servers_are_named_when_none_is_chosen(

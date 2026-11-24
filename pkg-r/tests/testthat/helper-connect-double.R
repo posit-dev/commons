@@ -145,14 +145,9 @@ expect_deployment_member <- function(member) {
     info <- case[["name"]]
     dir <- withr::local_tempdir()
     write_fixture_files(dir, case)
-    notices <- character()
-    found <- withCallingHandlers(
-      find_rsconnect_deployment(dir),
-      message = function(cnd) {
-        notices <<- c(notices, "message")
-        invokeRestart("muffleMessage")
-      }
-    )
+    found <- record_notices(find_rsconnect_deployment(dir))
+    notices <- found$notices
+    found <- found$value
     actual <- if (is.null(found)) {
       NULL
     } else {
@@ -161,6 +156,24 @@ expect_deployment_member <- function(member) {
     expect_identical(actual, case[["expected"]], info = info)
     expect_identical(notices, unlist(case[["notice"]]) %||% character(), info = info)
   }
+}
+
+# `expr`'s value, and its warnings and messages in order, as `notice` names
+# them.
+record_notices <- function(expr) {
+  notices <- character()
+  value <- withCallingHandlers(
+    expr,
+    warning = function(cnd) {
+      notices <<- c(notices, "warning")
+      invokeRestart("muffleWarning")
+    },
+    message = function(cnd) {
+      notices <<- c(notices, "message")
+      invokeRestart("muffleMessage")
+    }
+  )
+  list(value = value, notices = notices)
 }
 
 # The environment trajectories/connect.json starts each case with, then `env`.
@@ -200,7 +213,13 @@ expect_source_member <- function(member) {
         expect_error(resolve_trajectory_source(case[["source"]]), info = info)
         return()
       }
-      resolved <- suppressMessages(resolve_trajectory_source(case[["source"]]))
+      resolved <- record_notices(resolve_trajectory_source(case[["source"]]))
+      expect_identical(
+        resolved$notices,
+        unlist(case[["notice"]]) %||% character(),
+        info = info
+      )
+      resolved <- resolved$value
       expect_identical(resolved$kind, expected[["kind"]], info = info)
       if (identical(expected[["kind"]], "connect")) {
         expect_identical(resolved$guid, expected[["guid"]], info = info)
