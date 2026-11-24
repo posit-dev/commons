@@ -31,7 +31,7 @@ reference:
       contents: [DataSource, SemanticLayer, ContextLayer, Measure, Injected, Tag, list_tables]
     - title: Reading logged conversations
       desc: Read back the conversations an agent logged with `log=True`.
-      contents: [trajectory_read, Trajectory, ExchangeProvenance, CitationDecision]
+      contents: [trajectory_read, Trajectory, Exchange, CitationDecision]
     - title: Shiny UI and server
       desc: "Put a commons agent inside of an interactive chat app. Needs the `shiny` extra."
       contents: [ui.app, ui.server, ui.theme, ui.commons_chat_dependency, ui.asset_base_url]

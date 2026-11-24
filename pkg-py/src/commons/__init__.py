@@ -14,14 +14,14 @@ from ._context_layer import ContextLayer, context_layer
 from ._data_source import DataSource, data_source, list_tables
 from ._measures import Injected, Measure, SemanticLayer, measure, semantic_layer
 from ._provenance import Tag
-from ._trajectory import ExchangeProvenance, Trajectory, trajectory_read
+from ._trajectory import Exchange, Trajectory, trajectory_read
 
 __all__: list[str] = [
     "CitationDecision",
     "Commons",
     "ContextLayer",
     "DataSource",
-    "ExchangeProvenance",
+    "Exchange",
     "Injected",
     "Measure",
     "SemanticLayer",

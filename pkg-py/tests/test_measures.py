@@ -1109,7 +1109,7 @@ def test_public_api_exposes_the_semantic_layer() -> None:
         "Commons",
         "ContextLayer",
         "DataSource",
-        "ExchangeProvenance",
+        "Exchange",
         "Injected",
         "Measure",
         "SemanticLayer",

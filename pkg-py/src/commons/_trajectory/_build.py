@@ -38,13 +38,16 @@ _SpanKey = tuple[str, str]
 
 
 @dataclass(frozen=True)
-class ExchangeProvenance:
-    """The provenance of one exchange: a user's question and the turns that answer it.
+class Exchange:
+    """One exchange of a conversation: a user's question and the turns that answer it.
 
+    `turns` starts with the user's turn and runs to the turn before the next
+    question. They are the same `Turn` objects as in `Trajectory.turns`.
     `tag` is the answer's provenance tag, or None when none was recorded.
     `decisions` are the `CitationDecision`s recorded for the answer.
     """
 
+    turns: list[Turn]
     tag: Tag | None
     decisions: list[CitationDecision]
 
@@ -56,14 +59,24 @@ class Trajectory:
     `turns` are its chatlas turns as of its latest chat activity, and
     `last_active` is the time of that activity, in UTC. `user` is the
     authenticated user of the session, from the conversation's earliest
-    recorded chat, or None when none was recorded. `provenance` has one
-    record per exchange, in order.
+    recorded chat, or None when none was recorded. `exchanges` splits
+    `turns` at each question the user asked, with the provenance recorded
+    for each answer. Turns before the first question, such as the system
+    prompt, are in no exchange.
     """
 
     turns: list[Turn]
     last_active: datetime
     user: str | None
-    provenance: list[ExchangeProvenance]
+    exchanges: list[Exchange]
+
+
+@dataclass(frozen=True)
+class _Record:
+    """The provenance recorded for an exchange's answer."""
+
+    tag: Tag | None
+    decisions: list[CitationDecision]
 
 
 @dataclass(frozen=True)
@@ -80,7 +93,7 @@ class _Candidate:
     """A recorded call's exchange signatures and the record it claims for the last."""
 
     signature: list[list[dict[str, Any]]]
-    record: ExchangeProvenance
+    record: _Record
     recorded: str  # the record as written, which claims compare by
 
 
@@ -100,13 +113,16 @@ def build_trajectories(spans: Sequence[Span]) -> dict[str, Trajectory]:
     trajectories: dict[str, Trajectory] = {}
     for id_, span in latest.items():
         turns = _chat_span_turns(span, cache)
+        exchanges = split_exchanges(turns)
+        records = _associate_provenance(exchanges, candidates.get(id_, []), id_)
         trajectories[id_] = Trajectory(
             turns=list(turns),
             last_active=_instant(span_time(span)),
             user=_conversation_user(by_conversation[id_], index),
-            provenance=_associate_provenance(
-                split_exchanges(turns), candidates.get(id_, []), id_
-            ),
+            exchanges=[
+                Exchange(turns=exchange, tag=record.tag, decisions=record.decisions)
+                for exchange, record in zip(exchanges, records, strict=True)
+            ],
         )
     return trajectories
 
@@ -316,16 +332,14 @@ def _recorded_calls(
     return calls
 
 
-def _span_record(span: Span) -> ExchangeProvenance:
+def _span_record(span: Span) -> _Record:
     """The provenance a span records; what does not decode reads as absent."""
     tag = span.attributes.get(TAG_ATTRIBUTE)
     try:
         tag = None if tag is None else Tag(str(tag))
     except ValueError:
         tag = None
-    return ExchangeProvenance(
-        tag, _decisions(span.attributes.get(CANDIDATES_ATTRIBUTE))
-    )
+    return _Record(tag, _decisions(span.attributes.get(CANDIDATES_ATTRIBUTE)))
 
 
 def _recorded_text(span: Span) -> str:
@@ -438,7 +452,7 @@ def _associate_provenance(
     exchanges: Sequence[Sequence[Turn]],
     candidates: Sequence[_Candidate],
     conversation_id: str,
-) -> list[ExchangeProvenance]:
+) -> list[_Record]:
     """One record per exchange, from the calls whose history leads to it.
 
     Records attach by matching recorded history rather than by position, so
@@ -456,7 +470,7 @@ def _associate_provenance(
         ):
             claims[length - 1].append(candidate)
 
-    records: list[ExchangeProvenance] = []
+    records: list[_Record] = []
     conflict = False
     for claim in claims:
         # Claims compare as recorded, so a decision dropped on reading still
@@ -467,7 +481,7 @@ def _associate_provenance(
             records.append(next(iter(distinct.values())))
         else:
             conflict = conflict or len(distinct) > 1
-            records.append(ExchangeProvenance(None, []))
+            records.append(_Record(None, []))
     if conflict:
         warnings.warn(
             f"Ignoring conflicting audit records in conversation '{conversation_id}'.",

@@ -15,7 +15,7 @@ from chatlas import Turn
 from commons._citations import CitationDecision
 from commons._provenance import Tag
 from commons._trajectory._build import (
-    ExchangeProvenance,
+    Exchange,
     Trajectory,
     build_trajectories,
 )
@@ -52,7 +52,7 @@ def test_a_trajectory_has_the_public_types() -> None:
     assert trajectory.last_active == datetime(1970, 1, 1, 0, 1, 41, tzinfo=UTC)
     assert trajectory.last_active.tzinfo is UTC
     assert all(isinstance(turn, Turn) for turn in trajectory.turns)
-    assert all(isinstance(r, ExchangeProvenance) for r in trajectory.provenance)
+    assert all(isinstance(e, Exchange) for e in trajectory.exchanges)
 
 
 def _recorded(attributes: dict[str, Any]) -> Trajectory:
@@ -91,8 +91,8 @@ def test_a_record_reads_as_a_tag_and_citation_decisions() -> None:
     trajectory = _recorded(
         {"commons.provenance.tag": "B", "commons.citation.candidates": [accepted]}
     )
-    assert trajectory.provenance[0].tag is Tag.B
-    assert trajectory.provenance[0].decisions == [
+    assert trajectory.exchanges[0].tag is Tag.B
+    assert trajectory.exchanges[0].decisions == [
         CitationDecision(
             quote="Canopy cover is measured in June.",
             status="accepted",
@@ -112,11 +112,37 @@ def test_a_decision_that_does_not_validate_is_dropped() -> None:
         {"quote": "Kept.", "status": "rejected"},
     ]
     trajectory = _recorded({"commons.citation.candidates": candidates})
-    assert trajectory.provenance[0].decisions == [
+    assert trajectory.exchanges[0].decisions == [
         CitationDecision(quote="Kept.", status="rejected")
     ]
 
 
 def test_an_unknown_tag_reads_as_none() -> None:
     trajectory = _recorded({"commons.provenance.tag": "Z"})
-    assert trajectory.provenance[0].tag is None
+    assert trajectory.exchanges[0].tag is None
+
+
+def test_exchanges_split_the_turns_at_each_question() -> None:
+    """Each answer's record sits beside the turns it answers, and the system
+    prompt, which answers nothing, is in no exchange."""
+
+    def text(role: str, content: str) -> dict[str, Any]:
+        return {"role": role, "parts": [{"type": "text", "content": content}]}
+
+    spans = [
+        {
+            "trace": "t1",
+            "span": "chat",
+            "chat": True,
+            "conversation": "conv-a",
+            "system": [{"type": "text", "content": "Be brief."}],
+            "input": [text("user", "Q1"), text("assistant", "A1"), text("user", "Q2")],
+            "output": [text("assistant", "A2")],
+        }
+    ]
+    trajectory = build_trajectories(parse_otlp_lines([fixture_line(spans)]))["conv-a"]
+    assert [[t.text for t in e.turns] for e in trajectory.exchanges] == [
+        ["Q1", "A1"],
+        ["Q2", "A2"],
+    ]
+    assert trajectory.exchanges[1].turns[-1] is trajectory.turns[-1]

@@ -8,7 +8,7 @@ import os
 from datetime import date, datetime, time
 
 from ._build import (
-    ExchangeProvenance,
+    Exchange,
     Trajectory,
     build_trajectories,
     drop_contentless,
@@ -16,7 +16,7 @@ from ._build import (
 )
 from ._source import read_source_spans, resolve_trajectory_source
 
-__all__ = ["ExchangeProvenance", "Trajectory", "trajectory_read"]
+__all__ = ["Exchange", "Trajectory", "trajectory_read"]
 
 _N_MESSAGE = "n must be a whole number of at least 1, or None."
 _BOUND_FORMATS = (

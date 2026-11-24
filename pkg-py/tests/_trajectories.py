@@ -18,7 +18,7 @@ from chatlas.types import ContentText, ContentToolRequest, ContentToolResult
 
 from commons._trajectory import trajectory_read
 from commons._trajectory._build import (
-    ExchangeProvenance,
+    Exchange,
     Trajectory,
     build_trajectories,
 )
@@ -127,14 +127,22 @@ def described_turns(turns: Sequence[Turn]) -> list[dict[str, Any]]:
     ]
 
 
-def described_provenance(records: Sequence[ExchangeProvenance]) -> list[dict[str, Any]]:
+def described_provenance(exchanges: Sequence[Exchange]) -> list[dict[str, Any]]:
     return [
         {
-            "tag": None if r.tag is None else str(r.tag),
-            "decisions": [d.as_record() for d in r.decisions],
+            "tag": None if e.tag is None else str(e.tag),
+            "decisions": [d.as_record() for d in e.decisions],
         }
-        for r in records
+        for e in exchanges
     ]
+
+
+def _assert_exchanges_tile_turns(t: Trajectory) -> None:
+    """The exchanges are the trajectory's own turns, from the first question on."""
+    tiled = [turn for exchange in t.exchanges for turn in exchange.turns]
+    tail = t.turns[len(t.turns) - len(tiled) :]
+    assert all(a is b for a, b in zip(tiled, tail, strict=True))
+    assert all(e.turns and e.turns[0].role == "user" for e in t.exchanges)
 
 
 class _Notices(logging.Handler):
@@ -188,10 +196,11 @@ def assert_trajectories(
     assert list(result) == [e["id"] for e in expected]
     for e in expected:
         t = result[e["id"]]
+        _assert_exchanges_tile_turns(t)
         if "turns" in e:
             assert described_turns(t.turns) == e["turns"], e["id"]
         if "provenance" in e:
-            assert described_provenance(t.provenance) == e["provenance"], e["id"]
+            assert described_provenance(t.exchanges) == e["provenance"], e["id"]
         if "user" in e:
             assert t.user == e["user"], e["id"]
         if "last_active" in e:

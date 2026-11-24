@@ -219,9 +219,9 @@ def test_the_committed_python_trace_reads_as_expected() -> None:
             linked = [r for r in results if r.request is request]
             assert len(linked) == (1 if want["tool"]["linked"] else 0)
         assert [
-            None if r.tag is None else str(r.tag) for r in trajectory.provenance
+            None if r.tag is None else str(r.tag) for r in trajectory.exchanges
         ] == [e["provenance_tag"] for e in want["exchanges"]]
-        assert [[d.status for d in r.decisions] for r in trajectory.provenance] == [
+        assert [[d.status for d in r.decisions] for r in trajectory.exchanges] == [
             e["decision_statuses"] for e in want["exchanges"]
         ]
         assert trajectory.user is None

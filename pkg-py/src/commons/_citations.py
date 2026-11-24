@@ -116,7 +116,7 @@ class CitationDecision:
 
     The agent records each decision to the `commons.citation.candidates` span
     attribute, and `trajectory_read()` returns them in
-    `ExchangeProvenance.decisions`.
+    `Exchange.decisions`.
     """
 
     quote: str | None
