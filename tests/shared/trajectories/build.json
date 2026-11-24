@@ -708,7 +708,7 @@
     ]
   },
   "window": {
-    "description": "`since` keeps the chat spans that start at or after it, and `until` the chat spans that start before it. Other spans are kept whatever their time, so a turn span outside the window still gives its record. A conversation left with no chat span is not returned.",
+    "description": "`since` keeps the chat spans that start at or after it, and `until` the chat spans that start before it. Other spans are kept whatever their time, so a turn span outside the window still gives its record. A call whose chat span starts before `since` is left out, so an exchange it answered keeps its turns, from a later call's history, but has no record. A conversation left with no chat span is not returned.",
     "spans": [
       {"trace": "t100", "span": "s1", "chat": true, "input": [{"role": "user", "parts": [{"type": "text", "content": "Hi."}]}], "start": "100000000000", "end": "101000000000"},
       {"trace": "t200", "span": "s2", "chat": true, "input": [{"role": "user", "parts": [{"type": "text", "content": "Hi."}]}], "start": "200000000000", "end": "201000000000"},
@@ -753,6 +753,30 @@
             "output": [{"role": "assistant", "parts": [{"type": "text", "content": "A1"}]}], "start": "150000000000", "end": "151000000000"}
         ],
         "trajectories": [{"id": "conv-a", "provenance": [{"tag": "A", "decisions": []}]}]
+      },
+      {
+        "name": "an exchange answered before since keeps its turns but has no record",
+        "since": 100,
+        "spans": [
+          {"trace": "t1", "span": "turn", "name": "commons_conversation_turn", "attributes": {"commons.provenance.tag": "A"}},
+          {"trace": "t1", "span": "chat", "parent": "turn", "chat": true, "conversation": "conv-a",
+            "input": [{"role": "user", "parts": [{"type": "text", "content": "Q1"}]}],
+            "output": [{"role": "assistant", "parts": [{"type": "text", "content": "A1"}]}], "start": "50000000000", "end": "51000000000"},
+          {"trace": "t2", "span": "turn", "name": "commons_conversation_turn", "attributes": {"commons.provenance.tag": "B"}},
+          {"trace": "t2", "span": "chat", "parent": "turn", "chat": true, "conversation": "conv-a",
+            "input": [
+              {"role": "user", "parts": [{"type": "text", "content": "Q1"}]},
+              {"role": "assistant", "parts": [{"type": "text", "content": "A1"}]},
+              {"role": "user", "parts": [{"type": "text", "content": "Q2"}]}
+            ],
+            "output": [{"role": "assistant", "parts": [{"type": "text", "content": "A2"}]}], "start": "150000000000", "end": "151000000000"}
+        ],
+        "trajectories": [{"id": "conv-a", "turns": [
+          {"role": "user", "contents": [{"type": "text", "text": "Q1"}]},
+          {"role": "assistant", "contents": [{"type": "text", "text": "A1"}]},
+          {"role": "user", "contents": [{"type": "text", "text": "Q2"}]},
+          {"role": "assistant", "contents": [{"type": "text", "text": "A2"}]}
+        ], "provenance": [{"tag": null, "decisions": []}, {"tag": "B", "decisions": []}]}]
       }
     ]
   },
