@@ -42,31 +42,31 @@ def trajectory_read(
 ) -> dict[str, Trajectory]:
     """Read the conversations an agent logged with `log=True`.
 
-    `source` is where to read from. With none, this content's own traces
-    are read when it runs on Posit Connect. Off Connect, the deployed
-    content's traces are read when the project has a deployment record,
-    written by rsconnect-python under `rsconnect-python/` or by the R
-    package rsconnect under `rsconnect/`. With several records, the most
-    recently modified is read, and a warning names it. An rsconnect-python
-    record that lists deployments to several servers does not say which is
-    the latest, so `CONNECT_SERVER` picks one of them. Otherwise the
-    directory the file
+    `source` is where to read from. With none, this content's own traces are
+    read when it runs on Posit Connect. Off Connect, the deployed content's
+    traces are read when the project has a deployment record, written by
+    rsconnect-python under `rsconnect-python/` or by the R package rsconnect
+    under `rsconnect/`. With several records, the most recently modified is
+    read, and a warning names it. An rsconnect-python record that lists
+    deployments to several servers does not say which is the latest, so
+    `CONNECT_SERVER` picks one of them. Otherwise the directory the file
     exporter writes to is read: the directory of
     `OTEL_EXPORTER_OTLP_TRACES_FILE` when it is set, and otherwise
-    `COMMONS_TRACES_DIR`, or `commons-traces` under the temporary
-    directory. `source` can also be a Connect content GUID, a content URL
-    (`.../content/<guid>/`), a vanity URL (`.../content/<name>/`), a
+    `COMMONS_TRACES_DIR`, or `commons-traces` under the temporary directory.
+    `source` can also be a Connect content GUID, a content URL
+    (`.../content/<guid>/`), a vanity URL written as
+    `<server>/content/<name>/` for content at `<server>/<name>/`, a
     dashboard URL (`.../connect/#/apps/<guid>/`), or a directory of OTLP
-    JSON trace files: `trace.jsonl`, `trace-<n>.jsonl`, and files named
-    from the `OTEL_EXPORTER_OTLP_TRACES_FILE` template.
+    JSON trace files: `trace.jsonl`, `trace-<n>.jsonl`, and files named from
+    the `OTEL_EXPORTER_OTLP_TRACES_FILE` template.
 
     Reading from Connect (2026.09.0 or later) needs `CONNECT_API_KEY`, and
     `CONNECT_SERVER` when the server is not in the URL, the deployment
     record, or the one server registered with rsconnect-python. The key's
-    user needs editor-level access to the content: they must own it or be
-    a collaborator (see `share_with` on `Commons`). When Connect finds no
-    traces and the content's or the server's tracing setting is off, a
-    warning names that setting.
+    user needs editor-level access to the content: they must own it or be a
+    collaborator (see `share_with` on `Commons`). When Connect finds no
+    traces and reports that the content's or the server's tracing setting is
+    off, a warning names that setting.
 
     `since` and `until` keep the chat activity at or after `since` and
     before `until`. Each is a datetime, a date, or a string like

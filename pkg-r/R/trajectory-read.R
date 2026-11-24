@@ -16,8 +16,8 @@
 #'     rsconnect, the deployed content's traces; otherwise, the local trace
 #'     directory that [agent()] writes to.
 #'   * A Connect content GUID, a content URL (`.../content/<guid>/`), a
-#'     vanity URL (`.../content/<name>/`), or a dashboard URL
-#'     (`.../connect/#/apps/<guid>/`).
+#'     vanity URL written as `<server>/content/<name>/` for content at
+#'     `<server>/<name>/`, or a dashboard URL (`.../connect/#/apps/<guid>/`).
 #'   * A directory of OTLP NDJSON trace files (`trace-*.jsonl`).
 #' @param ... These dots are for future extensions and must be empty.
 #' @param n Keep only the `n` most recent conversations, after `from`/`to`

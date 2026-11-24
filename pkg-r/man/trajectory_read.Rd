@@ -14,8 +14,8 @@ content's own traces; in a project that has been deployed with
 rsconnect, the deployed content's traces; otherwise, the local trace
 directory that \code{\link[=agent]{agent()}} writes to.
 \item A Connect content GUID, a content URL (\verb{.../content/<guid>/}), a
-vanity URL (\verb{.../content/<name>/}), or a dashboard URL
-(\verb{.../connect/#/apps/<guid>/}).
+vanity URL written as \verb{<server>/content/<name>/} for content at
+\verb{<server>/<name>/}, or a dashboard URL (\verb{.../connect/#/apps/<guid>/}).
 \item A directory of OTLP NDJSON trace files (\verb{trace-*.jsonl}).
 }}
 
