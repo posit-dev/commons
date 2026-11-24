@@ -162,3 +162,52 @@ expect_otlp_span <- function(span, expected, info = NULL) {
     )
   }
 }
+
+semconv_fixture_span <- function(attributes) {
+  encoded <- lapply(names(attributes), function(key) {
+    otlp_test_attr(key, otlp_fixture_line(attributes[[key]]))
+  })
+  parse_otlp_lines(otlp_test_line(list(
+    otlp_test_span("t1", "s1", attributes = encoded)
+  )))[[1]]
+}
+
+expect_semconv_turns <- function(turns, expected, info = NULL) {
+  expect_equal(length(turns), length(expected), info = info)
+  for (i in seq_along(expected)) {
+    turn <- turns[[i]]
+    e <- expected[[i]]
+    expect_identical(turn@role, e$role, info = info)
+    expect_equal(length(turn@contents), length(e$contents), info = info)
+    for (j in seq_along(e$contents)) {
+      content <- turn@contents[[j]]
+      d <- e$contents[[j]]
+      if (d$type == "text") {
+        expect_true(S7::S7_inherits(content, ellmer::ContentText), info = info)
+        expect_identical(content@text, d$text, info = info)
+      } else if (d$type == "tool_request") {
+        expect_true(
+          S7::S7_inherits(content, ellmer::ContentToolRequest),
+          info = info
+        )
+        expect_identical(content@id, d$id, info = info)
+        expect_identical(content@name, d$name, info = info)
+        expect_equal(content@arguments, d$arguments, info = info)
+      } else if (d$type == "tool_result") {
+        expect_true(
+          S7::S7_inherits(content, ellmer::ContentToolResult),
+          info = info
+        )
+        expect_equal(content@value, d$value, info = info)
+        if (is.null(d$request)) {
+          expect_null(content@request, info = info)
+        } else {
+          expect_identical(content@request@id, d$request$id, info = info)
+          expect_identical(content@request@name, d$request$name, info = info)
+        }
+      } else {
+        fail(paste0("unknown descriptor type ", d$type), info = info)
+      }
+    }
+  }
+}
