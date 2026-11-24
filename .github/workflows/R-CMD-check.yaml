@@ -29,6 +29,9 @@ jobs:
     env:
       COMMONS_SKIP_BROWSER_TESTS: "true"
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      # Package Manager can lag on a new release for one R version. Compiling
+      # in parallel keeps a source build, such as duckdb's, within the timeout.
+      MAKEFLAGS: -j4
     steps:
       - uses: actions/checkout@v6
       - uses: r-lib/actions/setup-pandoc@v2
@@ -49,12 +52,10 @@ jobs:
         with:
           r-version: ${{ matrix.config.r }}
           use-public-rspm: true
-      # Package Manager has no R-devel binaries and can lag on new releases
-      # for other R versions, so jobs compile from source and time out.
-      # This replaces Package Manager because pak sees R-universe's Linux
-      # binaries as source packages and would still prefer Package Manager.
-      - name: Use R-universe binaries on Linux
-        if: runner.os == 'Linux'
+      # pak finds no Posit Package Manager binaries for R-devel, whatever the
+      # user agent, but R-universe builds them.
+      - name: Use R-universe binaries on R-devel
+        if: matrix.config.r == 'devel'
         shell: Rscript {0}
         run: |
           codename <- system2("lsb_release", c("--short", "--codename"), stdout = TRUE)
