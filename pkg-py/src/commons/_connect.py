@@ -22,6 +22,7 @@ import httpx
 
 __all__ = [
     "FROM_PAD",
+    "JOBS_RESPONSE_MESSAGE",
     "LEGACY_TRACE_STORE_BEFORE",
     "MINIMUM_TRACING_VERSION",
     "MISSING_CONTENT_MESSAGE",
@@ -63,6 +64,8 @@ TRACE_ACCESS_MESSAGE = (
 )
 
 MISSING_CONTENT_MESSAGE = "Can't find this content on Posit Connect."
+
+JOBS_RESPONSE_MESSAGE = "Posit Connect returned an unexpected list of jobs."
 
 # Jobs whose trace pages are requested at once.
 _JOB_WORKERS = 20
@@ -336,12 +339,17 @@ def _job_trace_lines(
     try:
         jobs = response.json()
     except ValueError:
-        jobs = []
-    keys = [
-        job["key"]
-        for job in (jobs if isinstance(jobs, list) else [])
-        if isinstance(job, dict) and isinstance(job.get("key"), str)
-    ]
+        jobs = None
+    # Skipping a job Connect lists would leave its traces out of the read
+    # without a sign, so a list that cannot be read fails it instead.
+    if not isinstance(jobs, list) or not all(
+        isinstance(job, dict) and isinstance(job.get("key"), str) for job in jobs
+    ):
+        raise ConnectError(
+            f"{JOBS_RESPONSE_MESSAGE} {client.server} did not answer with a "
+            f"list of jobs, each with a key, for content {guid}."
+        )
+    keys = [job["key"] for job in jobs]
     lines = list(lines)
     if not keys:
         return lines

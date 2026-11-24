@@ -30,8 +30,9 @@ connect_fixture_responses <- function(server, state, content = list(), settings 
     if (!is.null(server[["page_size"]])) page <- utils::head(page, server[["page_size"]])
     headers <- list()
     if (!is.null(server[["version"]])) headers$Server <- paste0("Posit Connect v", server[["version"]])
-    total <- server[["total"]] %||% length(keep)
-    headers$`X-Total-Count` <- as.character(total)
+    if (!("total" %in% names(server) && is.null(server[["total"]]))) {
+      headers$`X-Total-Count` <- as.character(server[["total"]] %||% length(keep))
+    }
     body <- paste0(vapply(page, connect_fixture_line, character(1)), "\n", collapse = "")
     httr2::new_response("GET", req$url, 200L, headers, charToRaw(body), request = req)
   }
@@ -53,6 +54,10 @@ connect_fixture_responses <- function(server, state, content = list(), settings 
     jobs <- server[["jobs"]] %||% list()
     if (rel == "jobs") {
       if (!is.null(jobs[["status"]])) return(status_response(req, jobs[["status"]]))
+      if (!is.null(jobs[["body"]])) {
+        return(httr2::new_response("GET", req$url, 200L, list(`Content-Type` = "application/json"),
+          charToRaw(jobs[["body"]]), request = req))
+      }
       return(json_response(req, lapply(jobs, function(job) list(key = job[["key"]]))))
     }
     key <- sub("^jobs/([^/]+)/traces$", "\\1", rel)
@@ -107,6 +112,13 @@ expect_trace_lines_member <- function(member, spec) {
     }
     if (identical(case[["error"]], "missing")) {
       err <- expect_error(read(), spec[["missing_error"]], fixed = TRUE, info = info)
+      message <- conditionMessage(err)
+      expect_match(message, spec[["guid"]], fixed = TRUE, info = info)
+      expect_match(message, spec[["server"]], fixed = TRUE, info = info)
+      next
+    }
+    if (identical(case[["error"]], "jobs")) {
+      err <- expect_error(read(), spec[["jobs_error"]], fixed = TRUE, info = info)
       message <- conditionMessage(err)
       expect_match(message, spec[["guid"]], fixed = TRUE, info = info)
       expect_match(message, spec[["server"]], fixed = TRUE, info = info)

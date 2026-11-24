@@ -445,6 +445,13 @@ def test_trace_lines_match_the_shared_fixture(case: dict[str, Any]) -> None:
             read()
         assert TRACES["guid"] in str(raised.value)
         assert TRACES["server"] in str(raised.value)
+    elif case.get("error") == "jobs":
+        with pytest.raises(
+            ConnectError, match=re.escape(TRACES["jobs_error"])
+        ) as raised:
+            read()
+        assert TRACES["guid"] in str(raised.value)
+        assert TRACES["server"] in str(raised.value)
     elif case.get("error") == "failed":
         with pytest.raises(ConnectError) as raised:
             read()
@@ -494,49 +501,6 @@ def test_an_access_error_names_the_share_with_argument() -> None:
     cause = raised.value.__cause__
     assert isinstance(cause, ConnectError)
     assert cause.status_code == 403
-
-
-@pytest.mark.parametrize("version", ["2026.06.1", "2026.09.0"])
-def test_a_response_without_a_total_ends_the_read_after_one_page(
-    version: str,
-) -> None:
-    lines = ["line1", "line2", "line3"]
-    seen: list[httpx.Request] = []
-
-    def route(request: httpx.Request) -> httpx.Response:
-        seen.append(request)
-        if request.url.path.endswith("/jobs"):
-            return httpx.Response(200, json=[])
-        offset = int(request.url.params["offset"])
-        body = "".join(line + "\n" for line in lines[offset : offset + 2])
-        return httpx.Response(
-            200, headers={"Server": f"Posit Connect v{version}"}, text=body
-        )
-
-    with _trace_client(route) as client:
-        assert connect_trace_lines(client, GUID) == ["line1", "line2"]
-    assert [r.url.path.endswith("/traces") for r in seen].count(True) == 1
-
-
-@pytest.mark.parametrize("jobs", [{"key": "job"}, [{"id": 1}, "job"], "not json"])
-def test_malformed_jobs_read_as_no_jobs(jobs: object) -> None:
-    seen: list[httpx.Request] = []
-
-    def route(request: httpx.Request) -> httpx.Response:
-        seen.append(request)
-        if request.url.path.endswith("/jobs"):
-            if jobs == "not json":
-                return httpx.Response(200, text="not json")
-            return httpx.Response(200, json=jobs)
-        return httpx.Response(
-            200,
-            headers={"Server": "Posit Connect v2026.09.0", "X-Total-Count": "1"},
-            text="current\n",
-        )
-
-    with _trace_client(route) as client:
-        assert connect_trace_lines(client, GUID) == ["current"]
-    assert [r.url.path.rsplit("/", 1)[-1] for r in seen] == ["traces", "jobs"]
 
 
 def test_a_failed_job_request_cancels_the_queued_ones(

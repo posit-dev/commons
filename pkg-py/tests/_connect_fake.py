@@ -132,7 +132,8 @@ def connect_fixture_server(
         page = keep[int(params.get("offset", "0")) :]
         if "page_size" in server:
             page = page[: server["page_size"]]
-        headers = {"X-Total-Count": str(server.get("total", len(keep)))}
+        total = server.get("total", len(keep))
+        headers = {} if total is None else {"X-Total-Count": str(total)}
         if "version" in server:
             headers["Server"] = f"Posit Connect v{server['version']}"
         body = "".join(
@@ -160,6 +161,12 @@ def connect_fixture_server(
             return serve_lines(server["traces"], params)
         jobs = server.get("jobs", [])
         if rel == "jobs":
+            if isinstance(jobs, dict) and "body" in jobs:
+                return httpx.Response(
+                    200,
+                    headers={"Content-Type": "application/json"},
+                    text=jobs["body"],
+                )
             if isinstance(jobs, dict):
                 return httpx.Response(jobs["status"])
             return httpx.Response(200, json=[{"key": job["key"]} for job in jobs])
