@@ -154,6 +154,9 @@ expect_deployment_member <- function(member) {
     write_fixture_files(dir, case)
     found <- record_notices(find_rsconnect_deployment(dir))
     notices <- found$notices
+    for (text in unlist(case[["mentions"]])) {
+      expect_true(all(grepl(text, found$texts, fixed = TRUE)), info = info)
+    }
     found <- found$value
     actual <- if (is.null(found)) {
       NULL
@@ -169,10 +172,12 @@ expect_deployment_member <- function(member) {
 # them.
 record_notices <- function(expr) {
   notices <- character()
+  texts <- character()
   value <- withCallingHandlers(
     expr,
     warning = function(cnd) {
       notices <<- c(notices, "warning")
+      texts <<- c(texts, conditionMessage(cnd))
       invokeRestart("muffleWarning")
     },
     message = function(cnd) {
@@ -180,7 +185,7 @@ record_notices <- function(expr) {
       invokeRestart("muffleMessage")
     }
   )
-  list(value = value, notices = notices)
+  list(value = value, notices = notices, texts = texts)
 }
 
 # The environment trajectories/connect.json starts each case with, then `env`.

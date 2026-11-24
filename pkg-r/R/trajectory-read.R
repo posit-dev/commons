@@ -445,7 +445,8 @@ content_vanity_url <- function(x) {
 
 # Find the project's Connect deployment record (written by rsconnect under
 # rsconnect/). The record's `url` field has the content GUID. With several
-# records, warns which one is read unless `quiet`.
+# records naming more than one deployment, warns which one is read unless
+# `quiet`.
 find_rsconnect_deployment <- function(dir = getwd(), quiet = FALSE) {
   files <- rsconnect_record_files(dir)
   if (length(files) == 0) {
@@ -464,7 +465,12 @@ find_rsconnect_deployment <- function(dir = getwd(), quiet = FALSE) {
       numeric(1)
     )
     deployments <- deployments[order(mtimes, decreasing = TRUE)]
-    if (!quiet) {
+    keys <- vapply(
+      deployments,
+      function(dep) paste(dep$guid, sub("/+(__api__/*)?$", "", dep$server)),
+      character(1)
+    )
+    if (!quiet && length(unique(keys)) > 1) {
       cli::cli_warn(
         "Reading trajectories for {.val {deployments[[1]]$name}}
          ({deployments[[1]]$guid}) on {.url {deployments[[1]]$server}}, from

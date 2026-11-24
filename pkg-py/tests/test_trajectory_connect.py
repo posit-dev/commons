@@ -175,14 +175,18 @@ def test_deployment_records_match_the_shared_fixture(
     member: dict[str, Any], case: dict[str, Any], tmp_path: Path
 ) -> None:
     write_fixture_files(tmp_path, case)
-    found, notices = read_case(lambda: find_deployment(tmp_path))
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        found = find_deployment(tmp_path)
     expected = case["expected"]
     assert (
         None
         if found is None
         else {"guid": found.guid, "server": normalize_server(found.server)}
     ) == expected
-    assert notices == case.get("notice", [])
+    assert ["warning"] * len(caught) == case.get("notice", [])
+    for text in case.get("mentions", []):
+        assert all(text in str(w.message) for w in caught)
 
 
 def _python_record(
@@ -405,10 +409,29 @@ def test_one_deployment_written_in_two_cases_is_not_ambiguous(
         _python_record("https://ONE.example.com"),
     )
 
-    found = find_deployment(tmp_path, quiet=True)
+    found, notices = read_case(lambda: find_deployment(tmp_path))
 
     assert found is not None
     assert found.guid == GUID
+    assert notices == []
+
+
+def test_connect_server_matches_a_servers_whole_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # urlparse() would split ";two" off the path, and both servers would match.
+    connect_env(monkeypatch, {"CONNECT_SERVER": "https://connect.example.com/rsc;two"})
+    other = "01234567-89ab-cdef-0123-456789abcdef"
+    _write_python_record(
+        tmp_path / "rsconnect-python" / "app.json",
+        _python_record("https://connect.example.com/rsc;one"),
+        _python_record("https://connect.example.com/rsc;two", guid=other),
+    )
+
+    found = find_deployment(tmp_path, quiet=True)
+
+    assert found is not None
+    assert found.guid == other
 
 
 def test_connect_server_picks_from_a_python_record_for_two_servers(
@@ -582,7 +605,6 @@ def test_the_deployment_warning_points_at_the_caller(
         trajectory_read()
 
     assert [w.filename for w in caught] == [__file__]
-    assert case["expected"]["guid"] in str(caught[0].message)
 
 
 @pytest.mark.parametrize(("member", "case"), cases(("enough", "enough_ancestry")))

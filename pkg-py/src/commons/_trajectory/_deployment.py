@@ -60,7 +60,8 @@ def find_deployment(
         return None
     found.sort(key=lambda item: item[0], reverse=True)
     deployment = _latest_in_file([d for _, d in found if d.file == found[0][1].file])
-    if len(found) > 1 and not quiet:
+    several = len({(d.guid, _server_key(d.server)) for _, d in found}) > 1
+    if several and not quiet:
         warnings.warn(
             f"Reading trajectories for {deployment.name!r} ({deployment.guid}) on "
             f"{deployment.server}, from the most recently modified deployment "
