@@ -42,6 +42,8 @@ def find_deployment(
 
     Warns which record is read when there are several, unless `quiet`;
     `stacklevel` is as `warnings.warn` takes it, counted from this function.
+    Raises ValueError when the most recent record file lists deployments to
+    several servers and CONNECT_SERVER does not pick one of them.
     """
     directory = Path.cwd() if directory is None else directory
     found: list[tuple[float, Deployment]] = []
@@ -57,7 +59,7 @@ def find_deployment(
     if not found:
         return None
     found.sort(key=lambda item: item[0], reverse=True)
-    deployment = found[0][1]
+    deployment = _latest_in_file([d for _, d in found if d.file == found[0][1].file])
     if len(found) > 1 and not quiet:
         warnings.warn(
             f"Reading trajectories for the most recent deployment, "
@@ -65,6 +67,24 @@ def find_deployment(
             stacklevel=stacklevel,
         )
     return deployment
+
+
+def _latest_in_file(deployments: list[Deployment]) -> Deployment:
+    # rsconnect-python keeps one entry per server in a file and records no
+    # time, so a file's entries cannot be ordered by when they were deployed.
+    distinct = list({(d.guid, d.server): d for d in deployments}.values())
+    if len(distinct) == 1:
+        return distinct[0]
+    server = normalize_server(os.environ.get("CONNECT_SERVER", ""))
+    chosen = [d for d in distinct if d.server == server]
+    if len(chosen) == 1:
+        return chosen[0]
+    servers = ", ".join(d.server for d in distinct)
+    raise ValueError(
+        f"Can't tell which deployment in {distinct[0].file} is the most recent: "
+        f"it lists deployments to {servers}. Set CONNECT_SERVER to one of them, "
+        "or pass a content URL."
+    )
 
 
 def deployment_record_files(directory: Path, max_depth: int = 3) -> list[Path]:

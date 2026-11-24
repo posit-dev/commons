@@ -357,19 +357,57 @@ def test_records_of_both_tools_are_ordered_by_modification_time(
     assert found.guid == other
 
 
-def test_a_python_record_for_two_servers_reports_one(tmp_path: Path) -> None:
+def _write_two_server_record(directory: Path) -> str:
     other = "01234567-89ab-cdef-0123-456789abcdef"
     _write_python_record(
-        tmp_path / "rsconnect-python" / "app.json",
+        directory / "rsconnect-python" / "app.json",
         _python_record("https://one.example.com"),
         _python_record("https://two.example.com", guid=other),
     )
+    return other
+
+
+def test_a_python_record_for_two_servers_is_ambiguous(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # rsconnect-python keeps a redeployed server's entry where it was first
+    # written, so neither entry is known to be the latest.
+    connect_env(monkeypatch, {})
+    _write_two_server_record(tmp_path)
+
+    with pytest.raises(ValueError, match="Set CONNECT_SERVER") as raised:
+        find_deployment(tmp_path)
+
+    assert "https://one.example.com, https://two.example.com" in str(raised.value)
+
+
+def test_connect_server_picks_from_a_python_record_for_two_servers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    connect_env(monkeypatch, {"CONNECT_SERVER": "https://two.example.com/__api__"})
+    other = _write_two_server_record(tmp_path)
 
     found, notices = read_case(lambda: find_deployment(tmp_path))
 
     assert found is not None
-    assert (found.guid, found.server) == (GUID, "https://one.example.com")
+    assert (found.guid, found.server) == (other, "https://two.example.com")
     assert notices == ["warning"]
+
+
+def test_a_newer_record_file_settles_an_older_ambiguous_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    connect_env(monkeypatch, {})
+    _write_two_server_record(tmp_path)
+    os.utime(tmp_path / "rsconnect-python" / "app.json", (1784000000, 1784000000))
+    newer = tmp_path / "other" / "rsconnect-python" / "app.json"
+    _write_python_record(newer, _python_record("https://three.example.com"))
+    os.utime(newer, (1784700000, 1784700000))
+
+    found = find_deployment(tmp_path, quiet=True)
+
+    assert found is not None
+    assert found.server == "https://three.example.com"
 
 
 def _store_dir() -> Path:
