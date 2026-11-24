@@ -76,6 +76,11 @@ def cases(members: Sequence[str]) -> list[Any]:
     ]
 
 
+def expected_notices(case: dict[str, Any]) -> list[str]:
+    """The notices a case expects. A `record` notice is a warning in Python."""
+    return ["warning" if n == "record" else n for n in case.get("notice", [])]
+
+
 def _named(member: str) -> Any:
     return pytest.mark.parametrize(
         "case", CONNECT[member]["cases"], ids=lambda case: case["name"]
@@ -184,7 +189,7 @@ def test_deployment_records_match_the_shared_fixture(
         if found is None
         else {"guid": found.guid, "server": normalize_server(found.server)}
     ) == expected
-    assert ["warning"] * len(caught) == case.get("notice", [])
+    assert ["warning"] * len(caught) == expected_notices(case)
     for text in case.get("mentions", []):
         assert all(text in str(w.message) for w in caught)
 
@@ -594,7 +599,7 @@ def test_sources_resolve_as_the_shared_fixture_pins(
             assert text in str(raised.value)
         return
     resolved, notices = read_case(lambda: resolve_trajectory_source(case["source"]))
-    assert notices == case.get("notice", [])
+    assert notices == expected_notices(case)
     if expected["kind"] == "local":
         assert isinstance(resolved, LocalSource)
     else:
@@ -610,7 +615,7 @@ def test_the_deployment_warning_points_at_the_caller(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     (case,) = [
-        c for c in CONNECT["null_deployment"]["cases"] if c.get("notice") == ["warning"]
+        c for c in CONNECT["null_deployment"]["cases"] if c.get("notice") == ["record"]
     ]
     write_fixture_files(tmp_path, case)
     monkeypatch.chdir(tmp_path)
@@ -683,7 +688,7 @@ def test_connect_reads_match_the_shared_fixture(
     assert _trace_queries(seen) == case["trace_queries"]
     if "job_queries" in case:
         assert _job_queries(seen) == case["job_queries"]
-    assert notices == case.get("notice", [])
+    assert notices == expected_notices(case)
     assert_trajectories(result, case["trajectories"])
 
 

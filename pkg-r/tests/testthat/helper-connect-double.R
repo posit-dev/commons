@@ -176,8 +176,16 @@ expect_deployment_member <- function(member) {
       list(guid = found$guid, server = sub("/+(__api__/*)?$", "", found$server))
     }
     expect_identical(actual, case[["expected"]], info = info)
-    expect_identical(notices, unlist(case[["notice"]]) %||% character(), info = info)
+    expect_identical(notices, fixture_notices(case), info = info)
   }
+}
+
+# The notices a case expects. A `record` notice, which reports the deployment
+# record a read uses, is a message in R.
+fixture_notices <- function(case) {
+  notices <- unlist(case[["notice"]]) %||% character()
+  notices[notices == "record"] <- "message"
+  notices
 }
 
 # `expr`'s value, and its warnings and messages in order, as `notice` names
@@ -194,6 +202,7 @@ record_notices <- function(expr) {
     },
     message = function(cnd) {
       notices <<- c(notices, "message")
+      texts <<- c(texts, conditionMessage(cnd))
       invokeRestart("muffleMessage")
     }
   )
@@ -245,7 +254,7 @@ expect_source_member <- function(member) {
       resolved <- record_notices(resolve_trajectory_source(case[["source"]]))
       expect_identical(
         resolved$notices,
-        unlist(case[["notice"]]) %||% character(),
+        fixture_notices(case),
         info = info
       )
       resolved <- resolved$value
@@ -365,7 +374,7 @@ expect_connect_read_member <- function(member) {
       }
       expect_identical(
         notices,
-        unlist(case[["notice"]]) %||% character(),
+        fixture_notices(case),
         info = info
       )
       expect_trajectories(trajectories, case[["trajectories"]], info)
