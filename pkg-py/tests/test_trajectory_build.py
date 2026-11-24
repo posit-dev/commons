@@ -121,28 +121,3 @@ def test_an_unknown_tag_reads_as_none() -> None:
     trajectory = _recorded({"commons.provenance.tag": "Z"})
     assert trajectory.exchanges[0].tag is None
 
-
-def test_exchanges_split_the_turns_at_each_question() -> None:
-    """Each answer's record sits beside the turns it answers, and the system
-    prompt, which answers nothing, is in no exchange."""
-
-    def text(role: str, content: str) -> dict[str, Any]:
-        return {"role": role, "parts": [{"type": "text", "content": content}]}
-
-    spans = [
-        {
-            "trace": "t1",
-            "span": "chat",
-            "chat": True,
-            "conversation": "conv-a",
-            "system": [{"type": "text", "content": "Be brief."}],
-            "input": [text("user", "Q1"), text("assistant", "A1"), text("user", "Q2")],
-            "output": [text("assistant", "A2")],
-        }
-    ]
-    trajectory = build_trajectories(parse_otlp_lines([fixture_line(spans)]))["conv-a"]
-    assert [[t.text for t in e.turns] for e in trajectory.exchanges] == [
-        ["Q1", "A1"],
-        ["Q2", "A2"],
-    ]
-    assert trajectory.exchanges[1].turns[-1] is trajectory.turns[-1]

@@ -290,6 +290,13 @@ expect_trajectories <- function(trajectories, expected, info = NULL) {
     if (!is.null(e[["turns"]])) {
       expect_semconv_turns(t[["turns"]], e[["turns"]], info)
     }
+    if (!is.null(e[["exchanges"]])) {
+      expect_identical(
+        lengths(split_exchanges(t[["turns"]])),
+        as.integer(unlist(e[["exchanges"]])),
+        info = info
+      )
+    }
     if (!is.null(e[["provenance"]])) {
       records <- attr(t[["turns"]], "provenance")
       expect_equal(length(records), length(e[["provenance"]]), info = info)

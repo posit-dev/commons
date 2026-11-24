@@ -199,6 +199,8 @@ def assert_trajectories(
         _assert_exchanges_tile_turns(t)
         if "turns" in e:
             assert described_turns(t.turns) == e["turns"], e["id"]
+        if "exchanges" in e:
+            assert [len(x.turns) for x in t.exchanges] == e["exchanges"], e["id"]
         if "provenance" in e:
             assert described_provenance(t.exchanges) == e["provenance"], e["id"]
         if "user" in e:
