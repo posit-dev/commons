@@ -435,6 +435,9 @@ def test_trace_lines_match_the_shared_fixture(case: dict[str, Any]) -> None:
     if case.get("error") == "access":
         with pytest.raises(ConnectError, match=re.escape(TRACES["access_error"])):
             read()
+    elif case.get("error") == "missing":
+        with pytest.raises(ConnectError, match=re.escape(TRACES["missing_error"])):
+            read()
     elif case.get("error") == "failed":
         with pytest.raises(ConnectError) as raised:
             read()

@@ -24,6 +24,7 @@ __all__ = [
     "FROM_PAD",
     "LEGACY_TRACE_STORE_BEFORE",
     "MINIMUM_TRACING_VERSION",
+    "MISSING_CONTENT_MESSAGE",
     "TO_PAD",
     "TRACE_ACCESS_MESSAGE",
     "TRACE_PAGE_SIZE",
@@ -60,6 +61,8 @@ TRACE_ACCESS_MESSAGE = (
     "requires editor access: the CONNECT_API_KEY user must own the content or "
     "be a collaborator. See the share_with argument of commons.Commons."
 )
+
+MISSING_CONTENT_MESSAGE = "Can't find this content on Posit Connect."
 
 # Jobs whose trace pages are requested at once.
 _JOB_WORKERS = 20
@@ -320,6 +323,15 @@ def _job_trace_lines(
     except ConnectError as error:
         if error.status_code in (401, 403):
             raise trace_access_error(error) from error
+        if error.status_code == 404:
+            # The traces endpoint answered 404 too, or a read would not be here
+            # on a server that has it, so the GUID is not on this server.
+            raise ConnectError(
+                f"{MISSING_CONTENT_MESSAGE} {client.server} has no content "
+                f"{guid}. Check the GUID, or pass a content URL or set "
+                "CONNECT_SERVER to the server that has it.",
+                status_code=404,
+            ) from error
         raise
     try:
         jobs = response.json()

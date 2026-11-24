@@ -180,7 +180,8 @@ connect_job_trace_lines <- function(
       httr2::req_perform() |>
       httr2::resp_body_json(),
     httr2_http_401 = function(err) trace_access_abort(err, call),
-    httr2_http_403 = function(err) trace_access_abort(err, call)
+    httr2_http_403 = function(err) trace_access_abort(err, call),
+    httr2_http_404 = function(err) trace_missing_abort(err, client, guid, call)
   )
   job_keys <- vapply(jobs, function(job) job$key, character(1))
   offsets <- integer(length(job_keys))
@@ -311,6 +312,21 @@ trace_access_abort <- function(err, call) {
       i = "Reading traces requires editor access: the {.envvar
            CONNECT_API_KEY} user must own the content or be a collaborator.
            See the {.arg share_with} argument of {.fn commons}."
+    ),
+    parent = err,
+    call = call
+  )
+}
+
+# The traces endpoint answered 404 too, or a read would not reach the jobs
+# endpoint on a server that has it, so the GUID is not on this server.
+trace_missing_abort <- function(err, client, guid, call) {
+  cli::cli_abort(
+    c(
+      "Can't find this content on Posit Connect.",
+      i = "{.url {client$server}} has no content {.val {guid}}.",
+      i = "Check the GUID, or pass a content URL or set {.envvar
+           CONNECT_SERVER} to the server that has it."
     ),
     parent = err,
     call = call

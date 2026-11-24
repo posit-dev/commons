@@ -105,6 +105,10 @@ expect_trace_lines_member <- function(member, spec) {
       expect_error(read(), spec[["access_error"]], fixed = TRUE, info = info)
       next
     }
+    if (identical(case[["error"]], "missing")) {
+      expect_error(read(), spec[["missing_error"]], fixed = TRUE, info = info)
+      next
+    }
     if (identical(case[["error"]], "failed")) {
       err <- expect_error(read(), info = info)
       expect_false(
