@@ -79,7 +79,8 @@ Read back the conversations an agent logged with `log=True`.
 
 - `trajectory_read`: Read the conversations an agent logged with `log=True`
 - `Trajectory`: One logged conversation
-- `ExchangeProvenance`: The provenance of one exchange: a user's question and the turns that answer it
+- `Exchange`: One exchange of a conversation: a user's question and the turns that answer it
+- `CitationDecision`: One citation in an answer, and whether its quote was verified
 
 ### Shiny UI and server
 

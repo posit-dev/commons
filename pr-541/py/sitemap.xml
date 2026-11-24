@@ -31,6 +31,12 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://posit-dev.github.io/commons/reference/CitationDecision.html</loc>
+    <lastmod>2026-11-24</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://posit-dev.github.io/commons/reference/Commons.__deepcopy__.html</loc>
     <lastmod>2026-11-24</lastmod>
     <changefreq>monthly</changefreq>
@@ -187,7 +193,7 @@
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://posit-dev.github.io/commons/reference/ExchangeProvenance.html</loc>
+    <loc>https://posit-dev.github.io/commons/reference/Exchange.html</loc>
     <lastmod>2026-11-24</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
@@ -314,6 +320,12 @@
   </url>
   <url>
     <loc>https://posit-dev.github.io/commons/v/dev/reference/</loc>
+    <lastmod>2026-11-24</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://posit-dev.github.io/commons/v/dev/reference/CitationDecision.html</loc>
     <lastmod>2026-11-24</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
@@ -475,7 +487,7 @@
     <priority>0.5</priority>
   </url>
   <url>
-    <loc>https://posit-dev.github.io/commons/v/dev/reference/ExchangeProvenance.html</loc>
+    <loc>https://posit-dev.github.io/commons/v/dev/reference/Exchange.html</loc>
     <lastmod>2026-11-24</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>

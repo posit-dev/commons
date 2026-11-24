@@ -62,7 +62,8 @@
 
 - [trajectory_read](https://posit-dev.github.io/commons/py/reference/trajectory_read.html): Read the conversations an agent logged with `log=True`
 - [Trajectory](https://posit-dev.github.io/commons/py/reference/Trajectory.html): One logged conversation
-- [ExchangeProvenance](https://posit-dev.github.io/commons/py/reference/ExchangeProvenance.html): The provenance of one exchange: a user's question and the turns that answer it
+- [Exchange](https://posit-dev.github.io/commons/py/reference/Exchange.html): One exchange of a conversation: a user's question and the turns that answer it
+- [CitationDecision](https://posit-dev.github.io/commons/py/reference/CitationDecision.html): One citation in an answer, and whether its quote was verified
 
 #### Shiny UI and server
 > Put a commons agent inside of an interactive chat app. Needs the `shiny` extra.

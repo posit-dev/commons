@@ -11,12 +11,12 @@ Trajectory(
     turns,
     last_active,
     user,
-    provenance,
+    exchanges,
 )
 ```
 
 
-`turns` are its chatlas turns as of its latest chat activity, and `last_active` is the time of that activity, in UTC. `user` is the authenticated user of the session, from the conversation's earliest recorded chat, or None when none was recorded. `provenance` has one record per exchange, in order.
+`turns` are its chatlas turns as of its latest chat activity, and `last_active` is the time of that activity, in UTC. `user` is the authenticated user of the session, from the conversation's earliest recorded chat, or None when none was recorded. `exchanges` splits `turns` at each question the user asked, with the provenance recorded for each answer. Turns before the first question, such as the system prompt, are in no exchange.
 
 
 ## Parameter Attributes
@@ -28,4 +28,4 @@ Trajectory(
 
 `user: str | None`  
 
-`provenance: list[ExchangeProvenance]`
+`exchanges: list[Exchange]`
