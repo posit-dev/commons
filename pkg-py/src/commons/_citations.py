@@ -104,10 +104,13 @@ _CITATION_KINDS = get_args(CitationKind)
 class CitationDecision:
     """One citation in an answer, and whether its quote was verified.
 
-    `status` is `"accepted"` when the quote was found in a source the agent
-    read, `"rejected"` when it was not, and `"malformed"` when the citation had
-    no quote to check. `quote` is the quoted text, or None for a malformed
-    citation. `label` names the source that verified an accepted quote, and
+    `status` is `"accepted"` when the quote, after normalization, is found in
+    the trusted text the agent was given (its documentation, measure
+    definitions, and data dictionaries), and `"rejected"` when it is not or is
+    too short to check. It is `"malformed"` when the citation does not have
+    exactly one block quote, so there is no quote to check. `quote` is the
+    quoted text, or None for a malformed citation. `label` names the trusted
+    source that matched an accepted quote, and
     `kind` says what sort of source it is: `"prose"`, `"definition"`, or
     `"schema"`. Both are None unless the status is accepted.
 
