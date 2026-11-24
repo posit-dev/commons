@@ -892,34 +892,25 @@ Read the files back with `commons.trajectory_read()`, as the next section descri
 
 ## Reading logged conversations
 
-`commons.trajectory_read()` reads logged conversations back as chatlas turns. Pass it the directory of trace files. It reads the files named `trace.jsonl` and `trace-<n>.jsonl`, and files named from the `OTEL_EXPORTER_OTLP_TRACES_FILE` template. The `BatchSpanProcessor` exports spans in batches, so to read in the process that logged them, call `provider.force_flush()` first.
+`commons.trajectory_read()` reads logged conversations back as chatlas turns, one entry per conversation. Pass it the directory of trace files, or a Posit Connect content GUID or URL to read the conversations of a deployed agent. The `BatchSpanProcessor` exports spans in batches, so to read in the process that logged them, call `provider.force_flush()` first.
 
 ```python
 import commons
 
-trajectories = commons.trajectory_read("traces")
-for conversation_id, trajectory in trajectories.items():
-    print(conversation_id, trajectory.last_active, len(trajectory.turns))
-```
-
-The result is a dictionary keyed by conversation id, with the oldest conversation first. Each `Trajectory` has the conversation's `turns`, the time of its last chat activity as `last_active`, and the `user` the agent recorded for the session, which is the authenticated Shiny session user on Posit Connect, or `None` when the session had none. Its `exchanges` split the turns at each question the user asked. Each `Exchange` has its `turns` (the question and the turns that answer it), the answer's provenance `tag`, and its citation `decisions`.
-
-Use `n` to keep only the most recent conversations, and `since` and `until` to keep the chat activity in a time window. Each bound is a `datetime`, a `date`, or a string like `"2026-07-22"` or `"2026-07-22 14:30"`, and a date or a string is read in local time. A conversation that continues past `until` is returned as it was at `until`. A conversation that started before `since` is returned with the history its latest call in the window recorded, and its exchanges take provenance only from calls in the window, so an exchange answered only before `since` has no record.
-
-```python
 recent = commons.trajectory_read("traces", n=20, since="2026-07-01")
 ```
 
-`trajectory_read()` also reads from Posit Connect (version 2026.09.0 or later). Pass a content GUID, a content URL (`.../content/<guid>/`), a vanity URL written as `<server>/content/<name>/` for content at `<server>/<name>/`, or a dashboard URL (`.../connect/#/apps/<guid>/`). With no source, it reads the content's own traces when it runs on Connect. Off Connect, it reads the deployed content's traces when the project has a deployment record, written by rsconnect-python under `rsconnect-python/` or by the R package rsconnect under `rsconnect/`. With several records, it reads the most recently modified one and warns which. An rsconnect-python record that lists deployments to several servers does not say which is the latest, so set `CONNECT_SERVER` to pick one. Otherwise it reads the local trace directory: the directory of `OTEL_EXPORTER_OTLP_TRACES_FILE` when that variable is set, and otherwise `COMMONS_TRACES_DIR`, or `commons-traces` under the temporary directory.
+A read from Connect also needs the `CONNECT_API_KEY` environment variable:
 
 ```python
+import commons
+
 deployed = commons.trajectory_read(
-    "https://connect.example.com/content/01234567-89ab-cdef-0123-456789abcdef/",
-    n=20,
+    "https://connect.example.com/content/01234567-89ab-cdef-0123-456789abcdef/"
 )
 ```
 
-A read from Connect needs the `CONNECT_API_KEY` environment variable. It also needs `CONNECT_SERVER` when the server is not in the URL, in the deployment record, or the only server registered with rsconnect-python. The key's user needs editor-level access to the content: they must own it or be a collaborator, which is what `share_with` grants. `since` and `until` are sent to Connect, so Connect leaves out most traces outside the window. The per-job trace stores that older content can have are filtered by `since` only. When `since` is set and a chat span in the window has its ancestry cut off, the read is repeated once without `since`, and the job stores are then read unfiltered. `n` is not sent, and is applied after the read. When Connect has no traces for the content and reports that the content's or the server's tracing setting is off, `trajectory_read()` warns and names that setting.
+See the [`trajectory_read()` reference](../reference/trajectory_read.html) for the sources it accepts, the credentials and access a read from Connect needs, and how the time window applies, and the [`Trajectory` reference](../reference/Trajectory.html) for the fields of each conversation.
 
 ## Example application
 
