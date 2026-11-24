@@ -136,8 +136,8 @@ Read the conversations an agent logged with `log=True`.
 [Trajectory](Trajectory.md#commons.Trajectory)  
 One logged conversation.
 
-[ExchangeProvenance](ExchangeProvenance.md#commons.ExchangeProvenance)  
-The provenance of one exchange: a user's question and the turns that answer it.
+[Exchange](Exchange.md#commons.Exchange)  
+One exchange of a conversation: a user's question and the turns that answer it.
 
 [CitationDecision](CitationDecision.md#commons.CitationDecision)  
 One citation in an answer, and whether its quote was verified.

@@ -554,8 +554,8 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../reference/ExchangeProvenance.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">ExchangeProvenance</span></a>
+  <a href="../reference/Exchange.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Exchange</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -661,7 +661,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </div>
 <div class="doc-text">
 <p><code>status</code> is <code>"accepted"</code> when the quote, after normalization, is found in the trusted text the agent was given (its documentation, measure definitions, and data dictionaries), and <code>"rejected"</code> when it is not or is too short to check. It is <code>"malformed"</code> when the citation does not have exactly one block quote, so there is no quote to check. <code>quote</code> is the quoted text, or None for a malformed citation. <code>label</code> names the trusted source that matched an accepted quote, and <code>kind</code> says what sort of source it is: <code>"prose"</code>, <code>"definition"</code>, or <code>"schema"</code>. Both are None unless the status is accepted.</p>
-<p>The agent records each decision to the <code>commons.citation.candidates</code> span attribute, and <a href="trajectory_read.html#commons.trajectory_read" class="gdls-link gdls-code">trajectory_read()</a> returns them in <code>ExchangeProvenance.decisions</code>.</p>
+<p>The agent records each decision to the <code>commons.citation.candidates</code> span attribute, and <a href="trajectory_read.html#commons.trajectory_read" class="gdls-link gdls-code">trajectory_read()</a> returns them in <code>Exchange.decisions</code>.</p>
 </div>
 <section id="parameter-attributes" class="level2 doc-parameter-attributes">
 <h2 class="doc-parameter-attributes">Parameter Attributes</h2>
