@@ -303,7 +303,11 @@ def _chat_span_turns(
     by_conversation: dict[str, list[Span]],
     index: dict[_SpanKey, Span],
 ) -> list[Turn]:
-    """The turns a selected chat span records, parsed once per span."""
+    """The turns a selected chat span supplies, built once per span.
+
+    When the span records no input and sits below a turn span, its history is
+    rebuilt from earlier spans.
+    """
     key = _span_key(span)
     if key not in cache:
         cache[key] = _recover_missing_input(
