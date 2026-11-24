@@ -318,7 +318,7 @@ To reuse the same trusted calculations in reports, apps, and other projects, see
 
 Your agent may not answer every question correctly at first. Reviewing **trajectories**, or records of the conversations, helps you understand where it goes wrong and what trusted calculations or context would help it improve.
 
-To review conversations, you'll need to enable **trajectory logging** by setting `log = TRUE` in `agent()`. Local logging also requires a configured OpenTelemetry exporter, such as `otelsdk`'s file exporter. On Posit Connect, follow the [logging setup instructions](governance.html#logging-trajectories). Reading Connect trajectories into R requires owner or collaborator access and a configured `CONNECT_API_KEY`.
+To review conversations, you'll need to enable **trajectory logging** by setting `log = TRUE` in `agent()`. On Posit Connect, follow the [logging setup instructions](governance.html#logging-trajectories). Reading Connect trajectories into R requires owner or collaborator access and a configured `CONNECT_API_KEY`.
 
 Once conversations have been logged, you can read them into R with `trajectory_read()`:
 
