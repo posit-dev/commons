@@ -6,14 +6,17 @@ argument does not gate them. Until an SDK provider is configured, the
 OpenTelemetry API is inert: a span does not record and costs almost
 nothing. This makes the API safe as a hard dependency, so commons
 requires it and leaves the SDK and the exporters to the ``tracing``
-extra. ``pkg-r/R/tracing.R`` holds the R counterparts.
+extra. Trajectory logging setup checks, when an agent is built with
+``log=True``, whether conversation spans can record, and on Connect turns on
+Content Observability. ``pkg-r/R/tracing.R`` holds the R counterparts.
 """
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import warnings
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager, nullcontext
 from typing import Any
 
@@ -24,12 +27,14 @@ from ._connect import (
     MINIMUM_TRACING_VERSION,
     ConnectClient,
     ConnectError,
+    check_usernames,
     connect_content_guid,
     content,
     enable_otel,
     is_connect_runtime,
     parse_connect_version,
     server_settings,
+    share_trajectory_access,
     version_is_older,
 )
 
@@ -37,6 +42,7 @@ __all__ = [
     "CAPTURE_VAR",
     "TRACER_NAME",
     "Span",
+    "check_trajectory_arguments",
     "commons_span",
     "content_capture_enabled",
     "enable_content_observability",
@@ -76,19 +82,62 @@ def commons_span(
         yield span
 
 
-def enable_trajectory_tracing(*, log: bool) -> bool:
-    """Say whether to stamp conversation spans for trajectory logging.
+def check_trajectory_arguments(log: object, share_with: Sequence[str] | None) -> None:
+    """Raise a TypeError unless `log` is a bool and `share_with` a username sequence."""
+    if not isinstance(log, bool):
+        raise TypeError("log must be True or False.")
+    if share_with is not None:
+        check_usernames(share_with)
 
-    ``True`` only when ``log`` is set, a tracer provider is configured, and
-    message content capture is on. commons configures no exporter: where
-    the spans go is the caller's OpenTelemetry setup. Capture is checked
-    last, so a process with no tracing keeps its environment unchanged.
+
+def enable_trajectory_tracing(
+    *, log: bool, share_with: Sequence[str] | None = None, stacklevel: int = 2
+) -> bool:
+    """Check the tracing setup, and say whether to stamp conversation spans.
+
+    ``True`` only when ``log`` is set, the SDK is installed, a tracer
+    provider is configured, and message content capture is on. A missing SDK
+    warns. On Connect, an unsupported server warns, and a missing provider
+    turns on Content Observability and warns. A missing provider off Connect,
+    or a capture opt-out, returns ``False`` silently. ``share_with`` grants
+    those Connect users access once logging is live. commons configures no
+    exporter: where the spans go is the caller's OpenTelemetry setup. Capture
+    is checked last, so a process with no tracing keeps its environment
+    unchanged. Every warning is attributed ``stacklevel`` frames up from this
+    function.
     """
+    check_trajectory_arguments(log, share_with)
+    # The helpers warn one frame deeper than this function does.
+    nested = stacklevel + 1
+
     if not log:
+        if share_with is not None:
+            warnings.warn(
+                "share_with only applies when log=True. Ignoring it.",
+                stacklevel=stacklevel,
+            )
         return False
+
+    warn_if_connect_tracing_unsupported(stacklevel=nested)
+
+    if importlib.util.find_spec("opentelemetry.sdk") is None:
+        warnings.warn(
+            "Trajectory logging requires the tracing extra. "
+            "Install it with: pip install 'commons[tracing]'",
+            stacklevel=stacklevel,
+        )
+        return False
+
     if not tracing_configured():
+        enable_content_observability(stacklevel=nested)
         return False
-    return content_capture_enabled()
+
+    if not content_capture_enabled():
+        return False
+
+    if share_with is not None:
+        share_trajectory_access(share_with, stacklevel=nested)
+    return True
 
 
 def tracing_configured() -> bool:
@@ -96,8 +145,12 @@ def tracing_configured() -> bool:
 
     Says nothing about whether that provider exports them anywhere. A provider
     with no span processor, or one sampling nothing, records and discards, and
-    only its owner can know that.
+    only its owner can know that. ``OTEL_SDK_DISABLED=true`` turns the SDK's
+    tracers into no-ops whatever provider is installed, so it counts as not
+    configured.
     """
+    if os.environ.get("OTEL_SDK_DISABLED", "").strip().lower() == "true":
+        return False
     provider = trace.get_tracer_provider()
     return not isinstance(
         provider, trace.ProxyTracerProvider | trace.NoOpTracerProvider
@@ -120,7 +173,9 @@ def content_capture_enabled() -> bool:
     return True
 
 
-def warn_if_connect_tracing_unsupported(*, client: ConnectClient | None = None) -> None:
+def warn_if_connect_tracing_unsupported(
+    *, client: ConnectClient | None = None, stacklevel: int = 2
+) -> None:
     """Warn when this Connect server cannot record trajectories.
 
     The server must be at least ``MINIMUM_TRACING_VERSION`` and must allow
@@ -144,7 +199,7 @@ def warn_if_connect_tracing_unsupported(*, client: ConnectClient | None = None) 
             f"This server is running Connect {settings['version']}, but "
             f"trajectory logging requires Connect >= {MINIMUM_TRACING_VERSION}. "
             "Please ask your server administrator to upgrade.",
-            stacklevel=2,
+            stacklevel=stacklevel,
         )
     elif settings.get("allow_content_instrumentation") is False:
         warnings.warn(
@@ -153,11 +208,13 @@ def warn_if_connect_tracing_unsupported(*, client: ConnectClient | None = None) 
             "OpenTelemetry.Enabled = true and "
             "OpenTelemetry.AllowContentInstrumentation = true in the Connect "
             "configuration, then restart Connect.",
-            stacklevel=2,
+            stacklevel=stacklevel,
         )
 
 
-def enable_content_observability(*, client: ConnectClient | None = None) -> None:
+def enable_content_observability(
+    *, client: ConnectClient | None = None, stacklevel: int = 2
+) -> None:
     """Turn on this content's Content Observability setting, and say so.
 
     For a process that started without tracing. Connect injects the exporter
@@ -187,7 +244,7 @@ def enable_content_observability(*, client: ConnectClient | None = None) -> None
             "active. In this content's Settings > Monitoring > Traces panel "
             "on Posit Connect, select Enabled, then redeploy or restart the "
             "content.",
-            stacklevel=2,
+            stacklevel=stacklevel,
         )
         return
 
@@ -200,5 +257,5 @@ def enable_content_observability(*, client: ConnectClient | None = None) -> None
     )
     warnings.warn(
         f"{first} Trajectory logging will begin once the content restarts.",
-        stacklevel=2,
+        stacklevel=stacklevel,
     )

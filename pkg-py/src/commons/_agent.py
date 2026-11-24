@@ -48,7 +48,11 @@ from ._reminders import append_restored_conversation_reminder, append_turn_remin
 from ._run_python import run_python_description, run_python_tools
 from ._semantic_models import semantic_registry
 from ._tools import FirstTouch, ToolContext, build_commons_tools
-from ._tracing import commons_span
+from ._tracing import (
+    check_trajectory_arguments,
+    commons_span,
+    enable_trajectory_tracing,
+)
 
 __all__ = ["Commons"]
 
@@ -104,7 +108,24 @@ class Commons(Chat[Any, Any]):
     limited checks instead. Warning! These checks are not intended to be a
     security boundary.
 
+    `log` requests trajectory capture with OpenTelemetry (default `False`).
+    It needs the `tracing` extra (`pip install 'commons[tracing]'`), and warns
+    without it. On Posit Connect, the agent warns when the server cannot
+    record trajectories, and turns on the content's Content Observability
+    setting when the process is not yet traced. Connect must be >= 2026.09.0,
+    with `OpenTelemetry.Enabled` and `OpenTelemetry.AllowContentInstrumentation`
+    set to `true` by a server administrator. Elsewhere, the agent records only
+    when a tracer provider is already installed. Logging also records the
+    authenticated Shiny session user, when Connect supplies one, for
+    attribution. `share_with` is a sequence of Connect usernames granted
+    access to this content's trajectories once logging is live. Reading
+    traces needs editor-level access, so the named users are added as
+    collaborators on the content, which is a wider grant than trace access.
+    They need an account that can publish. `share_with` applies only when
+    `log=True`.
+
     Construction raises a TypeError if `client` is not a `chatlas.Chat`, if
+    `log` is not a bool, if `share_with` is not a sequence of strings, if
     an entry of `data_sources` is not a `DataSource`, or if a layer is not
     the layer its argument claims; a ValueError if `data_sources` names no
     source, a measure asks for an injection no named source can fill, or
@@ -122,6 +143,8 @@ class Commons(Chat[Any, Any]):
         *,
         instructions: str | None = None,
         network: Literal["none", "full"] = "none",
+        log: bool = False,
+        share_with: Sequence[str] | None = None,
     ) -> None:
         if not isinstance(client, Chat):
             raise TypeError(
@@ -147,6 +170,7 @@ class Commons(Chat[Any, Any]):
                 f"{type(semantic_layer).__name__}."
             )
         check_instructions(instructions)
+        check_trajectory_arguments(log, share_with)
         definitions = build_registry(sources)
         semantic = semantic_registry(sources)
         with commons_span(
@@ -229,6 +253,12 @@ class Commons(Chat[Any, Any]):
                 tools=tools,
                 model=self.model,
             )
+
+        # After construction succeeds, so a failure has changed nothing on
+        # Connect, and outside the setup span, which times only the build.
+        self._tracing = enable_trajectory_tracing(
+            log=log, share_with=share_with, stacklevel=_CALLER
+        )
 
     def __repr__(self) -> str:
         count = len(self._sources)
@@ -461,8 +491,8 @@ class Commons(Chat[Any, Any]):
             self._restore_reminder_pending = False
 
 
-# Called straight from __init__, so one stacklevel reaches whoever built the
-# agent from every warning below.
+# The stacklevel that reaches whoever built the agent, from a function called
+# straight from __init__: the warnings below, and trajectory logging setup.
 _CALLER = 3
 
 

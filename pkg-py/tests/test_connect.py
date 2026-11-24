@@ -363,3 +363,10 @@ def test_the_version_comparison_matches_the_shared_cases(
 )
 def test_parse_connect_version(text: object, expected: tuple[int, ...] | None) -> None:
     assert parse_connect_version(text) == expected
+
+
+def test_a_malformed_server_url_is_a_connect_error() -> None:
+    client = ConnectClient("https://connect.example.com:notaport", "the-api-key")
+
+    with pytest.raises(ConnectError, match="GET /__api__/v1/content"):
+        client.request("GET", "content")
