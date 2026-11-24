@@ -347,7 +347,29 @@ trace.set_tracer_provider(provider)
 
 On Posit Connect (version 2026.09.0 or later) the server exports the spans itself, so this recipe is not needed there. An administrator must set `OpenTelemetry.Enabled` and `OpenTelemetry.AllowContentInstrumentation` to `true`. When the agent runs on Connect in a process with no active tracer provider, it turns on the content's Content Observability setting itself and warns that logging begins once the content restarts; otherwise, use the content's Settings > Monitoring > Traces panel. Once logging is live, the `share_with=["username"]` argument adds the named Connect users as collaborators on the content, so that they can read its traces. 
 
-The R package's `trajectory_read()` reads the resulting trace files and Connect's trace store. From R, pass it the directory, as in `trajectory_read("traces")`. It groups turns into conversations by the conversation id the application sets, as shinychat does when chat history is enabled. A turn without one reads as a conversation of its own, so to group a script's turns, set `conversation_id` on the chatlas client before you pass it to `commons.Commons()`.
+Read the files back with `commons.trajectory_read()`, as the next section describes. It groups turns into conversations by the conversation id the application sets, as shinychat does when chat history is enabled. A turn without one reads as a conversation of its own, so to group a script's turns, set `conversation_id` on the chatlas client before you pass it to `commons.Commons()`.
+
+## Reading logged conversations
+
+`commons.trajectory_read()` reads logged conversations back as chatlas turns. Pass it the directory of trace files. It reads the files named `trace.jsonl` and `trace-<n>.jsonl`, and files named from the `OTEL_EXPORTER_OTLP_TRACES_FILE` template. The `BatchSpanProcessor` exports spans in batches, so to read in the process that logged them, call `provider.force_flush()` first.
+
+```python
+import commons
+
+trajectories = commons.trajectory_read("traces")
+for conversation_id, trajectory in trajectories.items():
+    print(conversation_id, trajectory.last_active, len(trajectory.turns))
+```
+
+The result is a dictionary keyed by conversation id, with the oldest conversation first. Each `Trajectory` has the conversation's `turns`, the time of its last chat activity as `last_active`, and the authenticated `user` of the session when Connect recorded one. Its `exchanges` split the turns at each question the user asked. Each `Exchange` has its `turns` (the question and the turns that answer it), the answer's provenance `tag`, and its citation `decisions`. With no directory, `trajectory_read()` reads the directory of `OTEL_EXPORTER_OTLP_TRACES_FILE` when that variable is set, and otherwise it usually reads nothing, so pass the directory.
+
+Use `n` to keep only the most recent conversations, and `since` and `until` to keep the chat activity in a time window. Each bound is a `datetime`, a `date`, or a string like `"2026-07-22"` or `"2026-07-22 14:30"`, and a date or a string is read in local time. A conversation that continues past `until` is returned as it was at `until`. A conversation that started before `since` is returned with the history its latest call in the window recorded, and its exchanges take provenance only from calls in the window, so an exchange answered only before `since` has no record.
+
+```python
+recent = commons.trajectory_read("traces", n=20, since="2026-07-01")
+```
+
+Reading from Posit Connect is not supported yet. The R package's `trajectory_read()` reads Connect's trace store.
 
 ## Example application
 

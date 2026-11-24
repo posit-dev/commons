@@ -102,11 +102,21 @@ _CITATION_KINDS = get_args(CitationKind)
 
 @dataclass(frozen=True)
 class CitationDecision:
-    """One candidate and its verdict, recorded to ``commons.citation.candidates``.
+    """One citation in an answer, and whether its quote was verified.
 
-    ``label`` and ``kind`` name the source that verified the quote, so they are
-    absent unless the status is accepted. A malformed body has no quote to
-    record.
+    `status` is `"accepted"` when the quote, after normalization, is found in
+    the trusted text the agent was given (its documentation, measure
+    definitions, and data dictionaries), and `"rejected"` when it is not or is
+    too short to check. It is `"malformed"` when the citation does not have
+    exactly one block quote, so there is no quote to check. `quote` is the
+    quoted text, or None for a malformed citation. `label` names the trusted
+    source that matched an accepted quote, and
+    `kind` says what sort of source it is: `"prose"`, `"definition"`, or
+    `"schema"`. Both are None unless the status is accepted.
+
+    The agent records each decision to the `commons.citation.candidates` span
+    attribute, and `trajectory_read()` returns them in
+    `Exchange.decisions`.
     """
 
     quote: str | None

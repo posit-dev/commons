@@ -11,14 +11,11 @@ otlp_test_span <- function(
   start_time = "1",
   end_time = "2"
 ) {
-  span <- list(
-    traceId = trace_id,
-    spanId = span_id,
-    name = name,
-    startTimeUnixNano = start_time,
-    endTimeUnixNano = end_time,
-    attributes = attributes
-  )
+  span <- list(traceId = trace_id, spanId = span_id, name = name)
+  # A NULL time leaves the field out of the span.
+  span$startTimeUnixNano <- start_time
+  span$endTimeUnixNano <- end_time
+  span$attributes <- attributes
   span$parentSpanId <- parent_span_id
   span
 }
@@ -208,6 +205,168 @@ expect_semconv_turns <- function(turns, expected, info = NULL) {
       } else {
         fail(paste0("unknown descriptor type ", d$type), info = info)
       }
+    }
+  }
+}
+
+trajectory_fixture_span <- function(span) {
+  attributes <- list()
+  if (isTRUE(span[["chat"]])) {
+    attributes[["gen_ai.operation.name"]] <- "chat"
+  }
+  shorthand <- c(
+    conversation = "gen_ai.conversation.id",
+    system = "gen_ai.system_instructions",
+    input = "gen_ai.input.messages",
+    output = "gen_ai.output.messages"
+  )
+  for (field in names(shorthand)) {
+    if (!is.null(span[[field]])) {
+      attributes[[shorthand[[field]]]] <- span[[field]]
+    }
+  }
+  for (key in names(span[["attributes"]])) {
+    attributes[key] <- list(span[["attributes"]][[key]])
+  }
+  otlp_test_span(
+    span[["trace"]],
+    span[["span"]],
+    parent_span_id = span[["parent"]],
+    name = if (isTRUE(span[["chat"]])) "chat test-model" else span[["name"]],
+    attributes = lapply(names(attributes), function(key) {
+      otlp_test_attr(key, otlp_fixture_line(attributes[[key]]))
+    }),
+    start_time = fixture_time(span[["start"]], "1"),
+    end_time = fixture_time(span[["end"]], "2")
+  )
+}
+
+# `false` leaves the timestamp out; an absent one takes its default.
+fixture_time <- function(time, default) {
+  if (isFALSE(time)) NULL else time %||% default
+}
+
+fixture_instant <- function(x) {
+  if (is.null(x)) NULL else .POSIXct(x, tz = "UTC")
+}
+
+trajectory_fixture_run <- function(member, case, read = FALSE) {
+  spans <- case[["spans"]] %||% member[["spans"]]
+  line <- otlp_test_line(lapply(spans, trajectory_fixture_span))
+  notices <- character()
+  trajectories <- withCallingHandlers(
+    if (read) {
+      path <- withr::local_tempdir()
+      writeLines(line, file.path(path, "trace-1.jsonl"))
+      trajectory_read(
+        path,
+        n = case[["n"]],
+        from = fixture_instant(case[["since"]]),
+        to = fixture_instant(case[["until"]])
+      )
+    } else {
+      build_trajectories(parse_otlp_lines(line))
+    },
+    warning = function(cnd) {
+      notices <<- c(notices, "warning")
+      invokeRestart("muffleWarning")
+    },
+    message = function(cnd) {
+      notices <<- c(notices, "message")
+      invokeRestart("muffleMessage")
+    }
+  )
+  list(trajectories = trajectories, notices = notices)
+}
+
+expect_trajectories <- function(trajectories, expected, info = NULL) {
+  expect_identical(
+    names(trajectories) %||% character(),
+    vapply(expected, function(e) e[["id"]], character(1)),
+    info = info
+  )
+  for (e in expected) {
+    t <- trajectories[[e[["id"]]]]
+    if (!is.null(e[["turns"]])) {
+      expect_semconv_turns(t[["turns"]], e[["turns"]], info)
+    }
+    if (!is.null(e[["exchanges"]])) {
+      expect_identical(
+        lengths(split_exchanges(t[["turns"]])),
+        as.integer(unlist(e[["exchanges"]])),
+        info = info
+      )
+    }
+    if (!is.null(e[["provenance"]])) {
+      records <- attr(t[["turns"]], "provenance")
+      expect_equal(length(records), length(e[["provenance"]]), info = info)
+      for (i in seq_along(e[["provenance"]])) {
+        r <- records[[i]]
+        p <- e[["provenance"]][[i]]
+        expect_identical(
+          r[["provenance_tag"]],
+          p[["tag"]] %||% NA_character_,
+          info = info
+        )
+        expect_equal(
+          r[["citation_decisions"]],
+          p[["decisions"]],
+          info = info
+        )
+      }
+    }
+    if ("user" %in% names(e)) {
+      expect_identical(
+        t[["user"]],
+        e[["user"]] %||% NA_character_,
+        info = info
+      )
+    }
+    if (!is.null(e[["last_active"]])) {
+      expect_equal(
+        as.numeric(t[["last_active"]]),
+        e[["last_active"]],
+        info = info
+      )
+    }
+  }
+}
+
+expect_trajectory_member <- function(member, read = FALSE) {
+  expect_gt(length(member[["cases"]]), 0)
+  for (case in member[["cases"]]) {
+    info <- case[["name"]]
+    if (isTRUE(case[["error"]])) {
+      expect_error(trajectory_fixture_run(member, case, read), info = info)
+      next
+    }
+    result <- trajectory_fixture_run(member, case, read)
+    expect_identical(
+      result[["notices"]],
+      if (is.null(case[["notice"]])) character() else case[["notice"]],
+      info = info
+    )
+    expect_trajectories(result[["trajectories"]], case[["trajectories"]], info)
+  }
+}
+
+expect_window_bound_member <- function(member) {
+  withr::local_timezone("America/Denver")
+  expect_gt(length(member[["cases"]]), 0)
+  for (case in member[["cases"]]) {
+    value <- if (!is.null(case[["date"]])) {
+      as.Date(case[["date"]])
+    } else {
+      case[["string"]]
+    }
+    if (is.null(case[["utc"]])) {
+      expect_error(check_window_bound(value), "must be", info = case[["name"]])
+    } else {
+      expect_equal(
+        as.numeric(check_window_bound(value)),
+        as.numeric(as.POSIXct(case[["utc"]], tz = "UTC")),
+        info = case[["name"]]
+      )
     }
   }
 }

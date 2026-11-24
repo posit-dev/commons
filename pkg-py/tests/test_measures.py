@@ -1105,18 +1105,22 @@ def test_public_api_exposes_the_semantic_layer() -> None:
     import commons
 
     assert set(commons.__all__) == {
+        "CitationDecision",
         "Commons",
         "ContextLayer",
         "DataSource",
+        "Exchange",
         "Injected",
         "Measure",
         "SemanticLayer",
         "Tag",
+        "Trajectory",
         "context_layer",
         "data_source",
         "list_tables",
         "measure",
         "semantic_layer",
+        "trajectory_read",
     }
     assert commons.Injected is Injected
     assert commons.Measure is Measure

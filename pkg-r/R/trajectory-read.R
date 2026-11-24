@@ -27,7 +27,10 @@
 #'   string in a standard format like `"2026-07-22"` or
 #'   `"2026-07-22 14:30:00"`; dates and strings are interpreted in local
 #'   time. A conversation that continues past `to` is returned with its
-#'   history as of `to`.
+#'   history as of `to`. A conversation that started before `from` is
+#'   returned with the history its latest call in the window recorded, and
+#'   its exchanges take provenance only from calls in the window, so an
+#'   exchange answered only before `from` has no record.
 #'
 #' @details
 #' Reading traces from Connect requires the `CONNECT_API_KEY` environment

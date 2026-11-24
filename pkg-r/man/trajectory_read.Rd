@@ -29,7 +29,10 @@ filtering. \code{NULL} (the default) keeps all of them.}
 string in a standard format like \code{"2026-07-22"} or
 \code{"2026-07-22 14:30:00"}; dates and strings are interpreted in local
 time. A conversation that continues past \code{to} is returned with its
-history as of \code{to}.}
+history as of \code{to}. A conversation that started before \code{from} is
+returned with the history its latest call in the window recorded, and
+its exchanges take provenance only from calls in the window, so an
+exchange answered only before \code{from} has no record.}
 }
 \value{
 A list of conversations, named by conversation id and ordered
