@@ -381,10 +381,10 @@ Read the conversations an agent logged with `log=True`.
 read when it runs on Posit Connect. Off Connect, the deployed content's
 traces are read when the project has a deployment record, written by
 rsconnect-python under `rsconnect-python/` or by the R package rsconnect
-under `rsconnect/`. With several records, the most recently modified is
-read, and a warning names it. An rsconnect-python record that lists
-deployments to several servers does not say which is the latest, so
-`CONNECT_SERVER` picks one of them. Otherwise the directory the file
+under `rsconnect/`. With several records, the most recently modified
+one that may be used (see below) is read, and a warning names it. An
+rsconnect-python record that lists deployments to several servers does
+not say which is the latest, so `CONNECT_SERVER` picks one of them. Otherwise the directory the file
 exporter writes to is read: the directory of
 `OTEL_EXPORTER_OTLP_TRACES_FILE` when it is set, and otherwise
 `COMMONS_TRACES_DIR`, or `commons-traces` under the temporary directory.
@@ -397,8 +397,10 @@ the `OTEL_EXPORTER_OTLP_TRACES_FILE` template.
 
 Reading from Connect (2026.09.0 or later) needs `CONNECT_API_KEY`, and
 `CONNECT_SERVER` when the server is not in the URL, the deployment
-record, or the one server registered with rsconnect-python. The key's
-user needs editor-level access to the content: they must own it or be a
+record, or the one server registered with rsconnect-python. A deployment
+record is used only when it names `CONNECT_SERVER` or, if that is unset,
+a server registered with rsconnect-python. The key's user needs
+editor-level access to the content: they must own it or be a
 collaborator (see `share_with` on `Commons`). When Connect finds no
 traces and reports that the content's or the server's tracing setting is
 off, a warning names that setting.
@@ -419,17 +421,15 @@ chat span in the window has its ancestry cut off, the read is repeated
 once without `since`, and the job stores are then read unfiltered. `n`
 is not sent, and is applied after the read.
 
-A tool result whose tool call was not recorded has a placeholder
-request; `is_unlinked_result()` tells it apart from a linked result.
-
 Conversations whose spans record no message content are dropped. The
 result is keyed by conversation id, with the oldest conversation
 first.
 
 Raises `TypeError` when `source`, `n`, or a bound has an unsupported
 type; `ValueError` when there is no Connect server or API key, a
-deployment record does not settle which server to read, a URL is not
-recognised, or a bound or `n` has an invalid value; `LookupError` when
+deployment record does not settle which server to read or names a
+server it may not send the key to, a URL is not recognised, or a bound
+or `n` has an invalid value; `LookupError` when
 a vanity URL is not found; and a `RuntimeError` when Connect refuses
 access, has no such content, or a request to it fails.
 
@@ -471,22 +471,6 @@ source that matched an accepted quote, and
 The agent records each decision to the `commons.citation.candidates` span
 attribute, and `trajectory_read()` returns them in
 `Exchange.decisions`.
-
-is_unlinked_result(result: chatlas._content.ContentToolResult) -> bool
-
-Whether a tool result from `trajectory_read()` has no recorded tool call.
-
-A conversation's spans can record a tool result without the tool call it
-answers. Such a result has a placeholder `request`, with the result's
-recorded id, an empty name, and no arguments, so that chatlas can print
-it. This returns True for a result with that placeholder or with no
-request at all, and False for a result linked to a recorded tool call,
-even one that recorded no name.
-
-Parameters
-----------
-result
-    A tool result from the turns of a `Trajectory` or an `Exchange`.
 
 
 ## Shiny UI and server
@@ -589,6 +573,32 @@ The agent searches for a trusted calculation that answers the question. If it fi
 Although the agent had to decide *which* trusted calculation to run. It did not have to decide *what code to write*, reducing degrees of freedom and allowing the agent to use code that you already vetted.
 
 However, we also expect users to ask questions that stray from the “happy path.” For those, the agent searches for additional context and writes custom code (either SQL or Python). Answers from this path either include a blue quote-mark citation marker if a citation was found in the added context, or display the yellow exclamation provenance marker for an `Untrusted` outcome.
+
+## Working with the agent skill
+
+The package includes a commons [agent skill](https://agentskills.io/) that helps coding agents build, evaluate, and improve commons agents. We recommend installing it before you begin because it provides detailed guidance and a structured workflow.
+
+To make the skill available to **Posit Assistant or Codex**, copy the skill and its references to `.agents/skills`:
+
+```python
+import shutil
+from importlib.resources import as_file, files
+
+with as_file(files("commons") / "skills" / "commons") as skill:
+    shutil.copytree(skill, ".agents/skills/commons")
+```
+
+For **Claude Code**, copy the skill and its references to `.claude/skills`:
+
+```python
+import shutil
+from importlib.resources import as_file, files
+
+with as_file(files("commons") / "skills" / "commons") as skill:
+    shutil.copytree(skill, ".claude/skills/commons")
+```
+
+`copytree()` stops if the destination already exists, so it never mixes two versions of the skill, or the Python and R skills, in one directory. To update the skill after upgrading commons, delete the copied directory and copy it again.
 
 ## Trust flow
 
@@ -1023,7 +1033,7 @@ While both Python and R packages are first-class implementations of `commons`, t
 
 | R-only feature | What a Python agent does instead |
 |---|---|
-| The commons agent skill for coding agents | Ships with the R package only |
+| Calling measures, metrics, and trusted queries from code without a model, through the object `commons()` returns | Can call a measure function directly, passing its connection by hand; governed metrics and trusted queries run only through the agent ([#459](https://github.com/posit-dev/commons/issues/459)) |
 | Answering with trusted calculations only, with `agent(mode = "trusted only")` | Can always write its own SQL and Python |
 | Reports written as Quarto documents, shown in the chat's drawer and revised with `edit_artifact` | Answers in the chat only |
 | Sharing a conversation, document, plot, or table to Posit Connect | No equivalent yet ([#517](https://github.com/posit-dev/commons/issues/517)) |

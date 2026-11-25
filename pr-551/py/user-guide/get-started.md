@@ -26,6 +26,33 @@ Although the agent had to decide *which* trusted calculation to run. It did not 
 However, we also expect users to ask questions that stray from the "happy path." For those, the agent searches for additional context and writes custom code (either SQL or Python). Answers from this path either include a blue quote-mark citation marker if a citation was found in the added context, or display the yellow exclamation provenance marker for an `Untrusted` outcome.
 
 
+# Working with the agent skill
+
+The package includes a commons [agent skill](https://agentskills.io/) that helps coding agents build, evaluate, and improve commons agents. We recommend installing it before you begin because it provides detailed guidance and a structured workflow.
+
+To make the skill available to **Posit Assistant or Codex**, copy the skill and its references to `.agents/skills`:
+
+``` python
+import shutil
+from importlib.resources import as_file, files
+
+with as_file(files("commons") / "skills" / "commons") as skill:
+    shutil.copytree(skill, ".agents/skills/commons")
+```
+
+For **Claude Code**, copy the skill and its references to `.claude/skills`:
+
+``` python
+import shutil
+from importlib.resources import as_file, files
+
+with as_file(files("commons") / "skills" / "commons") as skill:
+    shutil.copytree(skill, ".claude/skills/commons")
+```
+
+`copytree()` stops if the destination already exists, so it never mixes two versions of the skill, or the Python and R skills, in one directory. To update the skill after upgrading commons, delete the copied directory and copy it again.
+
+
 # Trust flow
 
 A `commons` agent uses trusted calculations when it can. When the user asks a question, the agent first searches the semantic layer for a trusted calculation. If it finds one, it calls that calculation, and the answer shows the green check-shield provenance marker for the `Trusted` outcome.

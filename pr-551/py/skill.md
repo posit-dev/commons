@@ -81,7 +81,6 @@ Read back the conversations an agent logged with `log=True`.
 - `Trajectory`: One logged conversation
 - `Exchange`: One exchange of a conversation: a user's question and the turns that answer it
 - `CitationDecision`: One citation in an answer, and whether its quote was verified
-- `is_unlinked_result`: Whether a tool result from `trajectory_read()` has no recorded tool call
 
 ### Shiny UI and server
 

@@ -59,7 +59,7 @@
     "href": "user-guide/feature-parity.html",
     "title": "Feature parity with the R package",
     "section": "",
-    "text": "While both Python and R packages are first-class implementations of commons, the R implementation was developed first, and the Python package does not yet implement everything the R package does. This page lists the gaps that remain as of the current version and what a Python agent does instead.\n\n\n\nR-only feature\nWhat a Python agent does instead\n\n\n\n\nThe commons agent skill for coding agents\nShips with the R package only\n\n\nAnswering with trusted calculations only, with agent(mode = \"trusted only\")\nCan always write its own SQL and Python\n\n\nReports written as Quarto documents, shown in the chat’s drawer and revised with edit_artifact\nAnswers in the chat only\n\n\nSharing a conversation, document, plot, or table to Posit Connect\nNo equivalent yet (#517)\n\n\n\nThis page will shrink (and eventually disappear) as the Python package matures.",
+    "text": "While both Python and R packages are first-class implementations of commons, the R implementation was developed first, and the Python package does not yet implement everything the R package does. This page lists the gaps that remain as of the current version and what a Python agent does instead.\n\n\n\nR-only feature\nWhat a Python agent does instead\n\n\n\n\nCalling measures, metrics, and trusted queries from code without a model, through the object commons() returns\nCan call a measure function directly, passing its connection by hand; governed metrics and trusted queries run only through the agent (#459)\n\n\nAnswering with trusted calculations only, with agent(mode = \"trusted only\")\nCan always write its own SQL and Python\n\n\nReports written as Quarto documents, shown in the chat’s drawer and revised with edit_artifact\nAnswers in the chat only\n\n\nSharing a conversation, document, plot, or table to Posit Connect\nNo equivalent yet (#517)\n\n\n\nThis page will shrink (and eventually disappear) as the Python package matures.",
     "crumbs": [
       "User Guide",
       "Feature parity with the R package"
@@ -126,442 +126,99 @@
     ]
   },
   {
-    "objectID": "reference/index.html",
-    "href": "reference/index.html",
-    "title": "API Reference",
+    "objectID": "reference/data_source.html",
+    "href": "reference/data_source.html",
+    "title": "data_source()",
     "section": "",
-    "text": "Main functions\n\nThe main agent constructor, plus the building blocks for a commons agent.\n\n\nCommons\n\nA trustworthy agent that answers questions about its data.\n\ndata_source()\n\nCreate a data source from an engine, a pins board, or named frames.\n\nsemantic_layer()\n\nCollect measures into a semantic layer.\n\nmeasure()\n\nMark a function as a measure.\n\ncontext_layer()\n\nCreate a context layer from text or Markdown files.\n\n\n\n\nCommons Methods\n\nMethods for the Commons class\n\n\nCommons.__repr__()\n\n\n\nCommons.__deepcopy__()\n\n\n\nCommons.chat()\n\nAsk a question and wait for the whole answer.\n\nCommons.stream_async()\n\nAsk a question and stream the answer as it arrives.\n\nCommons.chat_async()\n\n\n\nCommons.stream()\n\n\n\nCommons.chat_structured()\n\n\n\nCommons.chat_structured_async()\n\n\n\nCommons.extract_data()\n\n\n\nCommons.extract_data_async()\n\n\n\nCommons.to_solver()\n\n\n\nCommons.citation_corpus()\n\nThe trusted text this agent’s citations are verified against.\n\nCommons.prewarm()\n\nBuild the caches the first question would otherwise pay for.\n\nCommons.add_turn()\n\nAdd a turn, restarting the citation request if a person spoke.\n\nCommons.set_turns()\n\nReplace the conversation, dropping any reminder queued for it.\n\nCommons.queue_restore_reminder()\n\nTell the next turn that the session behind its history is gone.\n\n\n\n\nSupporting types\n\nThe objects the constructors return, and the values they carry.\n\n\nDataSource\n\nTables an agent can query, and the dictionary that describes them.\n\nSemanticLayer\n\nThe trusted calculations an agent can run.\n\nContextLayer\n\nText that helps an agent interpret its data source.\n\nMeasure\n\nA trusted calculation the agent can run.\n\nInjected\n\n\n\nTag\n\nHow an answer was produced.\n\nlist_tables()\n\nThe table names an agent can query on source.\n\n\n\n\nDataSource Methods\n\nMethods for the DataSource class\n\n\nDataSource.from_frames()\n\nLoad named data frames into a locked-down in-process DuckDB.\n\nDataSource.from_engine()\n\nQuery a caller’s database directly. Nothing is copied.\n\nDataSource.from_board()\n\nExpose a pins board’s pins as tables, each read on first use.\n\nDataSource.query()\n\nRun one read-only statement, rejecting anything else first.\n\nDataSource.ensure_loaded()\n\nRead every pin this source has not read yet.\n\nDataSource.ensure_tables_loaded()\n\nRead the pins behind tables that this source has not read yet.\n\nDataSource.dialect()\n\nA hint for the system prompt, not a contract.\n\n\n\n\nReading logged conversations\n\nRead back the conversations an agent logged with log=True.\n\n\ntrajectory_read()\n\nRead the conversations an agent logged with log=True.\n\nTrajectory\n\nOne logged conversation.\n\nExchange\n\nOne exchange of a conversation: a user’s question and the turns that answer it.\n\nCitationDecision\n\nOne citation in an answer, and whether its quote was verified.\n\nis_unlinked_result()\n\nWhether a tool result from trajectory_read() has no recorded tool call.\n\n\n\n\nShiny UI and server\n\nPut a commons agent inside of an interactive chat app. Needs the shiny extra.\n\n\nui.app()\n\nBuild a complete app around a commons agent.\n\nui.server()\n\nWire a commons agent to the chat element id on the page.\n\nui.theme()\n\nBuild the theme a commons chat page uses.\n\nui.commons_chat_dependency()\n\nThe dependency serving the chat script, stylesheet and icons.\n\nui.asset_base_url()\n\nThe URL the assets are served under on a page.",
-    "crumbs": [
-      "API Reference",
-      "API Index"
-    ]
-  },
-  {
-    "objectID": "reference/context_layer.html",
-    "href": "reference/context_layer.html",
-    "title": "context_layer()",
-    "section": "",
-    "text": "Create a context layer from text or Markdown files.\n\n\nUsage\nSource\n\n\ncontext_layer(files=())\n\n\nfiles must be a collection of paths; a bare string or path raises TypeError. Files are read eagerly and decoded as UTF-8, so a missing path (FileNotFoundError), a directory (IsADirectoryError), or a file in another encoding (UnicodeDecodeError) fails here rather than mid-conversation.",
+    "text": "Create a data source from an engine, a pins board, or named frames.\n\n\nUsage\nSource\n\n\ndata_source(*args, tables=None, exclude=None, dictionary=None, **frames)\n\n\nA thin dispatcher over the constructors, which are the documented way in.\ntables, exclude, and dictionary are keyword-only options, so all three names are reserved in every form: a frame passed under one of them is rejected with a TypeError naming it, never silently consumed. tables selects tables of the engine and board forms, exclude drops relations from a warehouse catalog listing by glob, and dictionary attaches a data dictionary to any form. To use one as a frame name, call DataSource.from_frames() directly.\nA dictionary’s governed definitions are compiled for the source’s dialect during construction, so construction raises if the dialect has no emitter (DuckDB, Snowflake, and Databricks have one), if a definition sits on a table the source does not expose, or if a metric mixes row and aggregate grain. On a warehouse the authored column spellings are bound to the names the catalog reported before anything is lowered, so it raises there only if a table declaring definitions matched no exposed relation, or if a definition names an authored column the selected relation does not have.\nA Snowflake selection also imports the warehouse’s semantic views, and a Databricks selection its metric views. Their public metrics become trusted calculations, which their dimensions can group and filter. A view named in tables is read and checked for access when the source is created, and raises if it cannot be used. A view a namespace selection reaches is listed when the source is created and read only when the agent first inspects or uses it. Naming relations exactly also imports, where it can, the views in the same schemas that read only those relations; their access is checked only when the agent uses one. Name a view in tables to be sure it is imported.",
     "crumbs": [
       "API Reference",
       "Main functions",
-      "context_layer"
+      "data_source"
     ]
   },
   {
-    "objectID": "reference/Tag.html",
-    "href": "reference/Tag.html",
-    "title": "Tag",
+    "objectID": "reference/Trajectory.html",
+    "href": "reference/Trajectory.html",
+    "title": "Trajectory",
     "section": "",
-    "text": "How an answer was produced.",
-    "crumbs": [
-      "API Reference",
-      "Supporting types",
-      "Tag"
-    ]
-  },
-  {
-    "objectID": "reference/Tag.html#a",
-    "href": "reference/Tag.html#a",
-    "title": "Tag",
-    "section": "A",
-    "text": "A\n\n\n\n\nA=\"A\"",
-    "crumbs": [
-      "API Reference",
-      "Supporting types",
-      "Tag"
-    ]
-  },
-  {
-    "objectID": "reference/Tag.html#b",
-    "href": "reference/Tag.html#b",
-    "title": "Tag",
-    "section": "B",
-    "text": "B\n\n\n\n\nB=\"B\"",
-    "crumbs": [
-      "API Reference",
-      "Supporting types",
-      "Tag"
-    ]
-  },
-  {
-    "objectID": "reference/Tag.html#c",
-    "href": "reference/Tag.html#c",
-    "title": "Tag",
-    "section": "C",
-    "text": "C\n\n\n\n\nC=\"C\"",
-    "crumbs": [
-      "API Reference",
-      "Supporting types",
-      "Tag"
-    ]
-  },
-  {
-    "objectID": "reference/Measure.html",
-    "href": "reference/Measure.html",
-    "title": "Measure",
-    "section": "",
-    "text": "A trusted calculation the agent can run.",
-    "crumbs": [
-      "API Reference",
-      "Supporting types",
-      "Measure"
-    ]
-  },
-  {
-    "objectID": "reference/Measure.html#validate_args",
-    "href": "reference/Measure.html#validate_args",
-    "title": "Measure",
-    "section": "validate_args()",
-    "text": "validate_args()\n\nCheck and coerce the model’s arguments against the schema.\n\n\nUsage\nSource\n\n\nvalidate_args(args)\n\n\nThe provider only ever sees call_measure, so a measure’s own arguments arrive unchecked and are validated here.",
-    "crumbs": [
-      "API Reference",
-      "Supporting types",
-      "Measure"
-    ]
-  },
-  {
-    "objectID": "reference/Exchange.html",
-    "href": "reference/Exchange.html",
-    "title": "Exchange",
-    "section": "",
-    "text": "One exchange of a conversation: a user’s question and the turns that answer it.\n\n\nUsage\nSource\n\n\nExchange(turns, tag, decisions)\n\n\nturns starts with the user’s turn and runs to the turn before the next question. They are the same Turn objects as in Trajectory.turns. tag is the answer’s provenance tag, or None when none was recorded. decisions are the CitationDecisions recorded for the answer.\n\n\nParameter Attributes\n\n\nturns: list[Turn]\n\n\n\ntag: Tag | None\n\n\n\ndecisions: list[CitationDecision]",
+    "text": "One logged conversation.\n\n\nUsage\nSource\n\n\nTrajectory(turns, last_active, user, exchanges)\n\n\nturns are its chatlas turns as of its latest chat activity, and last_active is the time of that activity, in UTC. user is the authenticated user of the session, from the conversation’s earliest recorded chat, or None when none was recorded. exchanges splits turns at each question the user asked, with the provenance recorded for each answer. Turns before the first question, such as the system prompt, are in no exchange.\n\n\nParameter Attributes\n\n\nturns: list[Turn]\n\n\n\nlast_active: datetime\n\n\n\nuser: str | None\n\n\n\nexchanges: list[Exchange]",
     "crumbs": [
       "API Reference",
       "Reading logged conversations",
-      "Exchange"
+      "Trajectory"
     ]
   },
   {
-    "objectID": "reference/DataSource.html",
-    "href": "reference/DataSource.html",
-    "title": "DataSource",
+    "objectID": "reference/SemanticLayer.html",
+    "href": "reference/SemanticLayer.html",
+    "title": "SemanticLayer",
     "section": "",
-    "text": "Tables an agent can query, and the dictionary that describes them.\n\n\nUsage\nSource\n\n\nDataSource(\n    backend,\n    tables,\n    table_ids=dict(),\n    pending=None,\n    dictionary=None,\n    relations=None,\n    manifest=None,\n    session=None,\n    definition_bindings=None,\n    semantic_models=dict(),\n    semantic_stubs=dict()\n)\n\n\nParameter Attributes\n\n\nbackend: Backend\n\n\n\ntables: list[str]\n\n\n\ntable_ids: dict[str, TableId] = dict()\n\n\n\npending: _PendingPins | None = None\n\n\n\ndictionary: DataDictionary | None = None\n\n\n\nrelations: dict[str, Relation] | None = None\n\n\n\nmanifest: Manifest | None = None\n\n\n\nsession: SessionSnapshot | None = None\n\n\n\ndefinition_bindings: dict[str, Any] | None = None\n\n\n\nsemantic_models: dict[str, SemanticModel] = dict()\n\n\n\nsemantic_stubs: dict[str, SemanticStub] = dict()",
+    "text": "The trusted calculations an agent can run.\n\n\nUsage\nSource\n\n\nSemanticLayer(measures, source_text)\n\n\nsource_text holds the source of the measures and the module-level helpers they call, keyed by Python function name, dedented and without decorator lines so the worker can exec it as-is. Only text is kept: the agent’s worker session reads measure definitions but never receives a callable. Two functions that share a Python name share one entry, and the first definition collected wins, so a measure whose function shares its name with an earlier one is shown that earlier function’s source instead. The R implementation sources a path’s files into one shared environment, so there the last definition of a same-named helper wins instead, and is what every measure calling it actually runs.\nThe layout of this object is internal and may change without notice.\n\n\nParameter Attributes\n\n\nmeasures: Mapping[str, Measure]\n\n\n\nsource_text: Mapping[str, str]",
     "crumbs": [
       "API Reference",
       "Supporting types",
-      "DataSource"
+      "SemanticLayer"
     ]
   },
   {
-    "objectID": "reference/DataSource.from_engine.html",
-    "href": "reference/DataSource.from_engine.html",
-    "title": "DataSource.from_engine()",
+    "objectID": "reference/Injected.html",
+    "href": "reference/Injected.html",
+    "title": "Injected",
     "section": "",
-    "text": "Query a caller’s database directly. Nothing is copied.\n\n\nUsage\nSource\n\n\nDataSource.from_engine(engine, tables=None, exclude=None, dictionary=None)\n\n\nA Snowflake or Databricks engine imports its catalog: the selection is resolved against the warehouse, access to it is verified for the current principal, and what it reports is folded into dictionary.\nWith tables unset on any other backend, its own listing is taken as given: it reports what exists, so there is nothing to check and no round trip worth paying for.\nexclude takes unqualified object-name globs to drop from a warehouse catalog listing, such as \"TMP_*\". Only a warehouse has a listing to drop from, so any other engine refuses it. A glob matches a semantic view by its own name, not by the tables it reads, so a view over an excluded table can still answer metric queries.\nOn a warehouse dictionary is taken here because the catalog listing is folded into it during construction; on any other engine it is simply attached. Its governed definitions are lowered once the dialect and the final table set are known, at the end of construction.",
+    "text": "Injected=Annotated[_T, INJECTED]",
+    "crumbs": [
+      "API Reference",
+      "Supporting types",
+      "Injected"
+    ]
+  },
+  {
+    "objectID": "reference/DataSource.query.html",
+    "href": "reference/DataSource.query.html",
+    "title": "DataSource.query()",
+    "section": "",
+    "text": "Run one read-only statement, rejecting anything else first.\n\n\nUsage\nSource\n\n\nDataSource.query(sql)\n\n\nOn a warehouse source the connection identity is checked before the statement is read: access to these tables was decided for one principal, role, and namespace, so a query raises rather than runs once any of those has moved.",
     "crumbs": [
       "API Reference",
       "DataSource Methods",
-      "DataSource.from_engine"
+      "DataSource.query"
     ]
   },
   {
-    "objectID": "reference/DataSource.ensure_tables_loaded.html",
-    "href": "reference/DataSource.ensure_tables_loaded.html",
-    "title": "DataSource.ensure_tables_loaded()",
+    "objectID": "reference/DataSource.from_frames.html",
+    "href": "reference/DataSource.from_frames.html",
+    "title": "DataSource.from_frames()",
     "section": "",
-    "text": "Read the pins behind tables that this source has not read yet.\n\n\nUsage\nSource\n\n\nDataSource.ensure_tables_loaded(tables)\n\n\nFor a caller that reads a table’s columns from the backend rather than through query(), which is where loading otherwise happens. source_ensure_tables() in pkg-r/R/data-source.R is the same step.",
+    "text": "Load named data frames into a locked-down in-process DuckDB.\n\n\nUsage\nSource\n\n\nDataSource.from_frames(**frames)",
     "crumbs": [
       "API Reference",
       "DataSource Methods",
-      "DataSource.ensure_tables_loaded"
+      "DataSource.from_frames"
     ]
   },
   {
-    "objectID": "reference/DataSource.dialect.html",
-    "href": "reference/DataSource.dialect.html",
-    "title": "DataSource.dialect()",
+    "objectID": "reference/DataSource.from_board.html",
+    "href": "reference/DataSource.from_board.html",
+    "title": "DataSource.from_board()",
     "section": "",
-    "text": "A hint for the system prompt, not a contract.\n\n\nUsage\nSource\n\n\nDataSource.dialect()",
+    "text": "Expose a pins board’s pins as tables, each read on first use.\n\n\nUsage\nSource\n\n\nDataSource.from_board(board, tables, dictionary=None)\n\n\ndictionary is taken here so that the argument survives the dispatcher; a board has no catalog listing to fold into it. Its governed definitions are lowered at the end of construction, once the dialect and the final table set are known.",
     "crumbs": [
       "API Reference",
       "DataSource Methods",
-      "DataSource.dialect"
+      "DataSource.from_board"
     ]
   },
   {
-    "objectID": "reference/Commons.to_solver.html",
-    "href": "reference/Commons.to_solver.html",
-    "title": "Commons.to_solver()",
+    "objectID": "reference/DataSource.ensure_loaded.html",
+    "href": "reference/DataSource.ensure_loaded.html",
+    "title": "DataSource.ensure_loaded()",
     "section": "",
-    "text": "Usage\nSource\n\n\nCommons.to_solver(*args, **kwargs)",
+    "text": "Read every pin this source has not read yet.\n\n\nUsage\nSource\n\n\nDataSource.ensure_loaded()\n\n\nA board source loads a pin when a query names it, and that recovery lives on query(). A measure is handed the connection itself and never goes through query(), so nothing there would trigger the read and the measure would fail on a relation that does not exist yet. source_ensure_all() in pkg-r/R/data-source.R is the same step for the same reason. A source with nothing pending, which is every source that is not board-backed, does nothing.",
     "crumbs": [
       "API Reference",
-      "Commons Methods",
-      "Commons.to_solver"
-    ]
-  },
-  {
-    "objectID": "reference/Commons.stream.html",
-    "href": "reference/Commons.stream.html",
-    "title": "Commons.stream()",
-    "section": "",
-    "text": "Usage\nSource\n\n\nCommons.stream(*args, **kwargs)",
-    "crumbs": [
-      "API Reference",
-      "Commons Methods",
-      "Commons.stream"
-    ]
-  },
-  {
-    "objectID": "reference/Commons.queue_restore_reminder.html",
-    "href": "reference/Commons.queue_restore_reminder.html",
-    "title": "Commons.queue_restore_reminder()",
-    "section": "",
-    "text": "Tell the next turn that the session behind its history is gone.\n\n\nUsage\nSource\n\n\nCommons.queue_restore_reminder()",
-    "crumbs": [
-      "API Reference",
-      "Commons Methods",
-      "Commons.queue_restore_reminder"
-    ]
-  },
-  {
-    "objectID": "reference/Commons.prewarm.html",
-    "href": "reference/Commons.prewarm.html",
-    "title": "Commons.prewarm()",
-    "section": "",
-    "text": "Build the caches the first question would otherwise pay for.\n\n\nUsage\nSource\n\n\nCommons.prewarm()\n\n\nFailures propagate: a direct call is typically warming caches ahead of a deployment, so a cold cache should fail the deploy.",
-    "crumbs": [
-      "API Reference",
-      "Commons Methods",
-      "Commons.prewarm"
-    ]
-  },
-  {
-    "objectID": "reference/Commons.extract_data.html",
-    "href": "reference/Commons.extract_data.html",
-    "title": "Commons.extract_data()",
-    "section": "",
-    "text": "Usage\nSource\n\n\nCommons.extract_data(*args, **kwargs)",
-    "crumbs": [
-      "API Reference",
-      "Commons Methods",
-      "Commons.extract_data"
-    ]
-  },
-  {
-    "objectID": "reference/Commons.chat_structured_async.html",
-    "href": "reference/Commons.chat_structured_async.html",
-    "title": "Commons.chat_structured_async()",
-    "section": "",
-    "text": "Usage\nSource\n\n\nCommons.chat_structured_async(*args, **kwargs)",
-    "crumbs": [
-      "API Reference",
-      "Commons Methods",
-      "Commons.chat_structured_async"
-    ]
-  },
-  {
-    "objectID": "reference/Commons.chat_async.html",
-    "href": "reference/Commons.chat_async.html",
-    "title": "Commons.chat_async()",
-    "section": "",
-    "text": "Usage\nSource\n\n\nCommons.chat_async(*args, **kwargs)",
-    "crumbs": [
-      "API Reference",
-      "Commons Methods",
-      "Commons.chat_async"
-    ]
-  },
-  {
-    "objectID": "reference/Commons.add_turn.html",
-    "href": "reference/Commons.add_turn.html",
-    "title": "Commons.add_turn()",
-    "section": "",
-    "text": "Add a turn, restarting the citation request if a person spoke.\n\n\nUsage\nSource\n\n\nCommons.add_turn(turn)\n\n\nA user turn of nothing but tool results is the same question still running, and an assistant turn is nobody asking anything.",
-    "crumbs": [
-      "API Reference",
-      "Commons Methods",
-      "Commons.add_turn"
-    ]
-  },
-  {
-    "objectID": "reference/Commons.__deepcopy__.html",
-    "href": "reference/Commons.__deepcopy__.html",
-    "title": "Commons.__deepcopy__()",
-    "section": "",
-    "text": "Usage\nSource\n\n\nCommons.__deepcopy__(memo)",
-    "crumbs": [
-      "API Reference",
-      "Commons Methods",
-      "Commons.__deepcopy__"
-    ]
-  },
-  {
-    "objectID": "package-info.html",
-    "href": "package-info.html",
-    "title": "Package Info",
-    "section": "",
-    "text": "Package\nVersion Constraint\nLast Published\nPyPI\n\n\n\n\nchatlas\n&gt;=0.22.0\n2026-09-04\n\n\n\nhtmltools\n&gt;=0.6\n2026-05-21\n\n\n\nopentelemetry-api\n&gt;=1.0\n2026-10-29\n\n\n\npydantic\n&gt;=2\n2026-11-19\n\n\n\nduckdb\n&gt;=1.0\n2026-11-20\n\n\n\nraghilda\n&gt;=0.2.1\n2026-09-02\n\n\n\nsqlalchemy\n&gt;=2.0\n2026-11-16\n\n\n\npyyaml\n&gt;=6\n2026-11-20\n\n\n\njinja2\n&gt;=3\n2025-03-05\n\n\n\npyarrow\n&gt;=17\n2026-11-03\n\n\n\nsqlglot\n&gt;=25\n2026-11-24\n\n\n\ngoogle-re2\n&gt;=1.1.20251105\n2025-11-05\n\n\n\nhttpx\n&gt;=0.27\n2024-12-06"
-  },
-  {
-    "objectID": "package-info.html#shiny",
-    "href": "package-info.html#shiny",
-    "title": "Package Info",
-    "section": "shiny",
-    "text": "shiny\n\n\n\nPackage\nVersion Constraint\nLast Published\nPyPI\n\n\n\n\npackaging\n&gt;=23\n2026-11-23\n\n\n\nshiny\n&gt;=1.7\n2026-10-29\n\n\n\nshinychat\n&lt;0.8,&gt;=0.7\n2026-09-18"
-  },
-  {
-    "objectID": "package-info.html#tracing",
-    "href": "package-info.html#tracing",
-    "title": "Package Info",
-    "section": "tracing",
-    "text": "tracing\n\n\n\nPackage\nVersion Constraint\nLast Published\nPyPI\n\n\n\n\nopentelemetry-sdk\n&gt;=1.39\n2026-10-29\n\n\n\nopentelemetry-exporter-otlp-json-file\n—\n2026-10-29"
-  },
-  {
-    "objectID": "index.html",
-    "href": "index.html",
-    "title": "commons",
-    "section": "",
-    "text": "commons\nAI Agents for Data Analysis\ncommons helps data scientists build trustworthy data agents.\nData teams typically have trusted code that they use to analyze their data and build reports and apps. commons leverages that expertise, situating the information in a series of prompts and tools designed to create an accurate, fast, and cost-effective agent.\nTrusted calculations can come from Python functions (as measures) or data dictionary definitions."
-  },
-  {
-    "objectID": "index.html#installation",
-    "href": "index.html#installation",
-    "title": "commons",
-    "section": "Installation",
-    "text": "Installation\ncommons requires Python 3.11 or later. To install the package from PyPI, run:\n# create a virtual environment with `uv venv` if you need first, then run:\nuv pip install commons\nIf you want the chat UI, install the shiny extra, as well:\nuv pip install \"commons[shiny]\"\nOr, for the development version:\n# just the core package:\nuv pip install \"commons @ git+https://github.com/posit-dev/commons#subdirectory=pkg-py\"\n\n# with the shiny UI dependencies:\nuv pip install \"commons[shiny] @ git+https://github.com/posit-dev/commons#subdirectory=pkg-py\""
-  },
-  {
-    "objectID": "index.html#get-started",
-    "href": "index.html#get-started",
-    "title": "commons",
-    "section": "Get started",
-    "text": "Get started\ncommons uses chatlas to access LLMs, so you will need access to one of chatlas’s supported providers.\nThe Introduction to commons page explains the structure of a commons agent and the creation process. For a complete example application, see demo.py in the repository."
-  },
-  {
-    "objectID": "index.html#trusted-answers",
-    "href": "index.html#trusted-answers",
-    "title": "commons",
-    "section": "Trusted answers",
-    "text": "Trusted answers\nThere are two provenance paths available to a commons agent. When a user asks a question for which there is trusted code, the agent runs that code and reports the result. When no trusted code covers the question, the agent writes custom SQL, leaning on additional context provided to the agent.\nAnswers display provenance according to the analysis path followed, so users can determine how much trust to put in a given answer.\nFor more information, see the Introduction to commons page."
-  },
-  {
-    "objectID": "index.html#evaluation",
-    "href": "index.html#evaluation",
-    "title": "commons",
-    "section": "Evaluation",
-    "text": "Evaluation\nThe DevRel agent is an example commons agent (using the R implementation) that answers questions about adoption, engagement, and growth across Posit’s open-source projects. Its repository contains an evaluation comparing the commons agent with Claude Code on the same data; the R documentation presents the results."
-  },
-  {
-    "objectID": "reference/CitationDecision.html",
-    "href": "reference/CitationDecision.html",
-    "title": "CitationDecision",
-    "section": "",
-    "text": "One citation in an answer, and whether its quote was verified.",
-    "crumbs": [
-      "API Reference",
-      "Reading logged conversations",
-      "CitationDecision"
-    ]
-  },
-  {
-    "objectID": "reference/CitationDecision.html#as_record",
-    "href": "reference/CitationDecision.html#as_record",
-    "title": "CitationDecision",
-    "section": "as_record()",
-    "text": "as_record()\n\nSerialize a citation decision.\n\n\nUsage\nSource\n\n\nas_record()",
-    "crumbs": [
-      "API Reference",
-      "Reading logged conversations",
-      "CitationDecision"
-    ]
-  },
-  {
-    "objectID": "reference/Commons.__repr__.html",
-    "href": "reference/Commons.__repr__.html",
-    "title": "Commons.__repr__()",
-    "section": "",
-    "text": "Usage\nSource\n\n\nCommons.__repr__()",
-    "crumbs": [
-      "API Reference",
-      "Commons Methods",
-      "Commons.__repr__"
-    ]
-  },
-  {
-    "objectID": "reference/Commons.chat.html",
-    "href": "reference/Commons.chat.html",
-    "title": "Commons.chat()",
-    "section": "",
-    "text": "Ask a question and wait for the whole answer.\n\n\nUsage\nSource\n\n\nCommons.chat(*args, echo=\"output\", stream=True, kwargs=None)\n\n\nA reminder queued with queue_restore_reminder() rides this turn, and a turn that fails leaves it queued for the next one.",
-    "crumbs": [
-      "API Reference",
-      "Commons Methods",
-      "Commons.chat"
-    ]
-  },
-  {
-    "objectID": "reference/Commons.chat_structured.html",
-    "href": "reference/Commons.chat_structured.html",
-    "title": "Commons.chat_structured()",
-    "section": "",
-    "text": "Usage\nSource\n\n\nCommons.chat_structured(*args, **kwargs)",
-    "crumbs": [
-      "API Reference",
-      "Commons Methods",
-      "Commons.chat_structured"
-    ]
-  },
-  {
-    "objectID": "reference/Commons.citation_corpus.html",
-    "href": "reference/Commons.citation_corpus.html",
-    "title": "Commons.citation_corpus()",
-    "section": "",
-    "text": "The trusted text this agent’s citations are verified against.\n\n\nUsage\nSource\n\n\nCommons.citation_corpus()",
-    "crumbs": [
-      "API Reference",
-      "Commons Methods",
-      "Commons.citation_corpus"
-    ]
-  },
-  {
-    "objectID": "reference/Commons.extract_data_async.html",
-    "href": "reference/Commons.extract_data_async.html",
-    "title": "Commons.extract_data_async()",
-    "section": "",
-    "text": "Usage\nSource\n\n\nCommons.extract_data_async(*args, **kwargs)",
-    "crumbs": [
-      "API Reference",
-      "Commons Methods",
-      "Commons.extract_data_async"
-    ]
-  },
-  {
-    "objectID": "reference/Commons.html",
-    "href": "reference/Commons.html",
-    "title": "Commons",
-    "section": "",
-    "text": "A trustworthy agent that answers questions about its data.\n\n\nUsage\nSource\n\n\nCommons(\n    client,\n    data_sources,\n    semantic_layer=None,\n    context_layer=None,\n    *,\n    instructions=None,\n    network=\"none\",\n    log=False,\n    share_with=None\n)\n\n\nGiven a chatlas.Chat for the provider and model, the data sources it can query, and optionally a semantic layer of trusted calculations and a context layer of prose, a Commons agent will allow for agent interactions with answers classified by how they were produced.\nA Commons agent inherits directly from chatlas.Chat and relies on the chatlas infrastructure to set up the LLM provider and model. Commons initializes its own chat state and system prompt to ensure provenance and citation tracking. Passing a custom system prompt in the Commons constructor is ignored with a warning; use instructions to add to commons’ prompt instead. For best results, enable thinking where the provider and model support it.\nchat() and stream_async() are the currently supported ways to interact with a Commons agent. The other entry points chatlas offers (chat_async(), stream(), chat_structured(), etc.) are disabled and raise NotImplementedErrors because they are not (yet) tied in to the commons framework. The rest of chatlas’s surface works as it does on any chat.\ndata_sources is a DataSource, or a mapping of name to DataSource; a measure can take a named source’s connection as an argument named after it. instructions is extra text placed under an ## Additional instructions heading at the end of commons’ built-in system prompt, as a string or the path to a text or Markdown file.\nThe agent can run Python code that its model writes. The code runs in a separate, sandboxed Python process, which starts the first time the model runs code. network sets whether that process can reach the network: \"none\" (the default) or \"full\". The sandbox works on Linux and macOS. For local development on another system, set the COMMONS_ALLOW_UNSAFE_FALLBACK environment variable to run the code with limited checks instead. Warning! These checks are not intended to be a security boundary.\nlog requests trajectory capture with OpenTelemetry (default False). It needs the tracing extra (pip install 'commons[tracing]'), and warns without it. On Posit Connect, the agent warns when the server cannot record trajectories, and turns on the content’s Content Observability setting when the process is not yet traced. Connect must be &gt;= 2026.09.0, with OpenTelemetry.Enabled and OpenTelemetry.AllowContentInstrumentation set to true by a server administrator. Elsewhere, the agent records only when a tracer provider is already installed. Logging also records the authenticated Shiny session user, when Connect supplies one, for attribution. share_with is a sequence of Connect usernames granted access to this content’s trajectories once logging is live. Reading traces needs editor-level access, so the named users are added as collaborators on the content, which is a wider grant than trace access. They need an account that can publish. share_with applies only when log=True.\nConstruction raises a TypeError if client is not a chatlas.Chat, if log is not a bool, if share_with is not a sequence of strings, if an entry of data_sources is not a DataSource, or if a layer is not the layer its argument claims; a ValueError if data_sources names no source, a measure asks for an injection no named source can fill, or network is neither \"none\" nor \"full\"; a FileNotFoundError if instructions names a file that does not exist; and a RuntimeError if this host cannot sandbox the session and the opt-in is not set.",
-    "crumbs": [
-      "API Reference",
-      "Main functions",
-      "Commons"
-    ]
-  },
-  {
-    "objectID": "reference/Commons.set_turns.html",
-    "href": "reference/Commons.set_turns.html",
-    "title": "Commons.set_turns()",
-    "section": "",
-    "text": "Replace the conversation, dropping any reminder queued for it.\n\n\nUsage\nSource\n\n\nCommons.set_turns(turns)",
-    "crumbs": [
-      "API Reference",
-      "Commons Methods",
-      "Commons.set_turns"
-    ]
-  },
-  {
-    "objectID": "reference/Commons.stream_async.html",
-    "href": "reference/Commons.stream_async.html",
-    "title": "Commons.stream_async()",
-    "section": "",
-    "text": "Ask a question and stream the answer as it arrives.\n\n\nUsage\nSource\n\n\nCommons.stream_async(\n    *args,\n    content=\"text\",\n    echo=\"none\",\n    data_model=None,\n    kwargs=None,\n    controller=None\n)\n\n\nThe signature is identical to chatlas’s, so a chat UI can drive this agent directly and needs the attachment content, the mode, and the controller its stop button cancels through.\nThe Commons agent does not accept data_model. If you pass it, this method raises NotImplementedError. In chatlas, using data_model means the chunks are JSON that the caller parses as one document. Commons adds provenance markers and citations to the stream that are not compatible with data_model, so it is explicitly forbidden.",
-    "crumbs": [
-      "API Reference",
-      "Commons Methods",
-      "Commons.stream_async"
+      "DataSource Methods",
+      "DataSource.ensure_loaded"
     ]
   },
   {
@@ -613,111 +270,442 @@
     ]
   },
   {
-    "objectID": "reference/DataSource.ensure_loaded.html",
-    "href": "reference/DataSource.ensure_loaded.html",
-    "title": "DataSource.ensure_loaded()",
+    "objectID": "reference/Commons.stream_async.html",
+    "href": "reference/Commons.stream_async.html",
+    "title": "Commons.stream_async()",
     "section": "",
-    "text": "Read every pin this source has not read yet.\n\n\nUsage\nSource\n\n\nDataSource.ensure_loaded()\n\n\nA board source loads a pin when a query names it, and that recovery lives on query(). A measure is handed the connection itself and never goes through query(), so nothing there would trigger the read and the measure would fail on a relation that does not exist yet. source_ensure_all() in pkg-r/R/data-source.R is the same step for the same reason. A source with nothing pending, which is every source that is not board-backed, does nothing.",
+    "text": "Ask a question and stream the answer as it arrives.\n\n\nUsage\nSource\n\n\nCommons.stream_async(\n    *args,\n    content=\"text\",\n    echo=\"none\",\n    data_model=None,\n    kwargs=None,\n    controller=None\n)\n\n\nThe signature is identical to chatlas’s, so a chat UI can drive this agent directly and needs the attachment content, the mode, and the controller its stop button cancels through.\nThe Commons agent does not accept data_model. If you pass it, this method raises NotImplementedError. In chatlas, using data_model means the chunks are JSON that the caller parses as one document. Commons adds provenance markers and citations to the stream that are not compatible with data_model, so it is explicitly forbidden.",
     "crumbs": [
       "API Reference",
-      "DataSource Methods",
-      "DataSource.ensure_loaded"
+      "Commons Methods",
+      "Commons.stream_async"
     ]
   },
   {
-    "objectID": "reference/DataSource.from_board.html",
-    "href": "reference/DataSource.from_board.html",
-    "title": "DataSource.from_board()",
+    "objectID": "reference/Commons.set_turns.html",
+    "href": "reference/Commons.set_turns.html",
+    "title": "Commons.set_turns()",
     "section": "",
-    "text": "Expose a pins board’s pins as tables, each read on first use.\n\n\nUsage\nSource\n\n\nDataSource.from_board(board, tables, dictionary=None)\n\n\ndictionary is taken here so that the argument survives the dispatcher; a board has no catalog listing to fold into it. Its governed definitions are lowered at the end of construction, once the dialect and the final table set are known.",
+    "text": "Replace the conversation, dropping any reminder queued for it.\n\n\nUsage\nSource\n\n\nCommons.set_turns(turns)",
     "crumbs": [
       "API Reference",
-      "DataSource Methods",
-      "DataSource.from_board"
+      "Commons Methods",
+      "Commons.set_turns"
     ]
   },
   {
-    "objectID": "reference/DataSource.from_frames.html",
-    "href": "reference/DataSource.from_frames.html",
-    "title": "DataSource.from_frames()",
+    "objectID": "reference/Commons.html",
+    "href": "reference/Commons.html",
+    "title": "Commons",
     "section": "",
-    "text": "Load named data frames into a locked-down in-process DuckDB.\n\n\nUsage\nSource\n\n\nDataSource.from_frames(**frames)",
-    "crumbs": [
-      "API Reference",
-      "DataSource Methods",
-      "DataSource.from_frames"
-    ]
-  },
-  {
-    "objectID": "reference/DataSource.query.html",
-    "href": "reference/DataSource.query.html",
-    "title": "DataSource.query()",
-    "section": "",
-    "text": "Run one read-only statement, rejecting anything else first.\n\n\nUsage\nSource\n\n\nDataSource.query(sql)\n\n\nOn a warehouse source the connection identity is checked before the statement is read: access to these tables was decided for one principal, role, and namespace, so a query raises rather than runs once any of those has moved.",
-    "crumbs": [
-      "API Reference",
-      "DataSource Methods",
-      "DataSource.query"
-    ]
-  },
-  {
-    "objectID": "reference/Injected.html",
-    "href": "reference/Injected.html",
-    "title": "Injected",
-    "section": "",
-    "text": "Injected=Annotated[_T, INJECTED]",
-    "crumbs": [
-      "API Reference",
-      "Supporting types",
-      "Injected"
-    ]
-  },
-  {
-    "objectID": "reference/SemanticLayer.html",
-    "href": "reference/SemanticLayer.html",
-    "title": "SemanticLayer",
-    "section": "",
-    "text": "The trusted calculations an agent can run.\n\n\nUsage\nSource\n\n\nSemanticLayer(measures, source_text)\n\n\nsource_text holds the source of the measures and the module-level helpers they call, keyed by Python function name, dedented and without decorator lines so the worker can exec it as-is. Only text is kept: the agent’s worker session reads measure definitions but never receives a callable. Two functions that share a Python name share one entry, and the first definition collected wins, so a measure whose function shares its name with an earlier one is shown that earlier function’s source instead. The R implementation sources a path’s files into one shared environment, so there the last definition of a same-named helper wins instead, and is what every measure calling it actually runs.\nThe layout of this object is internal and may change without notice.\n\n\nParameter Attributes\n\n\nmeasures: Mapping[str, Measure]\n\n\n\nsource_text: Mapping[str, str]",
-    "crumbs": [
-      "API Reference",
-      "Supporting types",
-      "SemanticLayer"
-    ]
-  },
-  {
-    "objectID": "reference/Trajectory.html",
-    "href": "reference/Trajectory.html",
-    "title": "Trajectory",
-    "section": "",
-    "text": "One logged conversation.\n\n\nUsage\nSource\n\n\nTrajectory(turns, last_active, user, exchanges)\n\n\nturns are its chatlas turns as of its latest chat activity, and last_active is the time of that activity, in UTC. user is the authenticated user of the session, from the conversation’s earliest recorded chat, or None when none was recorded. exchanges splits turns at each question the user asked, with the provenance recorded for each answer. Turns before the first question, such as the system prompt, are in no exchange.\n\n\nParameter Attributes\n\n\nturns: list[Turn]\n\n\n\nlast_active: datetime\n\n\n\nuser: str | None\n\n\n\nexchanges: list[Exchange]",
-    "crumbs": [
-      "API Reference",
-      "Reading logged conversations",
-      "Trajectory"
-    ]
-  },
-  {
-    "objectID": "reference/data_source.html",
-    "href": "reference/data_source.html",
-    "title": "data_source()",
-    "section": "",
-    "text": "Create a data source from an engine, a pins board, or named frames.\n\n\nUsage\nSource\n\n\ndata_source(*args, tables=None, exclude=None, dictionary=None, **frames)\n\n\nA thin dispatcher over the constructors, which are the documented way in.\ntables, exclude, and dictionary are keyword-only options, so all three names are reserved in every form: a frame passed under one of them is rejected with a TypeError naming it, never silently consumed. tables selects tables of the engine and board forms, exclude drops relations from a warehouse catalog listing by glob, and dictionary attaches a data dictionary to any form. To use one as a frame name, call DataSource.from_frames() directly.\nA dictionary’s governed definitions are compiled for the source’s dialect during construction, so construction raises if the dialect has no emitter (DuckDB, Snowflake, and Databricks have one), if a definition sits on a table the source does not expose, or if a metric mixes row and aggregate grain. On a warehouse the authored column spellings are bound to the names the catalog reported before anything is lowered, so it raises there only if a table declaring definitions matched no exposed relation, or if a definition names an authored column the selected relation does not have.\nA Snowflake selection also imports the warehouse’s semantic views, and a Databricks selection its metric views. Their public metrics become trusted calculations, which their dimensions can group and filter. A view named in tables is read and checked for access when the source is created, and raises if it cannot be used. A view a namespace selection reaches is listed when the source is created and read only when the agent first inspects or uses it. Naming relations exactly also imports, where it can, the views in the same schemas that read only those relations; their access is checked only when the agent uses one. Name a view in tables to be sure it is imported.",
+    "text": "A trustworthy agent that answers questions about its data.\n\n\nUsage\nSource\n\n\nCommons(\n    client,\n    data_sources,\n    semantic_layer=None,\n    context_layer=None,\n    *,\n    instructions=None,\n    network=\"none\",\n    log=False,\n    share_with=None\n)\n\n\nGiven a chatlas.Chat for the provider and model, the data sources it can query, and optionally a semantic layer of trusted calculations and a context layer of prose, a Commons agent will allow for agent interactions with answers classified by how they were produced.\nA Commons agent inherits directly from chatlas.Chat and relies on the chatlas infrastructure to set up the LLM provider and model. Commons initializes its own chat state and system prompt to ensure provenance and citation tracking. Passing a custom system prompt in the Commons constructor is ignored with a warning; use instructions to add to commons’ prompt instead. For best results, enable thinking where the provider and model support it.\nchat() and stream_async() are the currently supported ways to interact with a Commons agent. The other entry points chatlas offers (chat_async(), stream(), chat_structured(), etc.) are disabled and raise NotImplementedErrors because they are not (yet) tied in to the commons framework. The rest of chatlas’s surface works as it does on any chat.\ndata_sources is a DataSource, or a mapping of name to DataSource; a measure can take a named source’s connection as an argument named after it. instructions is extra text placed under an ## Additional instructions heading at the end of commons’ built-in system prompt, as a string or the path to a text or Markdown file.\nThe agent can run Python code that its model writes. The code runs in a separate, sandboxed Python process, which starts the first time the model runs code. network sets whether that process can reach the network: \"none\" (the default) or \"full\". The sandbox works on Linux and macOS. For local development on another system, set the COMMONS_ALLOW_UNSAFE_FALLBACK environment variable to run the code with limited checks instead. Warning! These checks are not intended to be a security boundary.\nlog requests trajectory capture with OpenTelemetry (default False). It needs the tracing extra (pip install 'commons[tracing]'), and warns without it. On Posit Connect, the agent warns when the server cannot record trajectories, and turns on the content’s Content Observability setting when the process is not yet traced. Connect must be &gt;= 2026.09.0, with OpenTelemetry.Enabled and OpenTelemetry.AllowContentInstrumentation set to true by a server administrator. Elsewhere, the agent records only when a tracer provider is already installed. Logging also records the authenticated Shiny session user, when Connect supplies one, for attribution. share_with is a sequence of Connect usernames granted access to this content’s trajectories once logging is live. Reading traces needs editor-level access, so the named users are added as collaborators on the content, which is a wider grant than trace access. They need an account that can publish. share_with applies only when log=True.\nConstruction raises a TypeError if client is not a chatlas.Chat, if log is not a bool, if share_with is not a sequence of strings, if an entry of data_sources is not a DataSource, or if a layer is not the layer its argument claims; a ValueError if data_sources names no source, a measure asks for an injection no named source can fill, or network is neither \"none\" nor \"full\"; a FileNotFoundError if instructions names a file that does not exist; and a RuntimeError if this host cannot sandbox the session and the opt-in is not set.",
     "crumbs": [
       "API Reference",
       "Main functions",
-      "data_source"
+      "Commons"
     ]
   },
   {
-    "objectID": "reference/is_unlinked_result.html",
-    "href": "reference/is_unlinked_result.html",
-    "title": "is_unlinked_result()",
+    "objectID": "reference/Commons.extract_data_async.html",
+    "href": "reference/Commons.extract_data_async.html",
+    "title": "Commons.extract_data_async()",
     "section": "",
-    "text": "Whether a tool result from trajectory_read() has no recorded tool call.\n\n\nUsage\nSource\n\n\nis_unlinked_result(result)\n\n\nA conversation’s spans can record a tool result without the tool call it answers. Such a result has a placeholder request, with the result’s recorded id, an empty name, and no arguments, so that chatlas can print it. This returns True for a result with that placeholder or with no request at all, and False for a result linked to a recorded tool call, even one that recorded no name.\n\n\nParameters\n\n\nresult: ContentToolResult\n\nA tool result from the turns of a Trajectory or an Exchange.",
+    "text": "Usage\nSource\n\n\nCommons.extract_data_async(*args, **kwargs)",
+    "crumbs": [
+      "API Reference",
+      "Commons Methods",
+      "Commons.extract_data_async"
+    ]
+  },
+  {
+    "objectID": "reference/Commons.citation_corpus.html",
+    "href": "reference/Commons.citation_corpus.html",
+    "title": "Commons.citation_corpus()",
+    "section": "",
+    "text": "The trusted text this agent’s citations are verified against.\n\n\nUsage\nSource\n\n\nCommons.citation_corpus()",
+    "crumbs": [
+      "API Reference",
+      "Commons Methods",
+      "Commons.citation_corpus"
+    ]
+  },
+  {
+    "objectID": "reference/Commons.chat_structured.html",
+    "href": "reference/Commons.chat_structured.html",
+    "title": "Commons.chat_structured()",
+    "section": "",
+    "text": "Usage\nSource\n\n\nCommons.chat_structured(*args, **kwargs)",
+    "crumbs": [
+      "API Reference",
+      "Commons Methods",
+      "Commons.chat_structured"
+    ]
+  },
+  {
+    "objectID": "reference/Commons.chat.html",
+    "href": "reference/Commons.chat.html",
+    "title": "Commons.chat()",
+    "section": "",
+    "text": "Ask a question and wait for the whole answer.\n\n\nUsage\nSource\n\n\nCommons.chat(*args, echo=\"output\", stream=True, kwargs=None)\n\n\nA reminder queued with queue_restore_reminder() rides this turn, and a turn that fails leaves it queued for the next one.",
+    "crumbs": [
+      "API Reference",
+      "Commons Methods",
+      "Commons.chat"
+    ]
+  },
+  {
+    "objectID": "reference/Commons.__repr__.html",
+    "href": "reference/Commons.__repr__.html",
+    "title": "Commons.__repr__()",
+    "section": "",
+    "text": "Usage\nSource\n\n\nCommons.__repr__()",
+    "crumbs": [
+      "API Reference",
+      "Commons Methods",
+      "Commons.__repr__"
+    ]
+  },
+  {
+    "objectID": "reference/CitationDecision.html",
+    "href": "reference/CitationDecision.html",
+    "title": "CitationDecision",
+    "section": "",
+    "text": "One citation in an answer, and whether its quote was verified.",
     "crumbs": [
       "API Reference",
       "Reading logged conversations",
-      "is_unlinked_result"
+      "CitationDecision"
+    ]
+  },
+  {
+    "objectID": "reference/CitationDecision.html#as_record",
+    "href": "reference/CitationDecision.html#as_record",
+    "title": "CitationDecision",
+    "section": "as_record()",
+    "text": "as_record()\n\nSerialize a citation decision.\n\n\nUsage\nSource\n\n\nas_record()",
+    "crumbs": [
+      "API Reference",
+      "Reading logged conversations",
+      "CitationDecision"
+    ]
+  },
+  {
+    "objectID": "index.html",
+    "href": "index.html",
+    "title": "commons",
+    "section": "",
+    "text": "commons\nAI Agents for Data Analysis\ncommons helps data scientists build trustworthy data agents.\nData teams typically have trusted code that they use to analyze their data and build reports and apps. commons leverages that expertise, situating the information in a series of prompts and tools designed to create an accurate, fast, and cost-effective agent.\nTrusted calculations can come from Python functions (as measures) or data dictionary definitions."
+  },
+  {
+    "objectID": "index.html#installation",
+    "href": "index.html#installation",
+    "title": "commons",
+    "section": "Installation",
+    "text": "Installation\ncommons requires Python 3.11 or later. To install the package from PyPI, run:\n# create a virtual environment with `uv venv` if you need first, then run:\nuv pip install commons\nIf you want the chat UI, install the shiny extra, as well:\nuv pip install \"commons[shiny]\"\nOr, for the development version:\n# just the core package:\nuv pip install \"commons @ git+https://github.com/posit-dev/commons#subdirectory=pkg-py\"\n\n# with the shiny UI dependencies:\nuv pip install \"commons[shiny] @ git+https://github.com/posit-dev/commons#subdirectory=pkg-py\""
+  },
+  {
+    "objectID": "index.html#get-started",
+    "href": "index.html#get-started",
+    "title": "commons",
+    "section": "Get started",
+    "text": "Get started\ncommons uses chatlas to access LLMs, so you will need access to one of chatlas’s supported providers.\nThe Introduction to commons page explains the structure of a commons agent and the creation process. For a complete example application, see demo.py in the repository."
+  },
+  {
+    "objectID": "index.html#trusted-answers",
+    "href": "index.html#trusted-answers",
+    "title": "commons",
+    "section": "Trusted answers",
+    "text": "Trusted answers\nThere are two provenance paths available to a commons agent. When a user asks a question for which there is trusted code, the agent runs that code and reports the result. When no trusted code covers the question, the agent writes custom SQL, leaning on additional context provided to the agent.\nAnswers display provenance according to the analysis path followed, so users can determine how much trust to put in a given answer.\nFor more information, see the Introduction to commons page."
+  },
+  {
+    "objectID": "index.html#evaluation",
+    "href": "index.html#evaluation",
+    "title": "commons",
+    "section": "Evaluation",
+    "text": "Evaluation\nThe DevRel agent is an example commons agent (using the R implementation) that answers questions about adoption, engagement, and growth across Posit’s open-source projects. Its repository contains an evaluation comparing the commons agent with Claude Code on the same data; the R documentation presents the results."
+  },
+  {
+    "objectID": "package-info.html",
+    "href": "package-info.html",
+    "title": "Package Info",
+    "section": "",
+    "text": "Package\nVersion Constraint\nLast Published\nPyPI\n\n\n\n\nchatlas\n&gt;=0.22.0\n2026-09-04\n\n\n\nhtmltools\n&gt;=0.6\n2026-05-21\n\n\n\nopentelemetry-api\n&gt;=1.0\n2026-10-29\n\n\n\npydantic\n&gt;=2\n2026-11-19\n\n\n\nduckdb\n&gt;=1.0\n2026-11-20\n\n\n\nraghilda\n&gt;=0.2.1\n2026-09-02\n\n\n\nsqlalchemy\n&gt;=2.0\n2026-11-16\n\n\n\npyyaml\n&gt;=6\n2026-11-20\n\n\n\njinja2\n&gt;=3\n2025-03-05\n\n\n\npyarrow\n&gt;=17\n2026-11-03\n\n\n\nsqlglot\n&gt;=25\n2026-11-24\n\n\n\ngoogle-re2\n&gt;=1.1.20251105\n2025-11-05\n\n\n\nhttpx\n&gt;=0.27\n2024-12-06"
+  },
+  {
+    "objectID": "package-info.html#shiny",
+    "href": "package-info.html#shiny",
+    "title": "Package Info",
+    "section": "shiny",
+    "text": "shiny\n\n\n\nPackage\nVersion Constraint\nLast Published\nPyPI\n\n\n\n\npackaging\n&gt;=23\n2026-11-23\n\n\n\nshiny\n&gt;=1.7\n2026-10-29\n\n\n\nshinychat\n&lt;0.8,&gt;=0.7\n2026-09-18"
+  },
+  {
+    "objectID": "package-info.html#tracing",
+    "href": "package-info.html#tracing",
+    "title": "Package Info",
+    "section": "tracing",
+    "text": "tracing\n\n\n\nPackage\nVersion Constraint\nLast Published\nPyPI\n\n\n\n\nopentelemetry-sdk\n&gt;=1.39\n2026-10-29\n\n\n\nopentelemetry-exporter-otlp-json-file\n—\n2026-10-29"
+  },
+  {
+    "objectID": "reference/Commons.__deepcopy__.html",
+    "href": "reference/Commons.__deepcopy__.html",
+    "title": "Commons.__deepcopy__()",
+    "section": "",
+    "text": "Usage\nSource\n\n\nCommons.__deepcopy__(memo)",
+    "crumbs": [
+      "API Reference",
+      "Commons Methods",
+      "Commons.__deepcopy__"
+    ]
+  },
+  {
+    "objectID": "reference/Commons.add_turn.html",
+    "href": "reference/Commons.add_turn.html",
+    "title": "Commons.add_turn()",
+    "section": "",
+    "text": "Add a turn, restarting the citation request if a person spoke.\n\n\nUsage\nSource\n\n\nCommons.add_turn(turn)\n\n\nA user turn of nothing but tool results is the same question still running, and an assistant turn is nobody asking anything.",
+    "crumbs": [
+      "API Reference",
+      "Commons Methods",
+      "Commons.add_turn"
+    ]
+  },
+  {
+    "objectID": "reference/Commons.chat_async.html",
+    "href": "reference/Commons.chat_async.html",
+    "title": "Commons.chat_async()",
+    "section": "",
+    "text": "Usage\nSource\n\n\nCommons.chat_async(*args, **kwargs)",
+    "crumbs": [
+      "API Reference",
+      "Commons Methods",
+      "Commons.chat_async"
+    ]
+  },
+  {
+    "objectID": "reference/Commons.chat_structured_async.html",
+    "href": "reference/Commons.chat_structured_async.html",
+    "title": "Commons.chat_structured_async()",
+    "section": "",
+    "text": "Usage\nSource\n\n\nCommons.chat_structured_async(*args, **kwargs)",
+    "crumbs": [
+      "API Reference",
+      "Commons Methods",
+      "Commons.chat_structured_async"
+    ]
+  },
+  {
+    "objectID": "reference/Commons.extract_data.html",
+    "href": "reference/Commons.extract_data.html",
+    "title": "Commons.extract_data()",
+    "section": "",
+    "text": "Usage\nSource\n\n\nCommons.extract_data(*args, **kwargs)",
+    "crumbs": [
+      "API Reference",
+      "Commons Methods",
+      "Commons.extract_data"
+    ]
+  },
+  {
+    "objectID": "reference/Commons.prewarm.html",
+    "href": "reference/Commons.prewarm.html",
+    "title": "Commons.prewarm()",
+    "section": "",
+    "text": "Build the caches the first question would otherwise pay for.\n\n\nUsage\nSource\n\n\nCommons.prewarm()\n\n\nFailures propagate: a direct call is typically warming caches ahead of a deployment, so a cold cache should fail the deploy.",
+    "crumbs": [
+      "API Reference",
+      "Commons Methods",
+      "Commons.prewarm"
+    ]
+  },
+  {
+    "objectID": "reference/Commons.queue_restore_reminder.html",
+    "href": "reference/Commons.queue_restore_reminder.html",
+    "title": "Commons.queue_restore_reminder()",
+    "section": "",
+    "text": "Tell the next turn that the session behind its history is gone.\n\n\nUsage\nSource\n\n\nCommons.queue_restore_reminder()",
+    "crumbs": [
+      "API Reference",
+      "Commons Methods",
+      "Commons.queue_restore_reminder"
+    ]
+  },
+  {
+    "objectID": "reference/Commons.stream.html",
+    "href": "reference/Commons.stream.html",
+    "title": "Commons.stream()",
+    "section": "",
+    "text": "Usage\nSource\n\n\nCommons.stream(*args, **kwargs)",
+    "crumbs": [
+      "API Reference",
+      "Commons Methods",
+      "Commons.stream"
+    ]
+  },
+  {
+    "objectID": "reference/Commons.to_solver.html",
+    "href": "reference/Commons.to_solver.html",
+    "title": "Commons.to_solver()",
+    "section": "",
+    "text": "Usage\nSource\n\n\nCommons.to_solver(*args, **kwargs)",
+    "crumbs": [
+      "API Reference",
+      "Commons Methods",
+      "Commons.to_solver"
+    ]
+  },
+  {
+    "objectID": "reference/DataSource.dialect.html",
+    "href": "reference/DataSource.dialect.html",
+    "title": "DataSource.dialect()",
+    "section": "",
+    "text": "A hint for the system prompt, not a contract.\n\n\nUsage\nSource\n\n\nDataSource.dialect()",
+    "crumbs": [
+      "API Reference",
+      "DataSource Methods",
+      "DataSource.dialect"
+    ]
+  },
+  {
+    "objectID": "reference/DataSource.ensure_tables_loaded.html",
+    "href": "reference/DataSource.ensure_tables_loaded.html",
+    "title": "DataSource.ensure_tables_loaded()",
+    "section": "",
+    "text": "Read the pins behind tables that this source has not read yet.\n\n\nUsage\nSource\n\n\nDataSource.ensure_tables_loaded(tables)\n\n\nFor a caller that reads a table’s columns from the backend rather than through query(), which is where loading otherwise happens. source_ensure_tables() in pkg-r/R/data-source.R is the same step.",
+    "crumbs": [
+      "API Reference",
+      "DataSource Methods",
+      "DataSource.ensure_tables_loaded"
+    ]
+  },
+  {
+    "objectID": "reference/DataSource.from_engine.html",
+    "href": "reference/DataSource.from_engine.html",
+    "title": "DataSource.from_engine()",
+    "section": "",
+    "text": "Query a caller’s database directly. Nothing is copied.\n\n\nUsage\nSource\n\n\nDataSource.from_engine(engine, tables=None, exclude=None, dictionary=None)\n\n\nA Snowflake or Databricks engine imports its catalog: the selection is resolved against the warehouse, access to it is verified for the current principal, and what it reports is folded into dictionary.\nWith tables unset on any other backend, its own listing is taken as given: it reports what exists, so there is nothing to check and no round trip worth paying for.\nexclude takes unqualified object-name globs to drop from a warehouse catalog listing, such as \"TMP_*\". Only a warehouse has a listing to drop from, so any other engine refuses it. A glob matches a semantic view by its own name, not by the tables it reads, so a view over an excluded table can still answer metric queries.\nOn a warehouse dictionary is taken here because the catalog listing is folded into it during construction; on any other engine it is simply attached. Its governed definitions are lowered once the dialect and the final table set are known, at the end of construction.",
+    "crumbs": [
+      "API Reference",
+      "DataSource Methods",
+      "DataSource.from_engine"
+    ]
+  },
+  {
+    "objectID": "reference/DataSource.html",
+    "href": "reference/DataSource.html",
+    "title": "DataSource",
+    "section": "",
+    "text": "Tables an agent can query, and the dictionary that describes them.\n\n\nUsage\nSource\n\n\nDataSource(\n    backend,\n    tables,\n    table_ids=dict(),\n    pending=None,\n    dictionary=None,\n    relations=None,\n    manifest=None,\n    session=None,\n    definition_bindings=None,\n    semantic_models=dict(),\n    semantic_stubs=dict()\n)\n\n\nParameter Attributes\n\n\nbackend: Backend\n\n\n\ntables: list[str]\n\n\n\ntable_ids: dict[str, TableId] = dict()\n\n\n\npending: _PendingPins | None = None\n\n\n\ndictionary: DataDictionary | None = None\n\n\n\nrelations: dict[str, Relation] | None = None\n\n\n\nmanifest: Manifest | None = None\n\n\n\nsession: SessionSnapshot | None = None\n\n\n\ndefinition_bindings: dict[str, Any] | None = None\n\n\n\nsemantic_models: dict[str, SemanticModel] = dict()\n\n\n\nsemantic_stubs: dict[str, SemanticStub] = dict()",
+    "crumbs": [
+      "API Reference",
+      "Supporting types",
+      "DataSource"
+    ]
+  },
+  {
+    "objectID": "reference/Exchange.html",
+    "href": "reference/Exchange.html",
+    "title": "Exchange",
+    "section": "",
+    "text": "One exchange of a conversation: a user’s question and the turns that answer it.\n\n\nUsage\nSource\n\n\nExchange(turns, tag, decisions)\n\n\nturns starts with the user’s turn and runs to the turn before the next question. They are the same Turn objects as in Trajectory.turns. tag is the answer’s provenance tag, or None when none was recorded. decisions are the CitationDecisions recorded for the answer.\n\n\nParameter Attributes\n\n\nturns: list[Turn]\n\n\n\ntag: Tag | None\n\n\n\ndecisions: list[CitationDecision]",
+    "crumbs": [
+      "API Reference",
+      "Reading logged conversations",
+      "Exchange"
+    ]
+  },
+  {
+    "objectID": "reference/Measure.html",
+    "href": "reference/Measure.html",
+    "title": "Measure",
+    "section": "",
+    "text": "A trusted calculation the agent can run.",
+    "crumbs": [
+      "API Reference",
+      "Supporting types",
+      "Measure"
+    ]
+  },
+  {
+    "objectID": "reference/Measure.html#validate_args",
+    "href": "reference/Measure.html#validate_args",
+    "title": "Measure",
+    "section": "validate_args()",
+    "text": "validate_args()\n\nCheck and coerce the model’s arguments against the schema.\n\n\nUsage\nSource\n\n\nvalidate_args(args)\n\n\nThe provider only ever sees call_measure, so a measure’s own arguments arrive unchecked and are validated here.",
+    "crumbs": [
+      "API Reference",
+      "Supporting types",
+      "Measure"
+    ]
+  },
+  {
+    "objectID": "reference/Tag.html",
+    "href": "reference/Tag.html",
+    "title": "Tag",
+    "section": "",
+    "text": "How an answer was produced.",
+    "crumbs": [
+      "API Reference",
+      "Supporting types",
+      "Tag"
+    ]
+  },
+  {
+    "objectID": "reference/Tag.html#a",
+    "href": "reference/Tag.html#a",
+    "title": "Tag",
+    "section": "A",
+    "text": "A\n\n\n\n\nA=\"A\"",
+    "crumbs": [
+      "API Reference",
+      "Supporting types",
+      "Tag"
+    ]
+  },
+  {
+    "objectID": "reference/Tag.html#b",
+    "href": "reference/Tag.html#b",
+    "title": "Tag",
+    "section": "B",
+    "text": "B\n\n\n\n\nB=\"B\"",
+    "crumbs": [
+      "API Reference",
+      "Supporting types",
+      "Tag"
+    ]
+  },
+  {
+    "objectID": "reference/Tag.html#c",
+    "href": "reference/Tag.html#c",
+    "title": "Tag",
+    "section": "C",
+    "text": "C\n\n\n\n\nC=\"C\"",
+    "crumbs": [
+      "API Reference",
+      "Supporting types",
+      "Tag"
+    ]
+  },
+  {
+    "objectID": "reference/context_layer.html",
+    "href": "reference/context_layer.html",
+    "title": "context_layer()",
+    "section": "",
+    "text": "Create a context layer from text or Markdown files.\n\n\nUsage\nSource\n\n\ncontext_layer(files=())\n\n\nfiles must be a collection of paths; a bare string or path raises TypeError. Files are read eagerly and decoded as UTF-8, so a missing path (FileNotFoundError), a directory (IsADirectoryError), or a file in another encoding (UnicodeDecodeError) fails here rather than mid-conversation.",
+    "crumbs": [
+      "API Reference",
+      "Main functions",
+      "context_layer"
+    ]
+  },
+  {
+    "objectID": "reference/index.html",
+    "href": "reference/index.html",
+    "title": "API Reference",
+    "section": "",
+    "text": "Main functions\n\nThe main agent constructor, plus the building blocks for a commons agent.\n\n\nCommons\n\nA trustworthy agent that answers questions about its data.\n\ndata_source()\n\nCreate a data source from an engine, a pins board, or named frames.\n\nsemantic_layer()\n\nCollect measures into a semantic layer.\n\nmeasure()\n\nMark a function as a measure.\n\ncontext_layer()\n\nCreate a context layer from text or Markdown files.\n\n\n\n\nCommons Methods\n\nMethods for the Commons class\n\n\nCommons.__repr__()\n\n\n\nCommons.__deepcopy__()\n\n\n\nCommons.chat()\n\nAsk a question and wait for the whole answer.\n\nCommons.stream_async()\n\nAsk a question and stream the answer as it arrives.\n\nCommons.chat_async()\n\n\n\nCommons.stream()\n\n\n\nCommons.chat_structured()\n\n\n\nCommons.chat_structured_async()\n\n\n\nCommons.extract_data()\n\n\n\nCommons.extract_data_async()\n\n\n\nCommons.to_solver()\n\n\n\nCommons.citation_corpus()\n\nThe trusted text this agent’s citations are verified against.\n\nCommons.prewarm()\n\nBuild the caches the first question would otherwise pay for.\n\nCommons.add_turn()\n\nAdd a turn, restarting the citation request if a person spoke.\n\nCommons.set_turns()\n\nReplace the conversation, dropping any reminder queued for it.\n\nCommons.queue_restore_reminder()\n\nTell the next turn that the session behind its history is gone.\n\n\n\n\nSupporting types\n\nThe objects the constructors return, and the values they carry.\n\n\nDataSource\n\nTables an agent can query, and the dictionary that describes them.\n\nSemanticLayer\n\nThe trusted calculations an agent can run.\n\nContextLayer\n\nText that helps an agent interpret its data source.\n\nMeasure\n\nA trusted calculation the agent can run.\n\nInjected\n\n\n\nTag\n\nHow an answer was produced.\n\nlist_tables()\n\nThe table names an agent can query on source.\n\n\n\n\nDataSource Methods\n\nMethods for the DataSource class\n\n\nDataSource.from_frames()\n\nLoad named data frames into a locked-down in-process DuckDB.\n\nDataSource.from_engine()\n\nQuery a caller’s database directly. Nothing is copied.\n\nDataSource.from_board()\n\nExpose a pins board’s pins as tables, each read on first use.\n\nDataSource.query()\n\nRun one read-only statement, rejecting anything else first.\n\nDataSource.ensure_loaded()\n\nRead every pin this source has not read yet.\n\nDataSource.ensure_tables_loaded()\n\nRead the pins behind tables that this source has not read yet.\n\nDataSource.dialect()\n\nA hint for the system prompt, not a contract.\n\n\n\n\nReading logged conversations\n\nRead back the conversations an agent logged with log=True.\n\n\ntrajectory_read()\n\nRead the conversations an agent logged with log=True.\n\nTrajectory\n\nOne logged conversation.\n\nExchange\n\nOne exchange of a conversation: a user’s question and the turns that answer it.\n\nCitationDecision\n\nOne citation in an answer, and whether its quote was verified.\n\n\n\n\nShiny UI and server\n\nPut a commons agent inside of an interactive chat app. Needs the shiny extra.\n\n\nui.app()\n\nBuild a complete app around a commons agent.\n\nui.server()\n\nWire a commons agent to the chat element id on the page.\n\nui.theme()\n\nBuild the theme a commons chat page uses.\n\nui.commons_chat_dependency()\n\nThe dependency serving the chat script, stylesheet and icons.\n\nui.asset_base_url()\n\nThe URL the assets are served under on a page.",
+    "crumbs": [
+      "API Reference",
+      "API Index"
     ]
   },
   {
@@ -737,7 +725,7 @@
     "href": "reference/trajectory_read.html",
     "title": "trajectory_read()",
     "section": "",
-    "text": "Read the conversations an agent logged with log=True.\n\n\nUsage\nSource\n\n\ntrajectory_read(source=None, *, n=None, since=None, until=None)\n\n\nsource is where to read from. With none, this content’s own traces are read when it runs on Posit Connect. Off Connect, the deployed content’s traces are read when the project has a deployment record, written by rsconnect-python under rsconnect-python/ or by the R package rsconnect under rsconnect/. With several records, the most recently modified is read, and a warning names it. An rsconnect-python record that lists deployments to several servers does not say which is the latest, so CONNECT_SERVER picks one of them. Otherwise the directory the file exporter writes to is read: the directory of OTEL_EXPORTER_OTLP_TRACES_FILE when it is set, and otherwise COMMONS_TRACES_DIR, or commons-traces under the temporary directory. source can also be a Connect content GUID, a content URL (.../content/&lt;guid&gt;/), a vanity URL written as &lt;server&gt;/content/&lt;name&gt;/ for content at &lt;server&gt;/&lt;name&gt;/, a dashboard URL (.../connect/#/apps/&lt;guid&gt;/), or a directory of OTLP JSON trace files: trace.jsonl, trace-&lt;n&gt;.jsonl, and files named from the OTEL_EXPORTER_OTLP_TRACES_FILE template.\nReading from Connect (2026.09.0 or later) needs CONNECT_API_KEY, and CONNECT_SERVER when the server is not in the URL, the deployment record, or the one server registered with rsconnect-python. The key’s user needs editor-level access to the content: they must own it or be a collaborator (see share_with on Commons). When Connect finds no traces and reports that the content’s or the server’s tracing setting is off, a warning names that setting.\nsince and until keep the chat activity at or after since and before until. Each is a datetime, a date, or a string like “2026-07-22” or “2026-07-22 14:30:00”. A date, a string, or a datetime without a time zone is read in local time. A conversation that continues past until is returned as it was at until. A conversation that started before since is returned with the history its latest call in the window recorded, and its exchanges take provenance only from calls in the window, so an exchange answered only before since has no record. n then keeps the n most recent conversations. On Connect, since and until are sent with the request, so Connect leaves out most traces outside the window. The per-job trace stores that older content can have are filtered by since only. When since is set and a chat span in the window has its ancestry cut off, the read is repeated once without since, and the job stores are then read unfiltered. n is not sent, and is applied after the read.\nA tool result whose tool call was not recorded has a placeholder request; is_unlinked_result() tells it apart from a linked result.\nConversations whose spans record no message content are dropped. The result is keyed by conversation id, with the oldest conversation first.\nRaises TypeError when source, n, or a bound has an unsupported type; ValueError when there is no Connect server or API key, a deployment record does not settle which server to read, a URL is not recognised, or a bound or n has an invalid value; LookupError when a vanity URL is not found; and a RuntimeError when Connect refuses access, has no such content, or a request to it fails.",
+    "text": "Read the conversations an agent logged with log=True.\n\n\nUsage\nSource\n\n\ntrajectory_read(source=None, *, n=None, since=None, until=None)\n\n\nsource is where to read from. With none, this content’s own traces are read when it runs on Posit Connect. Off Connect, the deployed content’s traces are read when the project has a deployment record, written by rsconnect-python under rsconnect-python/ or by the R package rsconnect under rsconnect/. With several records, the most recently modified one that may be used (see below) is read, and a warning names it. An rsconnect-python record that lists deployments to several servers does not say which is the latest, so CONNECT_SERVER picks one of them. Otherwise the directory the file exporter writes to is read: the directory of OTEL_EXPORTER_OTLP_TRACES_FILE when it is set, and otherwise COMMONS_TRACES_DIR, or commons-traces under the temporary directory. source can also be a Connect content GUID, a content URL (.../content/&lt;guid&gt;/), a vanity URL written as &lt;server&gt;/content/&lt;name&gt;/ for content at &lt;server&gt;/&lt;name&gt;/, a dashboard URL (.../connect/#/apps/&lt;guid&gt;/), or a directory of OTLP JSON trace files: trace.jsonl, trace-&lt;n&gt;.jsonl, and files named from the OTEL_EXPORTER_OTLP_TRACES_FILE template.\nReading from Connect (2026.09.0 or later) needs CONNECT_API_KEY, and CONNECT_SERVER when the server is not in the URL, the deployment record, or the one server registered with rsconnect-python. A deployment record is used only when it names CONNECT_SERVER or, if that is unset, a server registered with rsconnect-python. The key’s user needs editor-level access to the content: they must own it or be a collaborator (see share_with on Commons). When Connect finds no traces and reports that the content’s or the server’s tracing setting is off, a warning names that setting.\nsince and until keep the chat activity at or after since and before until. Each is a datetime, a date, or a string like “2026-07-22” or “2026-07-22 14:30:00”. A date, a string, or a datetime without a time zone is read in local time. A conversation that continues past until is returned as it was at until. A conversation that started before since is returned with the history its latest call in the window recorded, and its exchanges take provenance only from calls in the window, so an exchange answered only before since has no record. n then keeps the n most recent conversations. On Connect, since and until are sent with the request, so Connect leaves out most traces outside the window. The per-job trace stores that older content can have are filtered by since only. When since is set and a chat span in the window has its ancestry cut off, the read is repeated once without since, and the job stores are then read unfiltered. n is not sent, and is applied after the read.\nConversations whose spans record no message content are dropped. The result is keyed by conversation id, with the oldest conversation first.\nRaises TypeError when source, n, or a bound has an unsupported type; ValueError when there is no Connect server or API key, a deployment record does not settle which server to read or names a server it may not send the key to, a URL is not recognised, or a bound or n has an invalid value; LookupError when a vanity URL is not found; and a RuntimeError when Connect refuses access, has no such content, or a request to it fails.",
     "crumbs": [
       "API Reference",
       "Reading logged conversations",
@@ -773,7 +761,7 @@
     "href": "skills.html",
     "title": "Skills",
     "section": "",
-    "text": "A skill is a package of structured files that teaches an AI coding agent how to work with a specific tool or framework. The skill below was generated by Great Docs from this project’s documentation. Install it in your agent and it will be able to run commands, edit configuration, write content, and troubleshoot problems without step-by-step guidance from you.\n\n  \n    ▶    Install this skill\n  \n  \n    \n      \nAny agent — install with npx:\nnpx skills add https://posit-dev.github.io/commons/py/\nCodex / OpenCode\nTell the agent:Fetch the skill file at https://posit-dev.github.io/commons/py/skill.md and follow the instructions.\nManual — download the skill file:\ncurl -O https://posit-dev.github.io/commons/py/skill.md\nOr browse the SKILL.md file.\n      \n    \n  \n\n\nSKILL.md\n---\nname: commons\ndescription: &gt;\n  AI Agents for Data Analysis. Use when writing Python code that uses the commons package.\nlicense: MIT\ncompatibility: Requires Python &gt;=3.11.\n---\n\n# commons\n\nAI Agents for Data Analysis\n\n## Installation\n\n```bash\npip install commons\n```\n\n## API overview\n\n### Main functions\n\nThe main agent constructor, plus the building blocks for a commons agent.\n\n- `Commons`: A trustworthy agent that answers questions about its data\n- `data_source`: Create a data source from an engine, a pins board, or named frames\n- `semantic_layer`: Collect measures into a semantic layer\n- `measure`: Mark a function as a measure\n- `context_layer`: Create a context layer from text or Markdown files\n\n### Commons Methods\n\nMethods for the Commons class\n\n- `Commons.__repr__`\n- `Commons.__deepcopy__`\n- `Commons.chat`\n- `Commons.stream_async`\n- `Commons.chat_async`\n- `Commons.stream`\n- `Commons.chat_structured`\n- `Commons.chat_structured_async`\n- `Commons.extract_data`\n- `Commons.extract_data_async`\n- `Commons.to_solver`\n- `Commons.citation_corpus`\n- `Commons.prewarm`\n- `Commons.add_turn`\n- `Commons.set_turns`\n- `Commons.queue_restore_reminder`\n\n### Supporting types\n\nThe objects the constructors return, and the values they carry.\n\n- `DataSource`: Tables an agent can query, and the dictionary that describes them\n- `SemanticLayer`: The trusted calculations an agent can run\n- `ContextLayer`: Text that helps an agent interpret its data source\n- `Measure`: A trusted calculation the agent can run\n- `Injected`: Runtime representation of an annotated type\n- `Tag`: How an answer was produced\n- `list_tables`: The table names an agent can query on `source`\n\n### DataSource Methods\n\nMethods for the DataSource class\n\n- `DataSource.from_frames`\n- `DataSource.from_engine`\n- `DataSource.from_board`\n- `DataSource.query`\n- `DataSource.ensure_loaded`\n- `DataSource.ensure_tables_loaded`\n- `DataSource.dialect`\n\n### Reading logged conversations\n\nRead back the conversations an agent logged with `log=True`.\n\n- `trajectory_read`: Read the conversations an agent logged with `log=True`\n- `Trajectory`: One logged conversation\n- `Exchange`: One exchange of a conversation: a user's question and the turns that answer it\n- `CitationDecision`: One citation in an answer, and whether its quote was verified\n- `is_unlinked_result`: Whether a tool result from `trajectory_read()` has no recorded tool call\n\n### Shiny UI and server\n\nPut a commons agent inside of an interactive chat app. Needs the `shiny` extra.\n\n- `ui.app`\n- `ui.server`\n- `ui.theme`\n- `ui.commons_chat_dependency`\n- `ui.asset_base_url`\n\n## Resources\n\n- [Full documentation](https://posit-dev.github.io/commons/py/)\n- [llms.txt](llms.txt) — Indexed API reference for LLMs\n- [llms-full.txt](llms-full.txt) — Comprehensive documentation for LLMs"
+    "text": "A skill is a package of structured files that teaches an AI coding agent how to work with a specific tool or framework. The skill below was generated by Great Docs from this project’s documentation. Install it in your agent and it will be able to run commands, edit configuration, write content, and troubleshoot problems without step-by-step guidance from you.\n\n  \n    ▶    Install this skill\n  \n  \n    \n      \nAny agent — install with npx:\nnpx skills add https://posit-dev.github.io/commons/py/\nCodex / OpenCode\nTell the agent:Fetch the skill file at https://posit-dev.github.io/commons/py/skill.md and follow the instructions.\nManual — download the skill file:\ncurl -O https://posit-dev.github.io/commons/py/skill.md\nOr browse the SKILL.md file.\n      \n    \n  \n\n\nSKILL.md\n---\nname: commons\ndescription: &gt;\n  AI Agents for Data Analysis. Use when writing Python code that uses the commons package.\nlicense: MIT\ncompatibility: Requires Python &gt;=3.11.\n---\n\n# commons\n\nAI Agents for Data Analysis\n\n## Installation\n\n```bash\npip install commons\n```\n\n## API overview\n\n### Main functions\n\nThe main agent constructor, plus the building blocks for a commons agent.\n\n- `Commons`: A trustworthy agent that answers questions about its data\n- `data_source`: Create a data source from an engine, a pins board, or named frames\n- `semantic_layer`: Collect measures into a semantic layer\n- `measure`: Mark a function as a measure\n- `context_layer`: Create a context layer from text or Markdown files\n\n### Commons Methods\n\nMethods for the Commons class\n\n- `Commons.__repr__`\n- `Commons.__deepcopy__`\n- `Commons.chat`\n- `Commons.stream_async`\n- `Commons.chat_async`\n- `Commons.stream`\n- `Commons.chat_structured`\n- `Commons.chat_structured_async`\n- `Commons.extract_data`\n- `Commons.extract_data_async`\n- `Commons.to_solver`\n- `Commons.citation_corpus`\n- `Commons.prewarm`\n- `Commons.add_turn`\n- `Commons.set_turns`\n- `Commons.queue_restore_reminder`\n\n### Supporting types\n\nThe objects the constructors return, and the values they carry.\n\n- `DataSource`: Tables an agent can query, and the dictionary that describes them\n- `SemanticLayer`: The trusted calculations an agent can run\n- `ContextLayer`: Text that helps an agent interpret its data source\n- `Measure`: A trusted calculation the agent can run\n- `Injected`: Runtime representation of an annotated type\n- `Tag`: How an answer was produced\n- `list_tables`: The table names an agent can query on `source`\n\n### DataSource Methods\n\nMethods for the DataSource class\n\n- `DataSource.from_frames`\n- `DataSource.from_engine`\n- `DataSource.from_board`\n- `DataSource.query`\n- `DataSource.ensure_loaded`\n- `DataSource.ensure_tables_loaded`\n- `DataSource.dialect`\n\n### Reading logged conversations\n\nRead back the conversations an agent logged with `log=True`.\n\n- `trajectory_read`: Read the conversations an agent logged with `log=True`\n- `Trajectory`: One logged conversation\n- `Exchange`: One exchange of a conversation: a user's question and the turns that answer it\n- `CitationDecision`: One citation in an answer, and whether its quote was verified\n\n### Shiny UI and server\n\nPut a commons agent inside of an interactive chat app. Needs the `shiny` extra.\n\n- `ui.app`\n- `ui.server`\n- `ui.theme`\n- `ui.commons_chat_dependency`\n- `ui.asset_base_url`\n\n## Resources\n\n- [Full documentation](https://posit-dev.github.io/commons/py/)\n- [llms.txt](llms.txt) — Indexed API reference for LLMs\n- [llms-full.txt](llms-full.txt) — Comprehensive documentation for LLMs"
   },
   {
     "objectID": "user-guide/get-started.html",
