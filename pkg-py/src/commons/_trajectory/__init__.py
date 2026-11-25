@@ -52,8 +52,7 @@ def trajectory_read(
     `CONNECT_SERVER` picks one of them. When `CONNECT_SERVER` is set and the
     record names another server, the read is refused before any request is
     sent; pass the content URL to read from the record's server. Otherwise
-    the directory the file
-    exporter writes to is read: the directory of
+    the directory the file exporter writes to is read: the directory of
     `OTEL_EXPORTER_OTLP_TRACES_FILE` when it is set, and otherwise
     `COMMONS_TRACES_DIR`, or `commons-traces` under the temporary directory.
     `source` can also be a Connect content GUID, a content URL
@@ -94,8 +93,8 @@ def trajectory_read(
     Raises `TypeError` when `source`, `n`, or a bound has an unsupported
     type; `ValueError` when there is no Connect server or API key, a
     deployment record does not settle which server to read or names a
-    server other than `CONNECT_SERVER`, a URL is not
-    recognised, or a bound or `n` has an invalid value; `LookupError` when
+    server other than `CONNECT_SERVER`, a URL is not recognised, or a bound
+    or `n` has an invalid value; `LookupError` when
     a vanity URL is not found; and a `RuntimeError` when Connect refuses
     access, has no such content, or a request to it fails.
     """
