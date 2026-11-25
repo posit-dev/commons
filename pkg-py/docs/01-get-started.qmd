@@ -37,7 +37,7 @@ import shutil
 from importlib.resources import as_file, files
 
 with as_file(files("commons") / "skills" / "commons") as skill:
-    shutil.copytree(skill, ".agents/skills/commons", dirs_exist_ok=True)
+    shutil.copytree(skill, ".agents/skills/commons")
 ```
 
 For **Claude Code**, copy the skill and its references to `.claude/skills`:
@@ -47,8 +47,10 @@ import shutil
 from importlib.resources import as_file, files
 
 with as_file(files("commons") / "skills" / "commons") as skill:
-    shutil.copytree(skill, ".claude/skills/commons", dirs_exist_ok=True)
+    shutil.copytree(skill, ".claude/skills/commons")
 ```
+
+`copytree()` stops if the destination already exists, so it never mixes two versions of the skill, or the Python and R skills, in one directory. To update the skill after upgrading commons, delete the copied directory and copy it again.
 
 ## Trust flow
 
