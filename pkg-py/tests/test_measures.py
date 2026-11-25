@@ -1117,7 +1117,6 @@ def test_public_api_exposes_the_semantic_layer() -> None:
         "Trajectory",
         "context_layer",
         "data_source",
-        "is_unlinked_result",
         "list_tables",
         "measure",
         "semantic_layer",

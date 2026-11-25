@@ -106,51 +106,6 @@ def test_a_path_source_reads_like_a_string(tmp_path: Path) -> None:
     )
 
 
-def test_is_unlinked_result_tells_an_orphaned_result_apart(tmp_path: Path) -> None:
-    """A caller needs an exact test for a result whose tool call was not
-    recorded: its placeholder request has an empty name, and so can a
-    recorded tool call."""
-    spans = [
-        {
-            "trace": "t1",
-            "span": "chat",
-            "chat": True,
-            "conversation": "conv-a",
-            "end": "10",
-            "input": [
-                {"role": "user", "parts": [{"type": "text", "content": "Q1"}]},
-                {
-                    "role": "assistant",
-                    "parts": [
-                        {"type": "tool_call", "id": "c1", "name": "", "arguments": {}}
-                    ],
-                },
-                {
-                    "role": "tool",
-                    "parts": [
-                        {"type": "tool_call_response", "id": "c1", "response": "a"},
-                        {"type": "tool_call_response", "id": "c9", "response": "b"},
-                    ],
-                },
-            ],
-            "output": [
-                {"role": "assistant", "parts": [{"type": "text", "content": "A1"}]}
-            ],
-        }
-    ]
-    (tmp_path / "trace.jsonl").write_text(fixture_line(spans) + "\n", encoding="utf-8")
-    (trajectory,) = commons.trajectory_read(tmp_path).values()
-    results = [
-        c
-        for turn in trajectory.turns
-        for c in turn.contents
-        if isinstance(c, ContentToolResult)
-    ]
-    assert [r.value for r in results] == ["a", "b"]
-    assert all(r.request is not None and r.request.name == "" for r in results)
-    assert [commons.is_unlinked_result(r) for r in results] == [False, True]
-
-
 @pytest.mark.parametrize(
     "source",
     [
