@@ -4,7 +4,7 @@ title: "Feature parity with the R package"
 
 While both Python and R packages are first-class implementations of `commons`, the R implementation was developed first, and the Python package does not yet implement everything the R package does. This page lists the gaps that remain as of the current version and what a Python agent does instead.
 
-::: {.version-only versions="dev"}
+::: {.version-only versions=">=0.1.0"}
 
 | R-only feature | What a Python agent does instead |
 |---|---|
@@ -15,7 +15,7 @@ While both Python and R packages are first-class implementations of `commons`, t
 
 :::
 
-::: {.version-except versions="dev"}
+::: {.version-except versions=">=0.1.0"}
 
 | R-only feature | What a Python agent does instead |
 |---|---|
