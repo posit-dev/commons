@@ -582,7 +582,7 @@
     ]
   },
   "conflicting_records": {
-    "description": "When the claims on an exchange differ, the exchange gets no record, and the read warns once for the conversation. Claims compare as recorded, so a decision that a reader drops still makes two claims differ.",
+    "description": "When the claims on an exchange differ, the exchange gets no record, and the read warns once for the conversation. Claims compare as recorded, so a decision that a reader drops still makes two claims differ. The id of a tool result with no matching request is not compared, because it links to nothing.",
     "cases": [
       {
         "name": "conflicting records fail closed with one warning",
@@ -609,6 +609,21 @@
           {"trace": "t2", "span": "turn", "name": "commons_conversation_turn", "end": "20", "attributes": {"commons.provenance.tag": "A", "commons.citation.candidates": []}},
           {"trace": "t2", "span": "chat", "parent": "turn", "chat": true, "conversation": "conv-a", "end": "20",
             "input": [{"role": "user", "parts": [{"type": "text", "content": "Q1"}]}],
+            "output": [{"role": "assistant", "parts": [{"type": "text", "content": "A1"}]}]}
+        ],
+        "notice": "warning",
+        "trajectories": [{"id": "conv-a", "provenance": [{"tag": null, "decisions": []}]}]
+      },
+      {
+        "name": "histories that differ only in the id of an unlinked tool result still conflict",
+        "spans": [
+          {"trace": "t1", "span": "turn", "name": "commons_conversation_turn", "end": "10", "attributes": {"commons.provenance.tag": "A", "commons.citation.candidates": []}},
+          {"trace": "t1", "span": "chat", "parent": "turn", "chat": true, "conversation": "conv-a", "end": "10",
+            "input": [{"role": "user", "parts": [{"type": "text", "content": "Q1"}]}, {"role": "tool", "parts": [{"type": "tool_call_response", "id": "c8", "response": "orphan"}]}],
+            "output": [{"role": "assistant", "parts": [{"type": "text", "content": "A1"}]}]},
+          {"trace": "t2", "span": "turn", "name": "commons_conversation_turn", "end": "20", "attributes": {"commons.provenance.tag": "C", "commons.citation.candidates": []}},
+          {"trace": "t2", "span": "chat", "parent": "turn", "chat": true, "conversation": "conv-a", "end": "20",
+            "input": [{"role": "user", "parts": [{"type": "text", "content": "Q1"}]}, {"role": "tool", "parts": [{"type": "tool_call_response", "id": "c9", "response": "orphan"}]}],
             "output": [{"role": "assistant", "parts": [{"type": "text", "content": "A1"}]}]}
         ],
         "notice": "warning",
