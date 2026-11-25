@@ -1,5 +1,7 @@
 # commons (development version)
 
+* `trajectory_read()` now refuses a project's deployment record unless it names `CONNECT_SERVER` or, when that is unset, a server registered with rsconnect. This stops a cloned project from sending your `CONNECT_API_KEY` to a server you didn't choose. To read from the record's server, set `CONNECT_SERVER` and `CONNECT_API_KEY` for it (#550).
+
 # commons 0.2.0
 
 commons 0.2.0 introduces three big features in addition to a number of minor improvements and big fixes.
