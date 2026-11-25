@@ -64,9 +64,10 @@ def trajectory_read(
     `CONNECT_SERVER` when the server is not in the URL, the deployment
     record, or the one server registered with rsconnect-python. The key's
     user needs editor-level access to the content: they must own it or be a
-    collaborator (see `share_with` on `Commons`). When Connect finds no
-    traces and reports that the content's or the server's tracing setting is
-    off, a warning names that setting.
+    collaborator (see `share_with` on `Commons`). A read from an older
+    Connect raises `RuntimeError`. When Connect finds no traces and reports
+    that the content's or the server's tracing setting is off, a warning
+    names that setting.
 
     `since` and `until` keep the chat activity at or after `since` and
     before `until`. Each is a datetime, a date, or a string like

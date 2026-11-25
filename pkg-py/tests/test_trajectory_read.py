@@ -163,7 +163,8 @@ def test_no_source_reads_the_python_deployment(
     serve_connect(monkeypatch, route)
 
     assert list(trajectory_read()) == ["deployed"]
-    assert str(seen[0].url).startswith(f"{server}/__api__/v1/content/{guid}/")
+    content_reads = [r for r in seen if "/v1/content/" in r.url.path]
+    assert str(content_reads[0].url).startswith(f"{server}/__api__/v1/content/{guid}/")
 
 
 def test_no_source_reads_the_traces_directory(

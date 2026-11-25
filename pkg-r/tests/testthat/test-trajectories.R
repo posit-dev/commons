@@ -487,6 +487,48 @@ test_that("every member of trajectories/connect-source.json is run", {
   }
 })
 
+# A server older than the public traces API has only internal trace
+# endpoints, so a read could return partial results without a sign.
+test_that("a Connect read refuses a server older than the minimum", {
+  skip_on_cran()
+  member <- connect_cases$minimum_version
+  minimum <- shared_fixture("connect")$observability$minimum_version
+  guid <- "ea3c1445-cb71-42df-a2f2-bdb18874ef41"
+  expect_gt(length(connect_cases$minimum_version$cases), 0)
+  for (case in member$cases) {
+    local({
+      info <- case[["name"]]
+      withr::local_dir(withr::local_tempdir())
+      withr::local_envvar(
+        connect_fixture_env(list(CONNECT_SERVER = "https://connect.example.com"))
+      )
+      state <- new.env()
+      httr2::local_mocked_responses(connect_fixture_responses(
+        list(traces = member$traces, jobs = list()),
+        state,
+        settings = case[["settings"]]
+      ))
+      if (!case[["refused"]]) {
+        expect_trajectories(
+          trajectory_read(guid),
+          member$trajectories,
+          info
+        )
+        return()
+      }
+      err <- expect_error(trajectory_read(guid))
+      text <- conditionMessage(err)
+      expect_true(grepl(case$settings$version, text, fixed = TRUE), info = info)
+      expect_true(grepl(paste(">=", minimum), text, fixed = TRUE), info = info)
+      trace_reads <- Filter(
+        function(r) endsWith(r[["path"]], "/traces"),
+        state$requests
+      )
+      expect_length(trace_reads, 0)
+    })
+  }
+})
+
 test_that("an empty Connect read diagnoses disabled tracing settings", {
   skip_on_cran()
   expect_connect_read_member(connect_cases$empty_read)

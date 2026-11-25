@@ -11,14 +11,17 @@ from urllib.parse import unquote
 
 from .._connect import (
     FROM_PAD,
+    MINIMUM_TRACING_VERSION,
     ConnectClient,
     ConnectError,
     connect_content_guid,
     connect_trace_lines,
     content,
     is_connect_runtime,
+    parse_connect_version,
     server_settings,
     vanity_guid,
+    version_is_older,
 )
 from .._tracing import CONTENT_TRACING_HINT, SERVER_TRACING_HINT
 from ._build import (
@@ -195,6 +198,7 @@ def read_connect_spans(
 
     With `n`, the read stops once it holds the `n` latest conversations whole.
     """
+    check_connect_read_version(client)
     spans = _fetch_connect_spans(client, guid, since, n=n, since=since, until=until)
     # The padded `from` can still drop a turn span that started more than an
     # hour earlier, so a severed chain is fetched once more without it.
@@ -203,6 +207,26 @@ def read_connect_spans(
     ):
         spans = _fetch_connect_spans(client, guid, None, n=n, since=since, until=until)
     return spans
+
+
+def check_connect_read_version(client: ConnectClient) -> None:
+    """Refuse a server older than the first Connect with a public traces API.
+
+    Older servers have only internal trace endpoints, whose storage changed
+    between releases. The settings endpoint is internal, so a failed request
+    or a missing version lets the read go ahead.
+    """
+    try:
+        settings = server_settings(client)
+    except (ConnectError, ValueError):
+        return
+    version = parse_connect_version(settings.get("version"))
+    if version is not None and version_is_older(version, MINIMUM_TRACING_VERSION):
+        raise ConnectError(
+            f"This server is running Connect {settings['version']}, but "
+            f"reading trajectories requires Connect >= {MINIMUM_TRACING_VERSION}. "
+            "Please ask your server administrator to upgrade."
+        )
 
 
 def _fetch_connect_spans(

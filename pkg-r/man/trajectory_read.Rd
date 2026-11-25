@@ -51,7 +51,8 @@ spans—see the \code{log} argument of \code{\link[=agent]{agent()}} for how cap
 enabled—and read back from Posit Connect's content observability store or
 from local trace files.
 
-This feature requires Connect >= 2026.09.0.
+This feature requires Connect >= 2026.09.0. A read from an older server stops
+with an error.
 }
 \details{
 Reading traces from Connect requires the \code{CONNECT_API_KEY} environment

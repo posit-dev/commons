@@ -289,6 +289,33 @@ parse_connect_version <- function(x) {
   numeric_version(version[[2]])
 }
 
+# The first Connect whose content traces API is public. Older servers have
+# only internal trace endpoints, whose storage changed between releases.
+connect_minimum_version <- "2026.09.0"
+
+# The settings endpoint is internal, so a failed request or a missing version
+# lets the read go ahead.
+check_connect_read_version <- function(client, call = rlang::caller_env()) {
+  settings <- connect_tracing_server_settings(client)
+  version <- parse_connect_version(settings$version)
+  if (!is.null(version) && version < numeric_version(connect_minimum_version)) {
+    cli::cli_abort(
+      c(
+        paste0(
+          "This server is running Connect ",
+          settings$version,
+          ", but reading trajectories requires Connect >= ",
+          connect_minimum_version,
+          "."
+        ),
+        i = "Please ask your server administrator to upgrade."
+      ),
+      call = call
+    )
+  }
+  invisible(NULL)
+}
+
 # The seconds `from` is padded by.
 connect_from_pad <- -3600
 

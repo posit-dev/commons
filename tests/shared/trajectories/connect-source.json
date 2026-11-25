@@ -236,5 +236,19 @@
       {"name": "both reads fail", "content": null, "settings": null, "hints": []},
       {"name": "a read that finds spans reports nothing", "traces": [[{"trace": "t1", "span": "chat1", "chat": true, "conversation": "conv-a", "input": [{"role": "user", "parts": [{"type": "text", "content": "Hi."}]}], "start": "7300000000000", "end": "7301000000000"}]], "content": {"otel_enabled": false}, "settings": {"allow_content_instrumentation": false}, "hints": [], "trajectories": [{"id": "conv-a", "turns": [{"role": "user", "contents": [{"type": "text", "text": "Hi."}]}]}]}
     ]
+  },
+  "minimum_version": {
+    "description": "A Connect read first reads the server settings. When their `version` is older than the `minimum_version` of connect.json's `observability`, the read stops with an error that names the server's version and that minimum, and reads no traces. A version that is missing or that does not parse, or a settings read that fails, lets the read go ahead. Each case reads from a fake whose `traces` endpoint serves `traces` and whose answer to the server settings is `settings`, or a failure when null. A read that goes ahead returns `trajectories`, as in build.json.",
+    "traces": [[{"trace": "t1", "span": "chat1", "chat": true, "conversation": "conv-a", "input": [{"role": "user", "parts": [{"type": "text", "content": "Hi."}]}], "start": "7300000000000", "end": "7301000000000"}]],
+    "trajectories": [{"id": "conv-a"}],
+    "cases": [
+      {"name": "a server older than the minimum is refused", "settings": {"version": "2026.08.1"}, "refused": true},
+      {"name": "a development build older than the minimum is refused", "settings": {"version": "2026.06.0-dev+12-gabc123"}, "refused": true},
+      {"name": "a server at the minimum is read", "settings": {"version": "2026.09.0"}, "refused": false},
+      {"name": "a newer server is read", "settings": {"version": "2026.11.1"}, "refused": false},
+      {"name": "settings without a version are read", "settings": {}, "refused": false},
+      {"name": "a version that does not parse is read", "settings": {"version": "unknown"}, "refused": false},
+      {"name": "a failed settings read is read", "settings": null, "refused": false}
+    ]
   }
 }

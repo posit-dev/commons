@@ -7,7 +7,8 @@
 #' enabled—and read back from Posit Connect's content observability store or
 #' from local trace files.
 #'
-#' This feature requires Connect >= 2026.09.0.
+#' This feature requires Connect >= 2026.09.0. A read from an older server stops
+#' with an error.
 #'
 #' @param source Where to read trajectories from:
 #'
@@ -179,6 +180,7 @@ read_connect_spans <- function(
   to,
   call = rlang::caller_env()
 ) {
+  check_connect_read_version(client, call)
   spans <- fetch_connect_spans(client, guid, from, n, from, to, call)
   if (
     !is.null(from) && has_severed_ancestry(filter_chat_spans(spans, from, to))
