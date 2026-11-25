@@ -43,8 +43,9 @@ def trajectory_read(
     """Read the conversations an agent logged with `log=True`.
 
     `source` is where to read from. With none, this content's own traces are
-    read when it runs on Posit Connect. Off Connect, the deployed content's
-    traces are read when the project has a deployment record, written by
+    read when it runs on Posit Connect. When it runs locally or somewhere
+    other than Posit Connect, the deployed content's traces are read when
+    the project has a deployment record, written by
     rsconnect-python under `rsconnect-python/` or by the R package rsconnect
     under `rsconnect/`. With several records, the most recently modified
     one that may be used (see below) is read, and a warning names it. An

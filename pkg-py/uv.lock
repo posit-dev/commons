@@ -544,7 +544,7 @@ wheels = [
 
 [[package]]
 name = "commons"
-version = "0.1.0b2"
+version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "chatlas" },
