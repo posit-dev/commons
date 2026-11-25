@@ -13,7 +13,7 @@ import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse, urlsplit, urlunsplit
+from urllib.parse import urlparse, urlsplit
 
 from .._connect import normalize_server
 
@@ -113,8 +113,10 @@ def _server_key(server: str) -> tuple[str, str, str]:
         parts = urlsplit(server)
     except ValueError:
         return ("", "", server)
-    rest = urlunsplit(("", "", parts.path, parts.query, parts.fragment))
-    return (parts.scheme.lower(), parts.netloc.lower(), rest)
+    head = f"{parts.scheme}://{parts.netloc}"
+    if server[: len(head)].lower() != head.lower():
+        return ("", "", server)
+    return (parts.scheme.lower(), parts.netloc.lower(), server[len(head) :])
 
 
 def deployment_record_files(directory: Path, max_depth: int = 3) -> list[Path]:

@@ -513,10 +513,10 @@ check_record_server <- function(deployment, call = rlang::caller_env()) {
   )
 }
 
-# A server URL's scheme and host are case-insensitive; its path is not.
+# A server URL's scheme and host are case-insensitive; the rest of it is not.
 deployment_server_key <- function(server) {
   server <- sub("/+(__api__/*)?$", "", server)
-  parts <- regmatches(server, regexec("^([^:/]+://[^/]*)(.*)$", server))[[1]]
+  parts <- regmatches(server, regexec("^([^:/]+://[^/?#]*)(.*)$", server))[[1]]
   if (length(parts) == 0) {
     return(server)
   }
