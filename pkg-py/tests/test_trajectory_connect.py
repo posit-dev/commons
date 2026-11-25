@@ -692,7 +692,7 @@ def test_connect_reads_match_the_shared_fixture(
     assert_trajectories(result, case["trajectories"])
 
 
-_EMPTY = {"version": "2026.09.0", "traces": [], "jobs": []}
+_EMPTY = {"traces": [], "jobs": []}
 _HINTS = {"content": CONTENT_TRACING_HINT, "server": SERVER_TRACING_HINT}
 
 

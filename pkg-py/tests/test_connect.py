@@ -22,7 +22,6 @@ import pytest
 
 import commons._connect
 from commons._connect import (
-    LEGACY_TRACE_STORE_BEFORE,
     MINIMUM_TRACING_VERSION,
     TRACE_PAGE_SIZE,
     ConnectClient,
@@ -432,7 +431,6 @@ def test_trace_lines_match_the_shared_fixture(case: dict[str, Any]) -> None:
                 TRACES["guid"],
                 since=_instant(case.get("since")),
                 until=_instant(case.get("until")),
-                enough=(lambda lines: True) if case.get("enough") else None,
             )
 
     if case.get("error") == "access":
@@ -483,9 +481,8 @@ def test_vanity_search_matches_the_shared_fixture(case: dict[str, Any]) -> None:
     assert first.url.params["q"] == case["query"]
 
 
-def test_the_trace_page_size_and_store_version_match_the_shared_fixture() -> None:
+def test_the_trace_page_size_matches_the_shared_fixture() -> None:
     assert TRACE_PAGE_SIZE == TRACES["page_size"]
-    assert LEGACY_TRACE_STORE_BEFORE == TRACES["legacy_store_before"]
 
 
 def test_an_access_error_names_the_share_with_argument() -> None:

@@ -134,8 +134,6 @@ def connect_fixture_server(
             page = page[: server["page_size"]]
         total = server.get("total", len(keep))
         headers = {} if total is None else {"X-Total-Count": str(total)}
-        if "version" in server:
-            headers["Server"] = f"Posit Connect v{server['version']}"
         body = "".join(
             (line if isinstance(line, str) else fixture_line(line)) + "\n"
             for line in page

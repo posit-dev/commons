@@ -181,10 +181,7 @@ def read_connect_spans(
     since: datetime | None,
     until: datetime | None,
 ) -> list[Span]:
-    """The content's spans, with the window sent to Connect.
-
-    `n` is used to stop paging early where a server has a single trace store.
-    """
+    """The content's spans, with the window sent to Connect."""
     spans = _fetch_connect_spans(client, guid, since, n=n, since=since, until=until)
     # The padded `from` can still drop a turn span that started more than an
     # hour earlier, so a severed chain is fetched once more without it.
@@ -204,10 +201,7 @@ def _fetch_connect_spans(
     since: datetime | None,
     until: datetime | None,
 ) -> list[Span]:
-    enough = None if n is None else enough_trace_lines(n, since, until)
-    lines = connect_trace_lines(
-        client, guid, since=pushdown, until=until, enough=enough
-    )
+    lines = connect_trace_lines(client, guid, since=pushdown, until=until)
     return parse_otlp_lines(lines)
 
 

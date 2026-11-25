@@ -103,9 +103,9 @@ normalize_connect_url <- function(x) {
   utils::URLdecode(sub("/+$", "", x))
 }
 
-# Fetch trace rows for a content item as raw OTLP NDJSON lines, paging until
-# the X-Total-Count header is exhausted. On servers with a single trace store,
-# `enough(lines)` can stop paging early.
+# Fetch trace rows for a content item as raw OTLP NDJSON lines: the content's
+# `traces` store, paged until the X-Total-Count header is exhausted, then each
+# job's own store.
 # Connect returns rows newest-first by span start time and filters `from`/`to`
 # on span start time over `[from, to)`.
 connect_trace_lines <- function(
@@ -113,13 +113,11 @@ connect_trace_lines <- function(
   guid,
   from = NULL,
   to = NULL,
-  enough = NULL,
   page_size = 1000,
   call = rlang::caller_env()
 ) {
   lines <- character()
   offset <- 0
-  version <- NULL
   repeat {
     resp <- tryCatch(
       connect_req(client, "content", guid, "traces") |>
@@ -139,31 +137,20 @@ connect_trace_lines <- function(
         client, guid, from, page_size, call
       ))
     }
-    version <- version %||% parse_connect_version(
-      httr2::resp_header(resp, "Server")
-    )
     page <- resp_trace_lines(resp)
     lines <- c(lines, page)
     total <- suppressWarnings(
       as.integer(httr2::resp_header(resp, "X-Total-Count", default = NA))
     )
     offset <- offset + length(page)
-    if (
-      !is.null(version) && version < numeric_version("2026.07.0") &&
-        length(lines) > 0 && !is.null(enough) && enough(lines)
-    ) {
-      return(lines)
-    }
     if (length(page) == 0 || is.na(total) || offset >= total) {
       break
     }
   }
   # Connect 2026.07 moved new traces without migrating the per-job files.
-  if (is.null(version) || version >= numeric_version("2026.07.0")) {
-    lines <- connect_job_trace_lines(
-      client, guid, from, page_size, call, lines
-    )
-  }
+  lines <- connect_job_trace_lines(
+    client, guid, from, page_size, call, lines
+  )
   unique(lines)
 }
 

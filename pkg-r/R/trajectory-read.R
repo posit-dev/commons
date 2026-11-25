@@ -166,8 +166,8 @@ parse_window_bound <- function(x) {
   NULL
 }
 
-# The `from`/`to` window and `n` limit are passed down to Connect so a
-# filtered read doesn't transfer the whole trace store. The server-side
+# The `from`/`to` window is passed down to Connect so a filtered read
+# doesn't transfer the whole trace store. The server-side
 # `from` filter can still drop ancestor spans (see connect_window_param()),
 # severing turn-ancestor resolution; when that happens, refetch without
 # `from`.
@@ -202,7 +202,6 @@ fetch_connect_spans <- function(
     guid,
     from = from_pushdown,
     to = to,
-    enough = if (!is.null(n)) enough_trace_lines(n, from, to),
     call = call
   ))
 }
