@@ -177,9 +177,14 @@ def test_a_bound_padded_out_of_range_is_not_sent() -> None:
 
 @pytest.mark.parametrize(("member", "case"), cases(RECORD_MEMBERS))
 def test_deployment_records_match_the_shared_fixture(
-    member: dict[str, Any], case: dict[str, Any], tmp_path: Path
+    member: dict[str, Any],
+    case: dict[str, Any],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     write_fixture_files(tmp_path, case)
+    connect_env(monkeypatch, case.get("env", {}))
+    _write_registered(case)
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         found = find_deployment(tmp_path)
@@ -386,10 +391,39 @@ def test_a_python_record_for_two_servers_is_ambiguous(
     connect_env(monkeypatch, {})
     _write_two_server_record(tmp_path)
 
-    with pytest.raises(ValueError, match="Set CONNECT_SERVER") as raised:
+    with pytest.raises(
+        ValueError, match="Set CONNECT_SERVER and CONNECT_API_KEY"
+    ) as raised:
         find_deployment(tmp_path)
 
     assert "https://one.example.com, https://two.example.com" in str(raised.value)
+    # Neither server is trusted, so the message must not point at a source
+    # that would send the key to one of them.
+    assert "content URL" not in str(raised.value)
+
+
+def test_a_python_record_for_one_server_in_two_forms_names_its_guids(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # CONNECT_SERVER matches both entries, so the message must offer a remedy
+    # that picks one: the content GUID.
+    connect_env(monkeypatch, {"CONNECT_SERVER": "https://one.example.com"})
+    other = "01234567-89ab-cdef-0123-456789abcdef"
+    _write_python_record(
+        tmp_path / "rsconnect-python" / "app.json",
+        _python_record("https://one.example.com"),
+        _python_record("https://one.example.com/", guid=other),
+    )
+
+    with pytest.raises(ValueError, match="content GUIDs") as raised:
+        find_deployment(tmp_path)
+
+    assert f"{GUID}, {other}" in str(raised.value)
+    # A GUID source reads the record again unless CONNECT_SERVER is set, so
+    # the remedy names both steps.
+    assert "Set CONNECT_SERVER and CONNECT_API_KEY for https://one.example.com" in (
+        str(raised.value)
+    )
 
 
 def test_connect_server_picks_a_server_whatever_its_hosts_case(
@@ -505,6 +539,13 @@ def _server(name: str, url: str) -> dict[str, str]:
     return {"name": name, "url": url, "api_key": "key"}
 
 
+def _write_registered(case: dict[str, Any]) -> None:
+    if "registered" in case:
+        _write_servers(
+            [_server(f"s{i}", url) for i, url in enumerate(case["registered"])]
+        )
+
+
 def test_the_one_registered_server_is_used() -> None:
     _write_servers(
         [
@@ -583,17 +624,19 @@ def test_sources_resolve_as_the_shared_fixture_pins(
     write_fixture_files(tmp_path, case)
     monkeypatch.chdir(tmp_path)
     connect_env(monkeypatch, case.get("env", {}))
-    if "registered" in case:
-        _write_servers(
-            [_server(f"s{i}", url) for i, url in enumerate(case["registered"])]
-        )
+    _write_registered(case)
     if "search" in case:
         serve_connect(monkeypatch, connect_fixture_server({}, search=case["search"])[0])
     expected = case["expected"]
     if "error" in expected:
-        with pytest.raises(
-            (ValueError, LookupError), match=re.escape(expected["error"])
-        ) as raised:
+        # A refused record may still be reported as the one read.
+        with (
+            warnings.catch_warnings(),
+            pytest.raises(
+                (ValueError, LookupError), match=re.escape(expected["error"])
+            ) as raised,
+        ):
+            warnings.simplefilter("ignore")
             resolve_trajectory_source(case["source"])
         for text in expected.get("mentions", []):
             assert text in str(raised.value)
@@ -615,11 +658,14 @@ def test_the_deployment_warning_points_at_the_caller(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     (case,) = [
-        c for c in CONNECT["null_deployment"]["cases"] if c.get("notice") == ["record"]
+        c
+        for c in CONNECT["null_deployment"]["cases"]
+        if c["name"] == "NULL source warns which of several deployments it reads"
     ]
     write_fixture_files(tmp_path, case)
     monkeypatch.chdir(tmp_path)
     connect_env(monkeypatch, {})
+    _write_registered(case)
     route, _ = connect_fixture_server(_EMPTY)
     serve_connect(monkeypatch, route)
 

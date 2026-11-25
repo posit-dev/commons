@@ -59,7 +59,8 @@ variable (and \code{CONNECT_SERVER}, when the server can't be inferred from the
 URL, the project's deployment record, or the sole Connect server registered
 with rsconnect), and editor-level access to the content: you must own it or
 be a collaborator. See the \code{share_with} argument of
-\code{\link[=agent]{agent()}}.
+\code{\link[=agent]{agent()}}. A deployment record is used only when it names \code{CONNECT_SERVER}
+or, if that is unset, a server registered with rsconnect.
 }
 \examples{
 \dontrun{
