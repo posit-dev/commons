@@ -289,6 +289,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
    
   <ul class="collapse">
   <li><a href="#design-philosophy" id="toc-design-philosophy" class="nav-link active" data-scroll-target="#design-philosophy">Design philosophy</a></li>
+  <li><a href="#working-with-the-agent-skill" id="toc-working-with-the-agent-skill" class="nav-link" data-scroll-target="#working-with-the-agent-skill">Working with the agent skill</a></li>
   <li><a href="#trust-flow" id="toc-trust-flow" class="nav-link" data-scroll-target="#trust-flow">Trust flow</a></li>
   <li><a href="#information-layers" id="toc-information-layers" class="nav-link" data-scroll-target="#information-layers">Information layers</a>
   <ul class="collapse">
@@ -350,6 +351,23 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </blockquote>
 <p>Although the agent had to decide <em>which</em> trusted calculation to run. It did not have to decide <em>what code to write</em>, reducing degrees of freedom and allowing the agent to use code that you already vetted.</p>
 <p>However, we also expect users to ask questions that stray from the “happy path.” For those, the agent searches for additional context and writes custom code (either SQL or Python). Answers from this path either include a blue quote-mark citation marker if a citation was found in the added context, or display the yellow exclamation provenance marker for an <code>Untrusted</code> outcome.</p>
+</section>
+<section id="working-with-the-agent-skill" class="level1">
+<h1>Working with the agent skill</h1>
+<p>The package includes a commons <a href="https://agentskills.io/">agent skill</a> that helps coding agents build, evaluate, and improve commons agents. We recommend installing it before you begin because it provides detailed guidance and a structured workflow.</p>
+<p>To make the skill available to <strong>Posit Assistant or Codex</strong>, copy the skill and its references to <code>.agents/skills</code>:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> shutil</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> importlib.resources <span class="im">import</span> as_file, files</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> as_file(files(<span class="st">"commons"</span>) <span class="op">/</span> <span class="st">"skills"</span> <span class="op">/</span> <span class="st">"commons"</span>) <span class="im">as</span> skill:</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    shutil.copytree(skill, <span class="st">".agents/skills/commons"</span>)</span></code></pre></div>
+<p>For <strong>Claude Code</strong>, copy the skill and its references to <code>.claude/skills</code>:</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> shutil</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> importlib.resources <span class="im">import</span> as_file, files</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> as_file(files(<span class="st">"commons"</span>) <span class="op">/</span> <span class="st">"skills"</span> <span class="op">/</span> <span class="st">"commons"</span>) <span class="im">as</span> skill:</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    shutil.copytree(skill, <span class="st">".claude/skills/commons"</span>)</span></code></pre></div>
+<p><code>copytree()</code> stops if the destination already exists, so it never mixes two versions of the skill, or the Python and R skills, in one directory. To update the skill after upgrading commons, delete the copied directory and copy it again.</p>
 </section>
 <section id="trust-flow" class="level1">
 <h1>Trust flow</h1>
@@ -426,12 +444,12 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <p>The most direct way to add a trusted calculation is a <strong>measure</strong>. A measure is a Python function decorated with <code>@commons.measure</code>. The decorator needs a description, from its <code>description</code> argument or from the docstring of the function. When measures exist, the agent searches for a measure that matches the question. If it finds one, it calls that measure, with arguments if the measure takes any.</p>
 <p>A measure can take two kinds of parameter in its signature. A parameter declared as <code>Annotated[T, Field(description=...)]</code> gets its value from the model, which reads the description to decide what value to pass. A parameter declared as <code>commons.Injected[T]</code> gets its value from <code>commons</code>. The model never sees this parameter: <code>commons</code> passes the connection of the data source that has the same name as the parameter. A parameter with no description and no <a href="../reference/Injected.html#commons.Injected" class="gdls-link gdls-code">Injected</a> annotation will result in an error.</p>
 <p>As an example, in this measure, <code>commons</code> passes <code>biodiversity</code> and the model passes <code>site</code>:</p>
-<div class="sourceCode" id="cb2"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="at">@commons.measure</span>(description<span class="op">=</span><span class="st">"Species observed at one site."</span>)</span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> species_at_site(</span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    biodiversity: commons.Injected[Any],  <span class="co"># commons passes the connection</span></span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    site: Annotated[<span class="bu">str</span>, Field(description<span class="op">=</span><span class="st">"Site name."</span>)],  <span class="co"># the model passes a value</span></span>
-<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>) <span class="op">-&gt;</span> Any:</span>
-<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    ...</span></code></pre></div>
+<div class="sourceCode" id="cb4"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="at">@commons.measure</span>(description<span class="op">=</span><span class="st">"Species observed at one site."</span>)</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> species_at_site(</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    biodiversity: commons.Injected[Any],  <span class="co"># commons passes the connection</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    site: Annotated[<span class="bu">str</span>, Field(description<span class="op">=</span><span class="st">"Site name."</span>)],  <span class="co"># the model passes a value</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>) <span class="op">-&gt;</span> Any:</span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    ...</span></code></pre></div>
 <p>When a user asks “Which species were observed at Oak Bluff?”, the model reads the description of <code>site</code> and passes <code>"Oak Bluff"</code>. <code>commons</code> passes the connection of the data source named <code>biodiversity</code>, and the measure runs with both.</p>
 <p><code>data-dict.yaml</code> files also add to the semantic layer through <a href="#definitions"><code>definitions</code></a>.</p>
 </section>
@@ -451,41 +469,41 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <section id="data-dictionary" class="level3">
 <h3 class="anchored" data-anchor-id="data-dictionary">Data dictionary</h3>
 <p><code>dictionaries/biodiversity.yaml</code></p>
-<div class="sourceCode" id="cb3"><pre class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="fu">tables</span><span class="kw">:</span></span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> observations</span></span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">description</span><span class="kw">:</span><span class="at"> Species observations by nature preserve.</span></span>
-<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">columns</span><span class="kw">:</span></span>
-<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> count</span></span>
-<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">description</span><span class="kw">:</span><span class="at"> Individuals observed during surveys.</span></span></code></pre></div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="fu">tables</span><span class="kw">:</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> observations</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">description</span><span class="kw">:</span><span class="at"> Species observations by nature preserve.</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">columns</span><span class="kw">:</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> count</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">description</span><span class="kw">:</span><span class="at"> Individuals observed during surveys.</span></span></code></pre></div>
 </section>
 <section id="measure-file" class="level3">
 <h3 class="anchored" data-anchor-id="measure-file">Measure file</h3>
 <p><code>measures/biodiversity.py</code></p>
-<div class="sourceCode" id="cb4"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> typing <span class="im">import</span> Annotated, Any</span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> pydantic <span class="im">import</span> Field</span>
-<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> commons</span>
-<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="at">@commons.measure</span>(description<span class="op">=</span><span class="st">"Species richness by site."</span>)</span>
-<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> biodiversity_by_site(</span>
-<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>    biodiversity: commons.Injected[Any],</span>
-<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>    site: Annotated[<span class="bu">str</span>, Field(description<span class="op">=</span><span class="st">"Site name."</span>)],</span>
-<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>) <span class="op">-&gt;</span> Any:</span>
-<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> biodiversity.execute(</span>
-<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>        <span class="st">"SELECT COUNT(DISTINCT species) AS species_richness "</span></span>
-<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>        <span class="st">"FROM observations WHERE obs_site = ?"</span>,</span>
-<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a>        [site],</span>
-<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a>    ).fetchdf()</span></code></pre></div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> typing <span class="im">import</span> Annotated, Any</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> pydantic <span class="im">import</span> Field</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> commons</span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a><span class="at">@commons.measure</span>(description<span class="op">=</span><span class="st">"Species richness by site."</span>)</span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> biodiversity_by_site(</span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>    biodiversity: commons.Injected[Any],</span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>    site: Annotated[<span class="bu">str</span>, Field(description<span class="op">=</span><span class="st">"Site name."</span>)],</span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>) <span class="op">-&gt;</span> Any:</span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> biodiversity.execute(</span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a>        <span class="st">"SELECT COUNT(DISTINCT species) AS species_richness "</span></span>
+<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a>        <span class="st">"FROM observations WHERE obs_site = ?"</span>,</span>
+<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a>        [site],</span>
+<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a>    ).fetchdf()</span></code></pre></div>
 <p>The <code>biodiversity</code> parameter receives the connection of the data source named <code>biodiversity</code>. The model supplies <code>site</code>.</p>
 </section>
 <section id="context-document" class="level3">
 <h3 class="anchored" data-anchor-id="context-document">Context document</h3>
 <p><code>context/biodiversity.md</code></p>
-<div class="sourceCode" id="cb5"><pre class="sourceCode markdown"><code class="sourceCode markdown"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="fu"># Interpreting survey results</span></span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>Observed individuals reflect organisms recorded during surveys. They are not a complete population census of a nature preserve.</span></code></pre></div>
+<div class="sourceCode" id="cb7"><pre class="sourceCode markdown"><code class="sourceCode markdown"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="fu"># Interpreting survey results</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>Observed individuals reflect organisms recorded during surveys. They are not a complete population census of a nature preserve.</span></code></pre></div>
 </section>
 </section>
 </section>
@@ -494,23 +512,23 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <p>One of the primary decisions you’ll need to make when building a <code>commons</code> agent is which data sources to grant the agent access to. Each data source combines the underlying data with the tables to expose to the agent. It can also include a data dictionary describing those tables and trusted calculations on them.</p>
 <p>Data sources are created with <a href="../reference/data_source.html#commons.data_source" class="gdls-link gdls-code">commons.data_source()</a>. The data can be named <code>pandas</code> or <code>polars</code> data frames, a <a href="https://rstudio.github.io/pins-python/">pins</a> board, or a SQLAlchemy <code>Engine</code>. <code>commons</code> loads data frames and pins into an in-process DuckDB database. <code>commons</code> queries a database engine directly without copying data into a local database.</p>
 <p>For example, the following code creates a data source from two data frames. Each name becomes a table that the agent can query. <code>dictionary</code> is an optional path to a <code>data-dict.yaml</code> file.</p>
-<div class="sourceCode" id="cb6"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>biodiversity <span class="op">=</span> commons.data_source(</span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>    observations<span class="op">=</span>observations,</span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    site_area<span class="op">=</span>site_area,</span>
-<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>    dictionary<span class="op">=</span><span class="st">"dictionaries/biodiversity.yaml"</span>,</span>
-<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div>
+<div class="sourceCode" id="cb8"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>biodiversity <span class="op">=</span> commons.data_source(</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>    observations<span class="op">=</span>observations,</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    site_area<span class="op">=</span>site_area,</span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>    dictionary<span class="op">=</span><span class="st">"dictionaries/biodiversity.yaml"</span>,</span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div>
 <p>For an engine or a pins board, the <code>tables</code> argument selects the tables to expose. An engine takes a list of table names:</p>
-<div class="sourceCode" id="cb7"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sqlalchemy</span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>engine <span class="op">=</span> sqlalchemy.create_engine(<span class="st">"duckdb:///surveys.duckdb"</span>)</span>
-<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>surveys <span class="op">=</span> commons.data_source(engine, tables<span class="op">=</span>[<span class="st">"observations"</span>, <span class="st">"sites"</span>])</span></code></pre></div>
+<div class="sourceCode" id="cb9"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sqlalchemy</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>engine <span class="op">=</span> sqlalchemy.create_engine(<span class="st">"duckdb:///surveys.duckdb"</span>)</span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>surveys <span class="op">=</span> commons.data_source(engine, tables<span class="op">=</span>[<span class="st">"observations"</span>, <span class="st">"sites"</span>])</span></code></pre></div>
 <p>With a pins board, <code>tables</code> maps each table name the agent sees to the pin that supplies the data:</p>
-<div class="sourceCode" id="cb8"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>surveys <span class="op">=</span> commons.data_source(</span>
-<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>    board,</span>
-<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    tables<span class="op">=</span>{<span class="st">"observations"</span>: <span class="st">"survey-observations"</span>, <span class="st">"sites"</span>: <span class="st">"survey-sites"</span>},</span>
-<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div>
+<div class="sourceCode" id="cb10"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>surveys <span class="op">=</span> commons.data_source(</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>    board,</span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>    tables<span class="op">=</span>{<span class="st">"observations"</span>: <span class="st">"survey-observations"</span>, <span class="st">"sites"</span>: <span class="st">"survey-sites"</span>},</span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div>
 <p>A Snowflake or Databricks engine also imports its catalog, so commons can resolve the selection against the warehouse and check access. <code>exclude</code> drops objects from the catalog listing by glob:</p>
-<div class="sourceCode" id="cb9"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>warehouse <span class="op">=</span> commons.data_source(engine, exclude<span class="op">=</span>[<span class="st">"TMP_*"</span>])</span></code></pre></div>
+<div class="sourceCode" id="cb11"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>warehouse <span class="op">=</span> commons.data_source(engine, exclude<span class="op">=</span>[<span class="st">"TMP_*"</span>])</span></code></pre></div>
 <p>If the catalog is too large for the system prompt, the agent gets a <code>search_catalog</code> tool instead of a table listing. The system prompt reports only the number of selected catalog objects and tells the agent to call <code>search_catalog</code> before <code>describe_table</code>. The agent then searches the catalog for objects that match the question and describes only those before it writes SQL.</p>
 <section id="data-dictionaries" class="level2">
 <h2 class="anchored" data-anchor-id="data-dictionaries">Data dictionaries</h2>
@@ -525,16 +543,16 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <h3 class="anchored" data-anchor-id="definitions">Definitions</h3>
 <p><strong>Definitions</strong> are named, governed expressions attached to tables in <code>data-dict.yaml</code>. They let an agent reuse trusted metrics, filters, and derived values, so they add to the semantic layer.</p>
 <p>Each definition is an expression in the <a href="https://data-dict.tidyverse.org/expressions.html">data-dict expression language</a>, not in the SQL dialect of your database:</p>
-<div class="sourceCode" id="cb10"><pre class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="fu">tables</span><span class="kw">:</span></span>
-<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> observations</span></span>
-<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">columns</span><span class="kw">:</span></span>
-<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> count</span></span>
-<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">type</span><span class="kw">:</span><span class="at"> number</span></span>
-<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">definitions</span><span class="kw">:</span></span>
-<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> total_individuals</span></span>
-<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">label</span><span class="kw">:</span><span class="at"> Total individuals observed</span></span>
-<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">description</span><span class="kw">:</span><span class="at"> Sum of the individuals recorded in surveys.</span></span>
-<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">expr</span><span class="kw">:</span><span class="at"> SUM(count)</span></span></code></pre></div>
+<div class="sourceCode" id="cb12"><pre class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="fu">tables</span><span class="kw">:</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> observations</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">columns</span><span class="kw">:</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> count</span></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">type</span><span class="kw">:</span><span class="at"> number</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">definitions</span><span class="kw">:</span></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> total_individuals</span></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">label</span><span class="kw">:</span><span class="at"> Total individuals observed</span></span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">description</span><span class="kw">:</span><span class="at"> Sum of the individuals recorded in surveys.</span></span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a><span class="at">        </span><span class="fu">expr</span><span class="kw">:</span><span class="at"> SUM(count)</span></span></code></pre></div>
 <p>There are three kinds of definition. A definition can take part in a trusted metric calculation, or the agent can use it in custom SQL:<a href="#fn2" class="footnote-ref" id="fnref2" role="doc-noteref"><sup>2</sup></a></p>
 <table class="caption-top table">
 <thead>
@@ -587,24 +605,24 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <section id="constructing-the-agent" class="level1">
 <h1>Constructing the agent</h1>
 <p>Use <a href="../reference/Commons.html#commons.Commons" class="gdls-link gdls-code">commons.Commons()</a> to construct an agent. Pass it a <code>chatlas.Chat</code> and one or more data sources, plus any semantic and context layers. You can also optionally append information to the <code>commons</code> agent system prompt using the <code>instructions</code> argument.</p>
-<div class="sourceCode" id="cb12"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> chatlas</span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> commons</span>
-<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>biodiversity <span class="op">=</span> commons.data_source(</span>
-<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>    observations<span class="op">=</span>observations,</span>
-<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>    site_area<span class="op">=</span>site_area,</span>
-<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>    dictionary<span class="op">=</span><span class="st">"dictionaries/biodiversity.yaml"</span>,</span>
-<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>agent <span class="op">=</span> commons.Commons(</span>
-<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a>    client<span class="op">=</span>chatlas.ChatAuto(<span class="st">"anthropic/claude-sonnet-5"</span>),</span>
-<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a>    data_sources<span class="op">=</span>{<span class="st">"biodiversity"</span>: biodiversity},</span>
-<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a>    semantic_layer<span class="op">=</span>commons.semantic_layer(<span class="st">"measures"</span>),</span>
-<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a>    context_layer<span class="op">=</span>commons.context_layer(files<span class="op">=</span>[<span class="st">"context/context.md"</span>]),</span>
-<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a>    instructions<span class="op">=</span><span class="st">"instructions.md"</span>,</span>
-<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-18"><a href="#cb12-18" aria-hidden="true" tabindex="-1"></a>agent.chat(<span class="st">"How many species were observed at Oak Bluff?"</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb14"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> chatlas</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> commons</span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>biodiversity <span class="op">=</span> commons.data_source(</span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>    observations<span class="op">=</span>observations,</span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>    site_area<span class="op">=</span>site_area,</span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a>    dictionary<span class="op">=</span><span class="st">"dictionaries/biodiversity.yaml"</span>,</span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a>agent <span class="op">=</span> commons.Commons(</span>
+<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a>    client<span class="op">=</span>chatlas.ChatAuto(<span class="st">"anthropic/claude-sonnet-5"</span>),</span>
+<span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a>    data_sources<span class="op">=</span>{<span class="st">"biodiversity"</span>: biodiversity},</span>
+<span id="cb14-13"><a href="#cb14-13" aria-hidden="true" tabindex="-1"></a>    semantic_layer<span class="op">=</span>commons.semantic_layer(<span class="st">"measures"</span>),</span>
+<span id="cb14-14"><a href="#cb14-14" aria-hidden="true" tabindex="-1"></a>    context_layer<span class="op">=</span>commons.context_layer(files<span class="op">=</span>[<span class="st">"context/context.md"</span>]),</span>
+<span id="cb14-15"><a href="#cb14-15" aria-hidden="true" tabindex="-1"></a>    instructions<span class="op">=</span><span class="st">"instructions.md"</span>,</span>
+<span id="cb14-16"><a href="#cb14-16" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb14-17"><a href="#cb14-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-18"><a href="#cb14-18" aria-hidden="true" tabindex="-1"></a>agent.chat(<span class="st">"How many species were observed at Oak Bluff?"</span>)</span></code></pre></div>
 <p><code>data_sources</code> is one <a href="../reference/DataSource.html#commons.DataSource" class="gdls-link gdls-code">DataSource</a> or a mapping of name to <a href="../reference/DataSource.html#commons.DataSource" class="gdls-link gdls-code">DataSource</a>. Name the sources when a measure takes an injected connection, because commons injects by name. <a href="../reference/semantic_layer.html#commons.semantic_layer" class="gdls-link gdls-code">semantic_layer()</a> accepts measures, modules, or paths to <code>.py</code> files and directories. <a href="../reference/context_layer.html#commons.context_layer" class="gdls-link gdls-code">context_layer()</a> accepts a list of file paths.</p>
 <p>The agent can also write and run Python code, for example to reshape a query result or draw a matplotlib chart. The code runs in a separate, sandboxed Python process. See <a href="../user-guide/governance.html#python-code-execution">Security and governance</a> for what the sandbox allows, how to give it network access, and what happens on a host where <code>commons</code> cannot sandbox it.</p>
 <p>Underneath, a <a href="../reference/Commons.html#commons.Commons" class="gdls-link gdls-code">Commons</a> agent inherits from a <code>chatlas.Chat</code> object, but builds its own system prompt and tools. As such, it follows the <code>Chat</code> API and provides the <a href="../reference/Commons.chat.html#commons.Commons.chat" class="gdls-link gdls-code">chat()</a> and <a href="../reference/Commons.stream_async.html#commons.Commons.stream_async" class="gdls-link gdls-code">stream_async()</a> methods as ways to ask a question. The other <code>chatlas</code> entry points, such as <a href="../reference/Commons.chat_async.html#commons.Commons.chat_async" class="gdls-link gdls-code">chat_async()</a>, <a href="../reference/Commons.stream.html#commons.Commons.stream" class="gdls-link gdls-code">stream()</a>, and <a href="../reference/Commons.chat_structured.html#commons.Commons.chat_structured" class="gdls-link gdls-code">chat_structured()</a>, are not supported and will raise <code>NotImplementedError</code> at this moment.</p>
@@ -612,64 +630,64 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <h2 class="anchored" data-anchor-id="chat-ui">Chat UI</h2>
 <p>The above examples will build a terminal-based agent without any UI attached. If you want to use the agent in an interactive web UI, the <code>commons.ui</code> module will put the agent behind a <a href="https://shiny.posit.co/py/">Shiny</a> chat. This requires installing the <code>shiny</code> extra group.</p>
 <p>When developing locally, you can use <code>commons.ui.app(agent)</code> to return a complete Shiny app:</p>
-<div class="sourceCode" id="cb13"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>app <span class="op">=</span> commons.ui.app(agent)</span></code></pre></div>
+<div class="sourceCode" id="cb15"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>app <span class="op">=</span> commons.ui.app(agent)</span></code></pre></div>
 <p><a href="../reference/ui.app.html#commons.ui.app" class="gdls-link gdls-code">commons.ui.app()</a> shares one agent across every session, so it suits one visitor at a time. For a deployed app, you should instead build the page with <a href="../reference/ui.theme.html#commons.ui.theme" class="gdls-link gdls-code">commons.ui.theme()</a> and construct the agent inside the Shiny server function, so each session gets its own agent:</p>
-<div class="sourceCode" id="cb14"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> shinychat</span>
-<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> shiny <span class="im">import</span> App</span>
-<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>app_ui <span class="op">=</span> shinychat.page_chat(<span class="st">"Biodiversity"</span>, <span class="bu">id</span><span class="op">=</span><span class="st">"chat"</span>, theme<span class="op">=</span>commons.ui.theme())</span>
-<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> app_server(<span class="bu">input</span>, output, session):</span>
-<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a>    <span class="co"># The same construction as above; building it per session keeps each</span></span>
-<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a>    <span class="co"># session's citation and provenance state separate.</span></span>
-<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a>    commons.ui.server(</span>
-<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a>        <span class="st">"chat"</span>,</span>
-<span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a>        commons.Commons(</span>
-<span id="cb14-13"><a href="#cb14-13" aria-hidden="true" tabindex="-1"></a>            client<span class="op">=</span>chatlas.ChatAuto(<span class="st">"anthropic/claude-sonnet-5"</span>),</span>
-<span id="cb14-14"><a href="#cb14-14" aria-hidden="true" tabindex="-1"></a>            data_sources<span class="op">=</span>{<span class="st">"biodiversity"</span>: biodiversity},</span>
-<span id="cb14-15"><a href="#cb14-15" aria-hidden="true" tabindex="-1"></a>            semantic_layer<span class="op">=</span>commons.semantic_layer(<span class="st">"measures"</span>),</span>
-<span id="cb14-16"><a href="#cb14-16" aria-hidden="true" tabindex="-1"></a>            context_layer<span class="op">=</span>commons.context_layer(files<span class="op">=</span>[<span class="st">"context/context.md"</span>]),</span>
-<span id="cb14-17"><a href="#cb14-17" aria-hidden="true" tabindex="-1"></a>            instructions<span class="op">=</span><span class="st">"instructions.md"</span>,</span>
-<span id="cb14-18"><a href="#cb14-18" aria-hidden="true" tabindex="-1"></a>        ),</span>
-<span id="cb14-19"><a href="#cb14-19" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="cb14-20"><a href="#cb14-20" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb14-21"><a href="#cb14-21" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb14-22"><a href="#cb14-22" aria-hidden="true" tabindex="-1"></a>app <span class="op">=</span> App(app_ui, app_server)</span></code></pre></div>
+<div class="sourceCode" id="cb16"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> shinychat</span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> shiny <span class="im">import</span> App</span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>app_ui <span class="op">=</span> shinychat.page_chat(<span class="st">"Biodiversity"</span>, <span class="bu">id</span><span class="op">=</span><span class="st">"chat"</span>, theme<span class="op">=</span>commons.ui.theme())</span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> app_server(<span class="bu">input</span>, output, session):</span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>    <span class="co"># The same construction as above; building it per session keeps each</span></span>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a>    <span class="co"># session's citation and provenance state separate.</span></span>
+<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a>    commons.ui.server(</span>
+<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a>        <span class="st">"chat"</span>,</span>
+<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a>        commons.Commons(</span>
+<span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a>            client<span class="op">=</span>chatlas.ChatAuto(<span class="st">"anthropic/claude-sonnet-5"</span>),</span>
+<span id="cb16-14"><a href="#cb16-14" aria-hidden="true" tabindex="-1"></a>            data_sources<span class="op">=</span>{<span class="st">"biodiversity"</span>: biodiversity},</span>
+<span id="cb16-15"><a href="#cb16-15" aria-hidden="true" tabindex="-1"></a>            semantic_layer<span class="op">=</span>commons.semantic_layer(<span class="st">"measures"</span>),</span>
+<span id="cb16-16"><a href="#cb16-16" aria-hidden="true" tabindex="-1"></a>            context_layer<span class="op">=</span>commons.context_layer(files<span class="op">=</span>[<span class="st">"context/context.md"</span>]),</span>
+<span id="cb16-17"><a href="#cb16-17" aria-hidden="true" tabindex="-1"></a>            instructions<span class="op">=</span><span class="st">"instructions.md"</span>,</span>
+<span id="cb16-18"><a href="#cb16-18" aria-hidden="true" tabindex="-1"></a>        ),</span>
+<span id="cb16-19"><a href="#cb16-19" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb16-20"><a href="#cb16-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-21"><a href="#cb16-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-22"><a href="#cb16-22" aria-hidden="true" tabindex="-1"></a>app <span class="op">=</span> App(app_ui, app_server)</span></code></pre></div>
 </section>
 </section>
 <section id="logging-conversations" class="level1">
 <h1>Logging conversations</h1>
 <p>Pass <code>log=True</code> to <a href="../reference/Commons.html#commons.Commons" class="gdls-link gdls-code">commons.Commons()</a> to record each conversation with OpenTelemetry. The agent checks the tracing setup at the time it is built. On Posit Connect, it will warn about an unsupported server and turns on Content Observability for you. In a commons deployment running somewhere other than Posit Connect, it logs only when a tracer provider is already configured, and otherwise does nothing. To use tracing, install the extra dependency group that logging needs with <code>pip install 'commons[tracing]'</code>. The recorded spans can contain whole conversations, including query results and plots, so read <a href="../user-guide/governance.html#logging-conversations">Security and governance</a> before you turn logging on.</p>
 <p>By default, commons configures no exporter, so where the telemetry spans go depends on your OpenTelemetry setup. To write them to local files, install a tracer provider with a file exporter before you build the agent:</p>
-<div class="sourceCode" id="cb15"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> pathlib <span class="im">import</span> Path</span>
-<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> opentelemetry <span class="im">import</span> trace</span>
-<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> opentelemetry.exporter.otlp.json.<span class="bu">file</span> <span class="im">import</span> FileSpanExporter</span>
-<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> opentelemetry.sdk.trace <span class="im">import</span> TracerProvider</span>
-<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> opentelemetry.sdk.trace.export <span class="im">import</span> BatchSpanProcessor</span>
-<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a>trace_file <span class="op">=</span> Path(<span class="st">"traces"</span>) <span class="op">/</span> <span class="st">"trace-1.jsonl"</span></span>
-<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a>trace_file.parent.mkdir(exist_ok<span class="op">=</span><span class="va">True</span>)</span>
-<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a>provider <span class="op">=</span> TracerProvider()</span>
-<span id="cb15-12"><a href="#cb15-12" aria-hidden="true" tabindex="-1"></a>provider.add_span_processor(BatchSpanProcessor(FileSpanExporter(path<span class="op">=</span><span class="bu">str</span>(trace_file))))</span>
-<span id="cb15-13"><a href="#cb15-13" aria-hidden="true" tabindex="-1"></a>trace.set_tracer_provider(provider)</span></code></pre></div>
+<div class="sourceCode" id="cb17"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> pathlib <span class="im">import</span> Path</span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> opentelemetry <span class="im">import</span> trace</span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> opentelemetry.exporter.otlp.json.<span class="bu">file</span> <span class="im">import</span> FileSpanExporter</span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> opentelemetry.sdk.trace <span class="im">import</span> TracerProvider</span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> opentelemetry.sdk.trace.export <span class="im">import</span> BatchSpanProcessor</span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a>trace_file <span class="op">=</span> Path(<span class="st">"traces"</span>) <span class="op">/</span> <span class="st">"trace-1.jsonl"</span></span>
+<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a>trace_file.parent.mkdir(exist_ok<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-11"><a href="#cb17-11" aria-hidden="true" tabindex="-1"></a>provider <span class="op">=</span> TracerProvider()</span>
+<span id="cb17-12"><a href="#cb17-12" aria-hidden="true" tabindex="-1"></a>provider.add_span_processor(BatchSpanProcessor(FileSpanExporter(path<span class="op">=</span><span class="bu">str</span>(trace_file))))</span>
+<span id="cb17-13"><a href="#cb17-13" aria-hidden="true" tabindex="-1"></a>trace.set_tracer_provider(provider)</span></code></pre></div>
 <p>On Posit Connect (version 2026.09.0 or later) the server exports the spans itself, so this recipe is not needed there. An administrator must set <code>OpenTelemetry.Enabled</code> and <code>OpenTelemetry.AllowContentInstrumentation</code> to <code>true</code>. When the agent runs on Connect in a process with no active tracer provider, it turns on the content’s Content Observability setting itself and warns that logging begins once the content restarts; otherwise, use the content’s Settings &gt; Monitoring &gt; Traces panel. Once logging is live, the <code>share_with=["username"]</code> argument adds the named Connect users as collaborators on the content, so that they can read its traces.</p>
 <p>Read the files back with <a href="../reference/trajectory_read.html#commons.trajectory_read" class="gdls-link gdls-code">commons.trajectory_read()</a>, as the next section describes. It groups turns into conversations by the conversation id the application sets, as shinychat does when chat history is enabled. A turn without one reads as a conversation of its own, so to group a script’s turns, set <code>conversation_id</code> on the chatlas client before you pass it to <a href="../reference/Commons.html#commons.Commons" class="gdls-link gdls-code">commons.Commons()</a>.</p>
 </section>
 <section id="reading-logged-conversations" class="level1">
 <h1>Reading logged conversations</h1>
 <p><a href="../reference/trajectory_read.html#commons.trajectory_read" class="gdls-link gdls-code">commons.trajectory_read()</a> reads logged conversations back as chatlas turns, one entry per conversation. Pass it the directory of trace files, or a Posit Connect content GUID or URL to read the conversations of a deployed agent. The <code>BatchSpanProcessor</code> exports spans in batches, so to read in the process that logged them, call <code>provider.force_flush()</code> first.</p>
-<div class="sourceCode" id="cb16"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> commons</span>
-<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>recent <span class="op">=</span> commons.trajectory_read(<span class="st">"traces"</span>, n<span class="op">=</span><span class="dv">20</span>, since<span class="op">=</span><span class="st">"2026-07-01"</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb18"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> commons</span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>recent <span class="op">=</span> commons.trajectory_read(<span class="st">"traces"</span>, n<span class="op">=</span><span class="dv">20</span>, since<span class="op">=</span><span class="st">"2026-07-01"</span>)</span></code></pre></div>
 <p>A read from Connect also needs the <code>CONNECT_API_KEY</code> environment variable:</p>
-<div class="sourceCode" id="cb17"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> commons</span>
-<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>deployed <span class="op">=</span> commons.trajectory_read(</span>
-<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">"https://connect.example.com/content/01234567-89ab-cdef-0123-456789abcdef/"</span></span>
-<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div>
+<div class="sourceCode" id="cb19"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> commons</span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>deployed <span class="op">=</span> commons.trajectory_read(</span>
+<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">"https://connect.example.com/content/01234567-89ab-cdef-0123-456789abcdef/"</span></span>
+<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div>
 <p>See the <a href="../reference/trajectory_read.html"><code>trajectory_read()</code> reference</a> for the sources it accepts, the credentials and access a read from Connect needs, and how the time window applies, and the <a href="../reference/Trajectory.html"><code>Trajectory</code> reference</a> for the fields of each conversation.</p>
 </section>
 <section id="example-application" class="level1">
