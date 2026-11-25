@@ -13,16 +13,7 @@ Use this reference when creating, reviewing, or editing a data dictionary for a 
 
 ## Project convention
 
-Create one dictionary for each `data_source()` and name the file after the source in the `commons()` call:
-
-```r
-sources <- list(
-  warehouse = data_source(
-    con,
-    dictionary = "dictionaries/warehouse.yaml"
-  )
-)
-```
+Create one dictionary for each `data_source()`, pass it as that source's `dictionary`, and name the file after the name the agent gives the source. A source named `warehouse` reads `dictionaries/warehouse.yaml`.
 
 Dictionary table names must identify tables exposed by that source. Do not combine unrelated sources in one dictionary or use a dictionary to describe tables the agent cannot query.
 
