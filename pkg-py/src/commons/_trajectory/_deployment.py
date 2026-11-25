@@ -13,7 +13,7 @@ import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse, urlsplit
+from urllib.parse import urlparse, urlsplit, urlunsplit
 
 from .._connect import normalize_server
 
@@ -107,13 +107,14 @@ def check_record_server(deployment: Deployment) -> None:
 
 
 def _server_key(server: str) -> tuple[str, str, str]:
-    # A URL's scheme and host are case-insensitive; its path is not.
+    # A URL's scheme and host are case-insensitive; the rest of it is not.
     server = normalize_server(server)
     try:
         parts = urlsplit(server)
     except ValueError:
         return ("", "", server)
-    return (parts.scheme.lower(), parts.netloc.lower(), parts.path)
+    rest = urlunsplit(("", "", parts.path, parts.query, parts.fragment))
+    return (parts.scheme.lower(), parts.netloc.lower(), rest)
 
 
 def deployment_record_files(directory: Path, max_depth: int = 3) -> list[Path]:
