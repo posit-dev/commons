@@ -7,7 +7,8 @@
 #' enabled—and read back from Posit Connect's content observability store or
 #' from local trace files.
 #'
-#' This feature requires Connect >= 2026.09.0.
+#' This feature requires Connect >= 2026.09.0. A read stops with an error when
+#' the server reports an older version.
 #'
 #' @param source Where to read trajectories from:
 #'
@@ -167,11 +168,11 @@ parse_window_bound <- function(x) {
   NULL
 }
 
-# The `from`/`to` window and `n` limit are passed down to Connect so a
-# filtered read doesn't transfer the whole trace store. The server-side
-# `from` filter can still drop ancestor spans (see connect_window_param()),
-# severing turn-ancestor resolution; when that happens, refetch without
-# `from`.
+# The `from`/`to` window is passed down to Connect, and `n` stops the read
+# early, so a filtered read doesn't transfer the whole trace store. The
+# server-side `from` filter can still drop ancestor spans (see
+# connect_window_param()), severing turn-ancestor resolution; when that
+# happens, refetch without `from`.
 read_connect_spans <- function(
   client,
   guid,
@@ -180,6 +181,7 @@ read_connect_spans <- function(
   to,
   call = rlang::caller_env()
 ) {
+  check_connect_read_version(client, call)
   spans <- fetch_connect_spans(client, guid, from, n, from, to, call)
   if (
     !is.null(from) && has_severed_ancestry(filter_chat_spans(spans, from, to))
@@ -209,25 +211,90 @@ fetch_connect_spans <- function(
 }
 
 # Builds connect_trace_lines()'s early-stop check: TRUE once the lines
-# fetched so far reconstruct `n` complete conversations in the window.
+# fetched so far hold the `n` latest conversations in the window whole. A
+# conversation is whole once the lines reach its first question. Connect sorts
+# lines newest first by the start time of each line's first span, and one line
+# can hold spans of several conversations, so a line not yet read can still
+# hold a later chat span. The check also waits for a line that sorts an hour
+# (`connect_from_pad`) before the conversations' earliest chat span. That
+# assumes a span lasts at most an hour, as the `from` pushdown does.
 enough_trace_lines <- function(n, from, to) {
   state <- new.env(parent = emptyenv())
   state$spans <- list()
   state$n_seen <- 0
+  # The earliest sort time of the lines read, zero-padded.
+  state$oldest <- NULL
+  # Settled once the ancestry is intact, so each span is checked once.
+  state$gives_turns <- new.env(parent = emptyenv())
   function(lines) {
     new_lines <- lines[rlang::seq2(state$n_seen + 1, length(lines))]
     state$n_seen <- length(lines)
-    state$spans <- c(state$spans, parse_otlp_lines(new_lines))
+    parsed <- lapply(new_lines, parse_otlp_line)
+    state$spans <- c(
+      state$spans,
+      unlist(lapply(parsed, `[[`, "spans"), recursive = FALSE)
+    )
+    sort_times <- unlist(lapply(parsed, `[[`, "sort_time"))
+    if (length(sort_times) > 0) {
+      state$oldest <- min(
+        c(state$oldest, vapply(sort_times, pad_nano_time, character(1)))
+      )
+    }
     kept <- filter_chat_spans(state$spans, from, to)
     if (has_severed_ancestry(kept)) {
       return(FALSE)
     }
-    latest <- latest_chat_spans(Filter(is_chat_span, kept))
+    chat_spans <- Filter(is_chat_span, kept)
+    index <- span_index(kept)
+    latest <- latest_chat_spans(chat_spans)
+    latest <- Filter(function(span) {
+      key <- paste(span$trace_id, span$span_id)
+      if (is.null(state$gives_turns[[key]])) {
+        state$gives_turns[[key]] <- chat_span_gives_turns(span, index)
+      }
+      state$gives_turns[[key]]
+    }, latest)
     if (length(latest) < n) {
       return(FALSE)
     }
-    sum(lengths(lapply(latest, trajectory_turns)) > 0) >= n
+    by_conversation <- chat_spans_by_conversation(chat_spans)
+    recent <- by_conversation[utils::tail(names(latest), n)]
+    if (!all(vapply(recent, reaches_first_question, logical(1)))) {
+      return(FALSE)
+    }
+    starts <- vapply(
+      unlist(recent, recursive = FALSE),
+      function(span) pad_nano_time(span$start_time),
+      character(1)
+    )
+    !is.null(state$oldest) &&
+      pad_nano_time(shift_nano_time(state$oldest, -connect_from_pad)) <=
+        min(starts)
   }
+}
+
+# Whether a chat span gives its conversation turns, as recorded or rebuilt by
+# recover_missing_input().
+chat_span_gives_turns <- function(span, index) {
+  if (length(trajectory_turns(span)) > 0) {
+    return(TRUE)
+  }
+  is.null(parse_semconv_json(span$attributes[["gen_ai.input.messages"]])) &&
+    !is.null(conversation_turn_ancestor(span, index))
+}
+
+# Whether a conversation's chat spans reach back to its first question: the
+# earliest of them, leaving out title calls, records one exchange. The spans
+# after it then hold every later exchange. Earliest is by span_time(), as
+# conversation_user() picks the span the user is read from.
+reaches_first_question <- function(chat_spans) {
+  candidates <- Filter(Negate(is_conversation_title_span), chat_spans)
+  if (length(candidates) == 0) {
+    return(FALSE)
+  }
+  times <- vapply(candidates, span_time, character(1))
+  earliest <- candidates[[order(times)[[1]]]]
+  length(split_exchanges(trajectory_turns(earliest))) == 1
 }
 
 # Chat spans emitted without message content -- capture was off, or the spans
@@ -636,24 +703,42 @@ local_traces_pattern <- function() {
 # [{"spans": [...]}]}]}. Malformed lines are skipped, matching Connect's own
 # reader.
 parse_otlp_lines <- function(lines) {
+  spans <- lapply(lines, function(line) parse_otlp_line(line)$spans)
+  unlist(spans, recursive = FALSE) %||% list()
+}
+
+# One line's spans, and the time Connect sorts the line by: the start time of
+# its first span, as a string of digits, or NULL when it has none.
+parse_otlp_line <- function(line) {
+  envelope <- tryCatch(
+    jsonlite::fromJSON(line, simplifyVector = FALSE),
+    error = function(err) NULL
+  )
+  if (!is.list(envelope)) {
+    return(list(spans = list(), sort_time = NULL))
+  }
   spans <- list()
-  for (line in lines) {
-    envelope <- tryCatch(
-      jsonlite::fromJSON(line, simplifyVector = FALSE),
-      error = function(err) NULL
-    )
-    if (is.null(envelope)) {
-      next
-    }
-    for (resource_spans in envelope$resourceSpans) {
-      for (scope_spans in resource_spans$scopeSpans) {
-        for (span in scope_spans$spans) {
-          spans[[length(spans) + 1]] <- otlp_span(span)
-        }
+  for (resource_spans in envelope$resourceSpans) {
+    for (scope_spans in resource_spans$scopeSpans) {
+      for (span in scope_spans$spans) {
+        spans[[length(spans) + 1]] <- otlp_span(span)
       }
     }
   }
-  spans
+  list(spans = spans, sort_time = otlp_sort_time(envelope))
+}
+
+otlp_sort_time <- function(envelope) {
+  value <- envelope
+  for (key in c("resourceSpans", "scopeSpans", "spans")) {
+    entries <- if (is.list(value)) value[[key]]
+    if (!is.list(entries) || length(entries) == 0) {
+      return(NULL)
+    }
+    value <- entries[[1]]
+  }
+  start <- if (is.list(value)) value[["startTimeUnixNano"]]
+  if (rlang::is_string(start) && grepl("^[0-9]+$", start)) start else NULL
 }
 
 otlp_span <- function(span) {
@@ -1326,6 +1411,14 @@ has_severed_ancestry <- function(spans) {
 span_time <- function(span) {
   time <- if (nzchar(span$end_time)) span$end_time else span$start_time
   pad_nano_time(time)
+}
+
+# A Unix-nano timestamp moved by whole `seconds`. The seconds are shifted on
+# their own, since a double cannot hold the full timestamp exactly.
+shift_nano_time <- function(time, seconds) {
+  time <- pad_nano_time(time)
+  whole <- as.numeric(substr(time, 1, 23)) + seconds
+  paste0(sprintf("%.0f", whole), substr(time, 24, 32))
 }
 
 # Unix-nano timestamps overflow doubles, so compare them as zero-padded

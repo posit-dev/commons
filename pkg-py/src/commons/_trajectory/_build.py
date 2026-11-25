@@ -111,12 +111,10 @@ class _Candidate:
 
 def build_trajectories(spans: Sequence[Span]) -> dict[str, Trajectory]:
     """The conversations the chat spans record, keyed by conversation id, oldest first."""
-    index = _span_index(spans)
+    index = span_index(spans)
     chat_spans = [span for span in spans if is_chat_span(span)]
     latest = latest_chat_spans(chat_spans)
-    by_conversation: dict[str, list[Span]] = {}
-    for span in chat_spans:
-        by_conversation.setdefault(conversation_id(span), []).append(span)
+    by_conversation = chat_spans_by_conversation(chat_spans)
     turns_of = functools.partial(
         _chat_span_turns, cache={}, by_conversation=by_conversation, index=index
     )
@@ -203,6 +201,14 @@ def conversation_id(span: Span) -> str:
     return span.trace_id if id_ is None else str(id_)
 
 
+def chat_spans_by_conversation(chat_spans: Sequence[Span]) -> dict[str, list[Span]]:
+    """The chat spans of each conversation, in the order given."""
+    by_conversation: dict[str, list[Span]] = {}
+    for span in chat_spans:
+        by_conversation.setdefault(conversation_id(span), []).append(span)
+    return by_conversation
+
+
 def latest_chat_spans(chat_spans: Sequence[Span]) -> dict[str, Span]:
     """The chat span that supplies each conversation's turns, oldest first."""
     latest: dict[str, Span] = {}
@@ -212,6 +218,31 @@ def latest_chat_spans(chat_spans: Sequence[Span]) -> dict[str, Span]:
         if current is None or _is_preferred(span, current):
             latest[id_] = span
     return dict(sorted(latest.items(), key=lambda item: span_time(item[1])))
+
+
+def chat_span_gives_turns(span: Span, index: dict[_SpanKey, Span]) -> bool:
+    """Does the chat span give its conversation turns, as recorded or rebuilt?"""
+    if trajectory_turns(span):
+        return True
+    return (
+        not has_json(span.attributes.get(INPUT_MESSAGES))
+        and _turn_ancestor(span, index) is not None
+    )
+
+
+def reaches_first_question(chat_spans: Sequence[Span]) -> bool:
+    """Do a conversation's chat spans reach back to its first question?
+
+    True when the earliest of them, leaving out title calls, records one
+    exchange. The spans after it then hold every later exchange. Earliest is
+    by `span_time`, as `_conversation_user` picks the span the user is read
+    from.
+    """
+    candidates = [span for span in chat_spans if not _is_title_span(span)]
+    if not candidates:
+        return False
+    earliest = min(candidates, key=span_time)
+    return len(split_exchanges(trajectory_turns(earliest))) == 1
 
 
 def _is_preferred(candidate: Span, current: Span) -> bool:
@@ -264,7 +295,7 @@ def _span_key(span: Span) -> _SpanKey:
     return (span.trace_id, span.span_id)
 
 
-def _span_index(spans: Sequence[Span]) -> dict[_SpanKey, Span]:
+def span_index(spans: Sequence[Span]) -> dict[_SpanKey, Span]:
     index: dict[_SpanKey, Span] = {}
     for span in spans:
         index.setdefault(_span_key(span), span)
@@ -288,7 +319,7 @@ def _turn_ancestor(span: Span, index: dict[_SpanKey, Span]) -> Span | None:
 
 def has_severed_ancestry(spans: Sequence[Span]) -> bool:
     """Has a chat span lost a parent between it and its turn span?"""
-    index = _span_index(spans)
+    index = span_index(spans)
     return any(_ancestry_severed(span, index) for span in spans if is_chat_span(span))
 
 

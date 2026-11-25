@@ -70,7 +70,7 @@ test_that("the Connect tracing warning follows the shared cases", {
   expect_gt(length(spec$cases), 0)
   expect_equal(
     parse_connect_version(observability$minimum_version),
-    numeric_version("2026.09.0")
+    numeric_version(connect_minimum_version)
   )
   patterns <- c(
     version = "requires Connect >= 2026.09.0",

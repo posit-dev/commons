@@ -75,12 +75,14 @@ warn_if_connect_tracing_unsupported <- function() {
 
   settings <- connect_tracing_server_settings()
   version <- parse_connect_version(settings$version)
-  if (!is.null(version) && version < numeric_version("2026.09.0")) {
+  if (!is.null(version) && version < numeric_version(connect_minimum_version)) {
     cli::cli_warn(c(
       paste0(
         "This server is running Connect ",
         settings$version,
-        ", but trajectory logging requires Connect >= 2026.09.0."
+        ", but trajectory logging requires Connect >= ",
+        connect_minimum_version,
+        "."
       ),
       i = "Please ask your server administrator to upgrade."
     ))

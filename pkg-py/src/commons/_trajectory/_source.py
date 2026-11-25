@@ -5,26 +5,34 @@ import re
 import warnings
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from urllib.parse import unquote
 
 from .._connect import (
+    FROM_PAD,
+    MINIMUM_TRACING_VERSION,
     ConnectClient,
     ConnectError,
     connect_content_guid,
     connect_trace_lines,
     content,
     is_connect_runtime,
+    parse_connect_version,
     server_settings,
     vanity_guid,
+    version_is_older,
 )
 from .._tracing import CONTENT_TRACING_HINT, SERVER_TRACING_HINT
 from ._build import (
+    chat_span_gives_turns,
+    chat_spans_by_conversation,
     filter_chat_spans,
     has_severed_ancestry,
     is_chat_span,
     latest_chat_spans,
+    reaches_first_question,
+    span_index,
 )
 from ._deployment import (
     GUID_PATTERN,
@@ -32,8 +40,13 @@ from ._deployment import (
     find_deployment,
     registered_connect_servers,
 )
-from ._otlp import Span, local_traces_dir, parse_otlp_lines, read_local_spans
-from ._semconv import trajectory_turns
+from ._otlp import (
+    Span,
+    local_traces_dir,
+    parse_otlp_line,
+    parse_otlp_lines,
+    read_local_spans,
+)
 
 EMPTY_READ_MESSAGE = "No traces were found for this content."
 
@@ -191,8 +204,9 @@ def read_connect_spans(
 ) -> list[Span]:
     """The content's spans, with the window sent to Connect.
 
-    `n` is used to stop paging early where a server has a single trace store.
+    With `n`, the read stops once it holds the `n` latest conversations whole.
     """
+    check_connect_read_version(client)
     spans = _fetch_connect_spans(client, guid, since, n=n, since=since, until=until)
     # The padded `from` can still drop a turn span that started more than an
     # hour earlier, so a severed chain is fetched once more without it.
@@ -201,6 +215,26 @@ def read_connect_spans(
     ):
         spans = _fetch_connect_spans(client, guid, None, n=n, since=since, until=until)
     return spans
+
+
+def check_connect_read_version(client: ConnectClient) -> None:
+    """Refuse a server older than the first Connect with a public traces API.
+
+    Older servers have only internal trace endpoints, whose storage changed
+    between releases. The settings endpoint is internal, so a failed request
+    or a missing version lets the read go ahead.
+    """
+    try:
+        settings = server_settings(client)
+    except (ConnectError, ValueError):
+        return
+    version = parse_connect_version(settings.get("version"))
+    if version is not None and version_is_older(version, MINIMUM_TRACING_VERSION):
+        raise ConnectError(
+            f"This server is running Connect {settings['version']}, but "
+            f"reading trajectories requires Connect >= {MINIMUM_TRACING_VERSION}. "
+            "Please ask your server administrator to upgrade."
+        )
 
 
 def _fetch_connect_spans(
@@ -222,21 +256,50 @@ def _fetch_connect_spans(
 def enough_trace_lines(
     n: int, since: datetime | None, until: datetime | None
 ) -> Callable[[Sequence[str]], bool]:
-    """A check that the lines read so far hold `n` conversations with content."""
+    """A check that the lines read so far hold the `n` latest conversations whole.
+
+    A conversation is whole once the lines reach its first question. Connect
+    sorts lines newest first by the start time of each line's first span, and
+    one line can hold spans of several conversations, so a line not yet read
+    can still hold a later chat span. The check also waits for a line that
+    sorts an hour (`FROM_PAD`) before the conversations' earliest chat span.
+    That assumes a span lasts at most an hour, as the `from` pushdown does.
+    """
     spans: list[Span] = []
     parsed = 0
+    oldest: int | None = None
+    pad = -FROM_PAD // timedelta(microseconds=1) * 1000
+    # Settled once the ancestry is intact, so each span is checked once.
+    gives_turns: dict[tuple[str, str], bool] = {}
 
     def enough(lines: Sequence[str]) -> bool:
-        nonlocal parsed
-        spans.extend(parse_otlp_lines(lines[parsed:]))
+        nonlocal parsed, oldest
+        for line in lines[parsed:]:
+            line_spans, sort_time = parse_otlp_line(line)
+            spans.extend(line_spans)
+            if sort_time is not None and (oldest is None or sort_time < oldest):
+                oldest = sort_time
         parsed = len(lines)
         kept = filter_chat_spans(spans, since, until)
         if has_severed_ancestry(kept):
             return False
-        latest = latest_chat_spans([span for span in kept if is_chat_span(span)])
+        chat_spans = [span for span in kept if is_chat_span(span)]
+        index = span_index(kept)
+        latest = []
+        for id_, span in latest_chat_spans(chat_spans).items():
+            key = (span.trace_id, span.span_id)
+            if key not in gives_turns:
+                gives_turns[key] = chat_span_gives_turns(span, index)
+            if gives_turns[key]:
+                latest.append(id_)
         if len(latest) < n:
             return False
-        return sum(1 for span in latest.values() if trajectory_turns(span)) >= n
+        by_conversation = chat_spans_by_conversation(chat_spans)
+        recent = [by_conversation[id_] for id_ in latest[-n:]]
+        if not all(reaches_first_question(spans_) for spans_ in recent):
+            return False
+        first = min(span.start_time_unix_nano for spans_ in recent for span in spans_)
+        return oldest is not None and oldest + pad <= first
 
     return enough
 

@@ -18,7 +18,13 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from commons._connect import FROM_PAD, TO_PAD, normalize_server, window_param
+from commons._connect import (
+    FROM_PAD,
+    TO_PAD,
+    ConnectError,
+    normalize_server,
+    window_param,
+)
 from commons._tracing import CONTENT_TRACING_HINT, SERVER_TRACING_HINT
 from commons._trajectory import trajectory_read
 from commons._trajectory._build import has_severed_ancestry
@@ -58,7 +64,7 @@ SOURCE_MEMBERS = (
     "null_local",
 )
 CHECK_MEMBERS = ("enough", "enough_ancestry", "severed")
-READ_MEMBERS = ("refetch", "fetch_once", "early_stop", "empty_read")
+READ_MEMBERS = ("refetch", "fetch_once", "early_stop", "empty_read", "minimum_version")
 _CLEARED = (
     "POSIT_PRODUCT",
     "CONNECT_CONTENT_GUID",
@@ -738,7 +744,7 @@ def test_connect_reads_match_the_shared_fixture(
     assert_trajectories(result, case["trajectories"])
 
 
-_EMPTY = {"version": "2026.09.0", "traces": [], "jobs": []}
+_EMPTY = {"traces": [], "jobs": []}
 _HINTS = {"content": CONTENT_TRACING_HINT, "server": SERVER_TRACING_HINT}
 
 
@@ -780,6 +786,33 @@ def test_an_empty_read_warning_points_at_the_caller(
         trajectory_read(GUID)
 
     assert [w.filename for w in caught] == [__file__]
+
+
+@_named("minimum_version")
+def test_a_connect_read_refuses_a_server_older_than_the_minimum(
+    case: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A server older than the public traces API gets a clear error.
+
+    Its trace endpoints are internal, so a read could return partial results
+    without a sign. A server whose version is unknown is read as usual.
+    """
+    connect_env(monkeypatch, {"CONNECT_SERVER": "https://connect.example.com"})
+    member = CONNECT["minimum_version"]
+    route, seen = connect_fixture_server(
+        {"traces": member["traces"], "jobs": []}, settings=case["settings"]
+    )
+    serve_connect(monkeypatch, route)
+
+    if not case["refused"]:
+        assert_trajectories(trajectory_read(GUID), member["trajectories"])
+        return
+    with pytest.raises(ConnectError) as raised:
+        trajectory_read(GUID)
+    minimum = load_shared_fixture("connect")["observability"]["minimum_version"]
+    assert case["settings"]["version"] in str(raised.value)
+    assert f">= {minimum}" in str(raised.value)
+    assert _trace_queries(seen) == []
 
 
 def test_a_connect_read_closes_its_client(monkeypatch: pytest.MonkeyPatch) -> None:

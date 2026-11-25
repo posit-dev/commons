@@ -29,7 +29,6 @@ connect_fixture_responses <- function(server, state, content = list(), settings 
     page <- keep[rlang::seq2(as.integer(query[["offset"]] %||% "0") + 1, length(keep))]
     if (!is.null(server[["page_size"]])) page <- utils::head(page, server[["page_size"]])
     headers <- list()
-    if (!is.null(server[["version"]])) headers$Server <- paste0("Posit Connect v", server[["version"]])
     if (!("total" %in% names(server) && is.null(server[["total"]]))) {
       headers$`X-Total-Count` <- as.character(server[["total"]] %||% length(keep))
     }
@@ -103,7 +102,7 @@ expect_trace_lines_member <- function(member, spec) {
         spec[["guid"]],
         from = fixture_instant(case[["since"]]),
         to = fixture_instant(case[["until"]]),
-        enough = if (isTRUE(case[["enough"]])) function(lines) TRUE
+        enough = if (!is.null(case[["enough"]])) function(lines) case[["enough"]]
       )
     }
     if (identical(case[["error"]], "access")) {

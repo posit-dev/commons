@@ -23,7 +23,6 @@ import httpx
 __all__ = [
     "FROM_PAD",
     "JOBS_RESPONSE_MESSAGE",
-    "LEGACY_TRACE_STORE_BEFORE",
     "MINIMUM_TRACING_VERSION",
     "MISSING_CONTENT_MESSAGE",
     "TO_PAD",
@@ -53,9 +52,6 @@ _VERSION = re.compile(r"([0-9]+(?:\.[0-9]+){1,2})")
 
 # The lines a traces request asks for.
 TRACE_PAGE_SIZE = 1000
-
-# The first Connect release with a second trace store beside each job's own.
-LEGACY_TRACE_STORE_BEFORE = "2026.07.0"
 
 TRACE_ACCESS_MESSAGE = (
     "Couldn't read this content's traces from Posit Connect. Reading traces "
@@ -257,7 +253,8 @@ def connect_trace_lines(
     """The content's trace lines, as OTLP JSON, newest first.
 
     `since` and `until` are sent padded, so the caller applies the window
-    exactly. `enough(lines)` may stop the read early on an older server.
+    exactly. Once `enough(lines)` is true after a page of the `traces`
+    store, the read stops, before the job stores.
     """
     window = {
         key: value
@@ -269,7 +266,6 @@ def connect_trace_lines(
     }
     lines: list[str] = []
     offset = 0
-    version: tuple[int, ...] | None = None
     while True:
         try:
             response = client.request(
@@ -287,28 +283,20 @@ def connect_trace_lines(
                     client, guid, since=since, page_size=page_size, lines=[]
                 )
             raise
-        if version is None:
-            version = parse_connect_version(response.headers.get("Server"))
         page = _page_lines(response)
         lines.extend(page)
         total = _total(response)
         offset += len(page)
-        # Stopping early is safe only on a server with a single trace store.
-        if (
-            version is not None
-            and version_is_older(version, LEGACY_TRACE_STORE_BEFORE)
-            and lines
-            and enough is not None
-            and enough(lines)
-        ):
-            return lines
+        # The job stores hold only spans from before Connect 2026.07, which
+        # are older than every span in the `traces` store.
+        if lines and enough is not None and enough(lines):
+            return list(dict.fromkeys(lines))
         if not page or total is None or offset >= total:
             break
     # Connect 2026.07 moved new traces without migrating the per-job files.
-    if version is None or not version_is_older(version, LEGACY_TRACE_STORE_BEFORE):
-        lines = _job_trace_lines(
-            client, guid, since=since, page_size=page_size, lines=lines
-        )
+    lines = _job_trace_lines(
+        client, guid, since=since, page_size=page_size, lines=lines
+    )
     return list(dict.fromkeys(lines))
 
 
