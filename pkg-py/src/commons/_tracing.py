@@ -227,8 +227,9 @@ def enable_trajectory_tracing(
     ``True`` only when ``log`` is set, the SDK is installed, a tracer
     provider is configured, and message content capture is on. A missing SDK
     warns. On Connect, an unsupported server warns, and a missing provider
-    turns on Content Observability and warns. A missing provider off Connect,
-    or a capture opt-out, returns ``False`` silently. ``share_with`` grants
+    turns on Content Observability and warns. A capture opt-out returns
+    ``False`` silently, as does a missing provider when the process runs
+    locally or somewhere other than Posit Connect. ``share_with`` grants
     those Connect users access once logging is live. commons configures no
     exporter: where the spans go is the caller's OpenTelemetry setup. Capture
     is checked last, so a process with no tracing keeps its environment
@@ -310,7 +311,8 @@ def warn_if_connect_tracing_unsupported(
     The server must be at least ``MINIMUM_TRACING_VERSION`` and must allow
     content instrumentation. The version is checked first. The settings
     endpoint is internal, so a failed request or a missing field means
-    unknown and warns about nothing. Does nothing off Connect.
+    unknown and warns about nothing. Does nothing unless the process runs
+    on Posit Connect.
     """
     if not is_connect_runtime():
         return
@@ -348,8 +350,8 @@ def enable_content_observability(
     process stays untraced and the warning says when logging begins. The
     setting is editable with the ephemeral owner-scoped ``CONNECT_API_KEY``
     that Connect gives running content. Attempted once per process, since an
-    agent is typically built per session. Does nothing off Connect. A Connect
-    failure warns and never raises.
+    agent is typically built per session. Does nothing unless the process
+    runs on Posit Connect. A Connect failure warns and never raises.
     """
     global _OBSERVABILITY_ATTEMPTED
     if not is_connect_runtime() or _OBSERVABILITY_ATTEMPTED:
