@@ -96,8 +96,8 @@ def _latest_in_file(deployments: list[Deployment]) -> Deployment:
     servers = ", ".join(d.server for d in distinct)
     raise ValueError(
         f"Can't tell which deployment in {distinct[0].file} is the most recent: "
-        f"it lists deployments to {servers}. Set CONNECT_SERVER to one of them, "
-        "or pass a content URL."
+        f"it lists deployments to {servers}. Set CONNECT_SERVER and "
+        "CONNECT_API_KEY for one of them."
     )
 
 

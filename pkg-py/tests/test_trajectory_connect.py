@@ -391,10 +391,15 @@ def test_a_python_record_for_two_servers_is_ambiguous(
     connect_env(monkeypatch, {})
     _write_two_server_record(tmp_path)
 
-    with pytest.raises(ValueError, match="Set CONNECT_SERVER") as raised:
+    with pytest.raises(
+        ValueError, match="Set CONNECT_SERVER and CONNECT_API_KEY"
+    ) as raised:
         find_deployment(tmp_path)
 
     assert "https://one.example.com, https://two.example.com" in str(raised.value)
+    # Neither server is trusted, so the message must not point at a source
+    # that would send the key to one of them.
+    assert "content URL" not in str(raised.value)
 
 
 def test_connect_server_picks_a_server_whatever_its_hosts_case(
