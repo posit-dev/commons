@@ -6,7 +6,7 @@ The agent, the three layers (data, semantics, and context), and the chat UI are 
 
 ## Optional extras
 
-The core dependencies will allow you to build and query an agent. Installing the `shiny` group (via `pip install commons[shiny]`) will additionally install everything `commons.ui` needs to serve a full chat UI; importing `commons.ui` without it raises an `ImportError` that names the missing packages and the install command. The `tracing` group installs the OpenTelemetry packages that `log=True` uses to write trace files locally; when deploying your app somewhere other than Posit Connect, logging also needs a tracer provider, as [Logging conversations](https://posit-dev.github.io/commons/py/user-guide/get-started.html#logging-conversations) describes.
+The core dependencies will allow you to build and query an agent. Installing the `shiny` group (via `pip install commons[shiny]`) will additionally install everything `commons.ui` needs to serve a full chat UI; importing `commons.ui` without it raises an `ImportError` that names the missing packages and the install command. The `tracing` group installs the OpenTelemetry packages that `log=True` uses to write trace files locally; when running locally or deploying your app somewhere other than Posit Connect, logging also needs a tracer provider, as [Logging conversations](https://posit-dev.github.io/commons/py/user-guide/get-started.html#logging-conversations) describes.
 
 To install the complete package with all extras, run `pip install "commons[shiny,tracing]"`.
 

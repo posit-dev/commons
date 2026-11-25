@@ -23,7 +23,7 @@ If you want the chat UI, install the `shiny` extra, as well:
 uv pip install "commons[shiny]"
 ```
 
-To log conversations with `log=True`, install the `tracing` extra; when deploying your app somewhere other than Posit Connect, logging also needs a tracer provider, as [Logging conversations](user-guide/get-started.qmd#logging-conversations) describes. To install the complete package with all extras, run:
+To log conversations with `log=True`, install the `tracing` extra; when running locally or deploying your app somewhere other than Posit Connect, logging also needs a tracer provider, as [Logging conversations](user-guide/get-started.qmd#logging-conversations) describes. To install the complete package with all extras, run:
 
 ```bash
 uv pip install "commons[shiny,tracing]"
