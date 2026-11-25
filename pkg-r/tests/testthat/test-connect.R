@@ -110,7 +110,7 @@ test_that("connect_vanity_guid explains an inaccessible URL", {
       charToRaw(jsonlite::toJSON(
         list(
           results = list(),
-          total = 1L
+          total = 0L
         ),
         auto_unbox = TRUE
       )),

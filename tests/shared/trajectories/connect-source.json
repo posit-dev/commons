@@ -122,7 +122,7 @@
     "cases": [
       {"name": "a vanity URL is resolved through Connect", "source": "https://connect.example.com/content/my-agent", "search": [{"results": [{"guid": "ea3c1445-cb71-42df-a2f2-bdb18874ef41", "vanity_url": "https://connect.example.com/my-agent/"}], "total": 1}], "expected": {"kind": "connect", "guid": "ea3c1445-cb71-42df-a2f2-bdb18874ef41", "server": "https://connect.example.com"}},
       {"name": "a vanity URL under a path searches that server", "source": "https://connect.example.com/rsc/content/my-agent", "search": [{"results": [{"guid": "ea3c1445-cb71-42df-a2f2-bdb18874ef41", "vanity_url": "https://connect.example.com/rsc/my-agent/"}], "total": 1}], "expected": {"kind": "connect", "guid": "ea3c1445-cb71-42df-a2f2-bdb18874ef41", "server": "https://connect.example.com/rsc"}},
-      {"name": "a vanity URL that matches no content is an error", "source": "https://connect.example.com/content/missing", "search": [{"results": [], "total": 1}], "expected": {"error": "Can't find content for the Connect vanity URL"}}
+      {"name": "a vanity URL that matches no content is an error", "source": "https://connect.example.com/content/missing", "search": [{"results": [], "total": 0}], "expected": {"error": "Can't find content for the Connect vanity URL"}}
     ]
   },
   "unrecognized_url": {
