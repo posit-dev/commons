@@ -13,7 +13,6 @@ from importlib.resources import files
 from importlib.resources.abc import Traversable
 from pathlib import Path
 
-import pytest
 import yaml
 
 SKILL = files("commons") / "skills" / "commons"
@@ -78,11 +77,3 @@ def test_skill_names_no_r_api() -> None:
         text = file.read_text(encoding="utf-8")
         found = [term for term in R_TERMS if term in text]
         assert not found, f"{file.name} names R-only {found}"
-
-
-def test_shared_reference_matches_its_source() -> None:
-    source = Path(__file__).parents[2] / "agent-skill" / "references"
-    if not source.is_dir():
-        pytest.skip("not run from a repository checkout")
-    shipped = SKILL / "references" / "data-dictionaries.md"
-    assert shipped.read_bytes() == (source / "data-dictionaries.md").read_bytes()

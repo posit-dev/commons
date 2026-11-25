@@ -21,8 +21,7 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # places, because the landing page is a site of its own. The logos go to the
 # two documentation sites, the provenance-marker figs to the Python one, and
 # the hex to the Python site and the landing page, which serve them as they
-# stand. A coding-agent skill reference that reads the same in both languages
-# goes to both packages' skills.
+# stand.
 sources=(
   "tests/shared pkg-r/tests/testthat/fixtures/shared"
   "prompts pkg-r/inst/prompts pkg-py/src/commons/prompts"
@@ -32,7 +31,6 @@ sources=(
   "www/commons-chat/figs pkg-py/docs/assets/figs:bare"
   "hex docs/assets/hex:bare pkg-py/docs/assets/hex:bare"
   "docs/assets/trust-flow.svg pkg-r/man/figures/trust-flow.svg"
-  "agent-skill/references/data-dictionaries.md pkg-r/inst/skills/commons/references/data-dictionaries.md pkg-py/src/commons/skills/commons/references/data-dictionaries.md"
 )
 
 for entry in "${sources[@]}"; do

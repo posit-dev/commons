@@ -28,9 +28,6 @@ on:
       - docs/assets/trust-flow.svg
       - pkg-r/man/figures/trust-flow.svg
       - pkg-r/pkgdown/assets/logos/**
-      - agent-skill/**
-      - pkg-r/inst/skills/**
-      - pkg-py/src/commons/skills/**
       - scripts/sync-shared.sh
       - .github/workflows/verify-shared-synced.yaml
   pull_request:
@@ -56,9 +53,6 @@ on:
       - docs/assets/trust-flow.svg
       - pkg-r/man/figures/trust-flow.svg
       - pkg-r/pkgdown/assets/logos/**
-      - agent-skill/**
-      - pkg-r/inst/skills/**
-      - pkg-py/src/commons/skills/**
       - scripts/sync-shared.sh
       - .github/workflows/verify-shared-synced.yaml
   workflow_dispatch:
