@@ -64,6 +64,7 @@
 - [Trajectory](https://posit-dev.github.io/commons/py/reference/Trajectory.html): One logged conversation
 - [Exchange](https://posit-dev.github.io/commons/py/reference/Exchange.html): One exchange of a conversation: a user's question and the turns that answer it
 - [CitationDecision](https://posit-dev.github.io/commons/py/reference/CitationDecision.html): One citation in an answer, and whether its quote was verified
+- [is_unlinked_result](https://posit-dev.github.io/commons/py/reference/is_unlinked_result.html): Whether a tool result from `trajectory_read()` has no recorded tool call
 
 #### Shiny UI and server
 > Put a commons agent inside of an interactive chat app. Needs the `shiny` extra.

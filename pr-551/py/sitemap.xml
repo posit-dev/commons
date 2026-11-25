@@ -241,6 +241,12 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://posit-dev.github.io/commons/reference/is_unlinked_result.html</loc>
+    <lastmod>2026-11-25</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://posit-dev.github.io/commons/reference/list_tables.html</loc>
     <lastmod>2026-11-25</lastmod>
     <changefreq>monthly</changefreq>
@@ -530,6 +536,12 @@
   </url>
   <url>
     <loc>https://posit-dev.github.io/commons/v/dev/reference/data_source.html</loc>
+    <lastmod>2026-11-25</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://posit-dev.github.io/commons/v/dev/reference/is_unlinked_result.html</loc>
     <lastmod>2026-11-25</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>

@@ -142,6 +142,9 @@ One exchange of a conversation: a user's question and the turns that answer it.
 [CitationDecision](CitationDecision.md#commons.CitationDecision)  
 One citation in an answer, and whether its quote was verified.
 
+[is_unlinked_result()](is_unlinked_result.md#commons.is_unlinked_result)  
+Whether a tool result from `trajectory_read()` has no recorded tool call.
+
 
 ## Shiny UI and server
 

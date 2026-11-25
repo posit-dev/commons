@@ -419,6 +419,9 @@ chat span in the window has its ancestry cut off, the read is repeated
 once without `since`, and the job stores are then read unfiltered. `n`
 is not sent, and is applied after the read.
 
+A tool result whose tool call was not recorded has a placeholder
+request; `is_unlinked_result()` tells it apart from a linked result.
+
 Conversations whose spans record no message content are dropped. The
 result is keyed by conversation id, with the oldest conversation
 first.
@@ -468,6 +471,22 @@ source that matched an accepted quote, and
 The agent records each decision to the `commons.citation.candidates` span
 attribute, and `trajectory_read()` returns them in
 `Exchange.decisions`.
+
+is_unlinked_result(result: chatlas._content.ContentToolResult) -> bool
+
+Whether a tool result from `trajectory_read()` has no recorded tool call.
+
+A conversation's spans can record a tool result without the tool call it
+answers. Such a result has a placeholder `request`, with the result's
+recorded id, an empty name, and no arguments, so that chatlas can print
+it. This returns True for a result with that placeholder or with no
+request at all, and False for a result linked to a recorded tool call,
+even one that recorded no name.
+
+Parameters
+----------
+result
+    A tool result from the turns of a `Trajectory` or an `Exchange`.
 
 
 ## Shiny UI and server
