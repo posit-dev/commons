@@ -1,7 +1,5 @@
 # commons (development version)
 
-* `trajectory_read()` now reads a project's deployment record only when it names `CONNECT_SERVER` or, with `CONNECT_SERVER` unset, a Connect server registered with rsconnect, so a cloned project can't choose where your `CONNECT_API_KEY` is sent. This applies with no `source` and when a GUID `source` takes its server from the record. To read from another server, set `CONNECT_SERVER` and `CONNECT_API_KEY` for it.
-
 # commons 0.2.0
 
 commons 0.2.0 introduces three big features in addition to a number of minor improvements and big fixes.
