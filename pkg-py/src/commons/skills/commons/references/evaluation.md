@@ -95,6 +95,7 @@ Use an [Inspect](https://inspect.aisi.org.uk/) `Task` with:
 A commons agent has no `to_solver()`, so wrap it in a solver of your own. The agent makes its own model calls through chatlas, so Inspect does not see its tool calls or token usage; the solver records them instead. A basic task has this shape:
 
 ```python
+import sys
 import tempfile
 from pathlib import Path
 
@@ -105,7 +106,10 @@ from inspect_ai.model import ModelOutput
 from inspect_ai.scorer import model_graded_qa
 from inspect_ai.solver import Generate, TaskState, solver
 
-from agent import build_agent
+# Inspect runs this file from evals/, so make the project root importable.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from agent import build_agent  # noqa: E402
 
 
 @solver
@@ -138,7 +142,7 @@ def my_agent():
     )
 ```
 
-Run it with `inspect eval evals/task.py --model <grader model>`. The agent brings its own model, so `--model` is the one `model_graded_qa()` grades with. Use this only as a starting point. Adapt it rather than forcing every criterion into `model_graded_qa()`. Build a fresh agent for each sample, as above, so conversation history, temporary handles, and tool state cannot leak between questions. `get_cost()` raises when chatlas does not know the model's price; pass `token_price` or record `agent.get_tokens()` instead. The answer text includes the provenance marker and citation markup the agent appends; tell a model grader to disregard that markup, or strip it before grading. When a measure displays a table or plot, the agent is told not to repeat it in its reply, so a grader that sees only the answer text can mark a correct answer wrong. Give the scorer the results the user saw, from the trajectory the solver keeps in `state.store`, and label them as displayed results rather than intermediate tool output. A scorer that checks tool use reads the same trajectory.
+Run it with `inspect eval evals/task.py --model <grader model>`. The agent calls the model its chatlas client names, so `--model` selects only the model `model_graded_qa()` grades with. Inspect loads the task file with `evals/` as the working directory, so build every path in `agent.py` and the target code from `Path(__file__).parent` rather than the working directory, and pass a path to `instructions` as a `str`. Use this only as a starting point. Adapt it rather than forcing every criterion into `model_graded_qa()`. Build a fresh agent for each sample, as above, so conversation history, temporary handles, and tool state cannot leak between questions. `get_cost()` raises when chatlas does not know the model's price; pass `token_price` or record `agent.get_tokens()` instead. The answer text includes the provenance marker and citation markup the agent appends; tell a model grader to disregard that markup, or strip it before grading. When a measure displays a table or plot, the agent is told not to repeat it in its reply, so a grader that sees only the answer text can mark a correct answer wrong. Give the scorer the results the user saw, from the trajectory the solver keeps in `state.store`, and label them as displayed results rather than intermediate tool output. A scorer that checks tool use reads the same trajectory.
 
 Keep question data, target-generating code and stored facts, task construction, custom scorers, metrics, and run scripts organized so another person can reproduce and audit a run. Provide the agent and target code with the credentials and data access they need, verify that access by running code, and never write credentials into evaluation data or logs.
 
