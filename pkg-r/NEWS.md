@@ -1,7 +1,5 @@
 # commons (development version)
 
-* `trajectory_read()` with `n` is faster on Posit Connect: it stops once it has read the `n` most recent conversations in full, instead of reading every trace of the content (#546).
-
 # commons 0.2.0
 
 commons 0.2.0 introduces three big features in addition to a number of minor improvements and big fixes.
