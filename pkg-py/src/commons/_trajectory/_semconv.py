@@ -132,10 +132,21 @@ def _tool_request(
     return request
 
 
+class UnlinkedRequest(ContentToolRequest):
+    """The request of a tool result that no recorded request matches.
+
+    chatlas cannot print a result without a request. This placeholder has
+    the result's id, an empty name, and no arguments.
+    """
+
+
 def _tool_result(
     part: dict[str, Any], requests: dict[str, ContentToolRequest]
 ) -> ContentToolResult:
-    request = None if part.get("id") is None else requests.get(str(part["id"]))
+    call_id = _text(part.get("id"))
+    request = requests.get(call_id)
+    if request is None:
+        request = UnlinkedRequest(id=call_id, name="", arguments={})
     return ContentToolResult(value=part.get("response"), request=request)
 
 

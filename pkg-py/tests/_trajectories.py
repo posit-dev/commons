@@ -25,6 +25,7 @@ from commons._trajectory._build import (
     build_trajectories,
 )
 from commons._trajectory._otlp import parse_otlp_lines
+from commons._trajectory._semconv import UnlinkedRequest
 from tests._shared import load_shared_fixture
 
 T = TypeVar("T")
@@ -122,13 +123,15 @@ def _descriptor(content: object, turns: Sequence[Turn]) -> dict[str, Any]:
         requests = [
             c for t in turns for c in t.contents if isinstance(c, ContentToolRequest)
         ]
-        assert content.request is None or any(content.request is r for r in requests)
+        request = content.request
+        if isinstance(request, UnlinkedRequest):
+            assert (request.name, request.arguments) == ("", {})
+            return {"type": "tool_result", "value": content.value, "request": None}
+        assert request is not None and any(request is r for r in requests)
         return {
             "type": "tool_result",
             "value": content.value,
-            "request": None
-            if content.request is None
-            else {"id": content.request.id, "name": content.request.name},
+            "request": {"id": request.id, "name": request.name},
         }
     raise AssertionError(f"unexpected content {type(content).__name__}")
 
