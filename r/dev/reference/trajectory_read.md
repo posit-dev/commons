@@ -77,6 +77,8 @@ the URL, the project's deployment record, or the sole Connect server
 registered with rsconnect), and editor-level access to the content: you
 must own it or be a collaborator. See the `share_with` argument of
 [`agent()`](https://posit-dev.github.io/commons/r/dev/reference/agent.md).
+A deployment record is used only when it names `CONNECT_SERVER` or, if
+that is unset, a server registered with rsconnect.
 
 ## Examples
 

@@ -41,7 +41,9 @@
 
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="development version" id="commons-development-version">commons (development version)<a class="anchor" aria-label="anchor" href="#commons-development-version"></a></h2>
-</div>
+<ul><li>
+<code><a href="../reference/trajectory_read.html">trajectory_read()</a></code> now refuses a project’s deployment record unless it names <code>CONNECT_SERVER</code> or, when that is unset, a server registered with rsconnect. This stops a cloned project from sending your <code>CONNECT_API_KEY</code> to a server you didn’t choose. To read from the record’s server, set <code>CONNECT_SERVER</code> and <code>CONNECT_API_KEY</code> for it (<a href="https://github.com/posit-dev/commons/issues/550" class="external-link">#550</a>).</li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.2.0" id="commons-020">commons 0.2.0<a class="anchor" aria-label="anchor" href="#commons-020"></a></h2><p class="text-muted">CRAN release: 2026-11-17</p>
 <p>commons 0.2.0 introduces three big features in addition to a number of minor improvements and big fixes.</p>
