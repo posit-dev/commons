@@ -318,7 +318,7 @@ section.level2:first-of-type > h2:first-child,
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="ex">uv</span> pip install commons</span></code></pre></div>
 <p>If you want the chat UI, install the <code>shiny</code> extra, as well:</p>
 <div class="sourceCode" id="cb2"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="ex">uv</span> pip install <span class="st">"commons[shiny]"</span></span></code></pre></div>
-<p>To log conversations with <code>log=True</code>, install the <code>tracing</code> extra; off Posit Connect, logging also needs a tracer provider, as <a href="./user-guide/get-started.html#logging-conversations">Logging conversations</a> describes. To install every extra at once, run:</p>
+<p>To log conversations with <code>log=True</code>, install the <code>tracing</code> extra; when running locally or deploying your app somewhere other than Posit Connect, logging also needs a tracer provider, as <a href="./user-guide/get-started.html#logging-conversations">Logging conversations</a> describes. To install the complete package with all extras, run:</p>
 <div class="sourceCode" id="cb3"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="ex">uv</span> pip install <span class="st">"commons[shiny,tracing]"</span></span></code></pre></div>
 <p>Or, for the development version:</p>
 <div class="sourceCode" id="cb4"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co"># just the core package:</span></span>
@@ -327,7 +327,7 @@ section.level2:first-of-type > h2:first-child,
 <span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="co"># with the shiny UI dependencies:</span></span>
 <span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="ex">uv</span> pip install <span class="st">"commons[shiny] @ git+https://github.com/posit-dev/commons#subdirectory=pkg-py"</span></span>
 <span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="co"># with every extra:</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="co"># the complete package with all extras:</span></span>
 <span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="ex">uv</span> pip install <span class="st">"commons[shiny,tracing] @ git+https://github.com/posit-dev/commons#subdirectory=pkg-py"</span></span></code></pre></div>
 </section>
 <section id="get-started" class="level2">
