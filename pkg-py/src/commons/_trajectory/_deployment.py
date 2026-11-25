@@ -94,10 +94,16 @@ def _latest_in_file(deployments: list[Deployment]) -> Deployment:
     if len(chosen) == 1:
         return chosen[0]
     servers = ", ".join(d.server for d in distinct)
+    if len({_server_key(d.server) for d in distinct}) == 1:
+        # Entries whose server URLs differ only in form name one server, so
+        # CONNECT_SERVER cannot pick between them.
+        guids = ", ".join(d.guid for d in distinct)
+        remedy = f"Pass one of their content GUIDs ({guids}) as `source`."
+    else:
+        remedy = "Set CONNECT_SERVER and CONNECT_API_KEY for one of them."
     raise ValueError(
         f"Can't tell which deployment in {distinct[0].file} is the most recent: "
-        f"it lists deployments to {servers}. Set CONNECT_SERVER and "
-        "CONNECT_API_KEY for one of them."
+        f"it lists deployments to {servers}. {remedy}"
     )
 
 

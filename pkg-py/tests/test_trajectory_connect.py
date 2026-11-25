@@ -402,6 +402,25 @@ def test_a_python_record_for_two_servers_is_ambiguous(
     assert "content URL" not in str(raised.value)
 
 
+def test_a_python_record_for_one_server_in_two_forms_names_its_guids(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # CONNECT_SERVER matches both entries, so the message must offer a remedy
+    # that picks one: the content GUID.
+    connect_env(monkeypatch, {"CONNECT_SERVER": "https://one.example.com"})
+    other = "01234567-89ab-cdef-0123-456789abcdef"
+    _write_python_record(
+        tmp_path / "rsconnect-python" / "app.json",
+        _python_record("https://one.example.com"),
+        _python_record("https://one.example.com/", guid=other),
+    )
+
+    with pytest.raises(ValueError, match="content GUIDs") as raised:
+        find_deployment(tmp_path)
+
+    assert f"{GUID}, {other}" in str(raised.value)
+
+
 def test_connect_server_picks_a_server_whatever_its_hosts_case(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
