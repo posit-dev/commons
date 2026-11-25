@@ -14,6 +14,7 @@ from ._build import (
     drop_contentless,
     filter_chat_spans,
 )
+from ._semconv import is_unlinked_result
 from ._source import (
     ConnectSource,
     read_source_spans,
@@ -21,7 +22,7 @@ from ._source import (
     warn_if_tracing_disabled,
 )
 
-__all__ = ["Exchange", "Trajectory", "trajectory_read"]
+__all__ = ["Exchange", "Trajectory", "is_unlinked_result", "trajectory_read"]
 
 _N_MESSAGE = "n must be a whole number of at least 1, or None."
 _BOUND_FORMATS = (
@@ -83,6 +84,9 @@ def trajectory_read(
     chat span in the window has its ancestry cut off, the read is repeated
     once without `since`, and the job stores are then read unfiltered. `n`
     is not sent, and is applied after the read.
+
+    A tool result whose tool call was not recorded has a placeholder
+    request; `is_unlinked_result()` tells it apart from a linked result.
 
     Conversations whose spans record no message content are dropped. The
     result is keyed by conversation id, with the oldest conversation
