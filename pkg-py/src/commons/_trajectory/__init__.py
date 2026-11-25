@@ -82,7 +82,9 @@ def trajectory_read(
     content can have are filtered by `since` only. When `since` is set and a
     chat span in the window has its ancestry cut off, the read is repeated
     once without `since`, and the job stores are then read unfiltered. `n`
-    is not sent, and is applied after the read.
+    is not sent. The read stops once it holds the `n` latest conversations
+    back to their first questions, before the job stores when it can, and `n`
+    is then applied.
 
     Conversations whose spans record no message content are dropped. The
     result is keyed by conversation id, with the oldest conversation

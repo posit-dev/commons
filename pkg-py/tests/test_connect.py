@@ -431,6 +431,7 @@ def test_trace_lines_match_the_shared_fixture(case: dict[str, Any]) -> None:
                 TRACES["guid"],
                 since=_instant(case.get("since")),
                 until=_instant(case.get("until")),
+                enough=(lambda lines: case["enough"]) if "enough" in case else None,
             )
 
     if case.get("error") == "access":

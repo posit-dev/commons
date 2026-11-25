@@ -213,6 +213,19 @@ def latest_chat_spans(chat_spans: Sequence[Span]) -> dict[str, Span]:
     return dict(sorted(latest.items(), key=lambda item: span_time(item[1])))
 
 
+def reaches_first_question(chat_spans: Sequence[Span]) -> bool:
+    """Do a conversation's chat spans reach back to its first question?
+
+    True when the earliest of them, leaving out title calls, records one
+    exchange. The spans after it then hold every later exchange.
+    """
+    candidates = [span for span in chat_spans if not _is_title_span(span)]
+    if not candidates:
+        return False
+    earliest = min(candidates, key=lambda span: span.start_time_unix_nano)
+    return len(split_exchanges(trajectory_turns(earliest))) == 1
+
+
 def _is_preferred(candidate: Span, current: Span) -> bool:
     candidate_is_title = _is_title_span(candidate)
     if candidate_is_title != _is_title_span(current):

@@ -101,7 +101,8 @@ expect_trace_lines_member <- function(member, spec) {
         list(server = spec[["server"]], api_key = "key"),
         spec[["guid"]],
         from = fixture_instant(case[["since"]]),
-        to = fixture_instant(case[["until"]])
+        to = fixture_instant(case[["until"]]),
+        enough = if (!is.null(case[["enough"]])) function(lines) case[["enough"]]
       )
     }
     if (identical(case[["error"]], "access")) {

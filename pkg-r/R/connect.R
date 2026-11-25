@@ -105,7 +105,8 @@ normalize_connect_url <- function(x) {
 
 # Fetch trace rows for a content item as raw OTLP NDJSON lines: the content's
 # `traces` store, paged until the X-Total-Count header is exhausted, then each
-# job's own store.
+# job's own store. Once `enough(lines)` is TRUE after a page of the `traces`
+# store, the read stops, before the job stores.
 # Connect returns rows newest-first by span start time and filters `from`/`to`
 # on span start time over `[from, to)`.
 connect_trace_lines <- function(
@@ -113,6 +114,7 @@ connect_trace_lines <- function(
   guid,
   from = NULL,
   to = NULL,
+  enough = NULL,
   page_size = 1000,
   call = rlang::caller_env()
 ) {
@@ -143,6 +145,11 @@ connect_trace_lines <- function(
       as.integer(httr2::resp_header(resp, "X-Total-Count", default = NA))
     )
     offset <- offset + length(page)
+    # The job stores hold only spans from before Connect 2026.07, which are
+    # older than every span in the `traces` store.
+    if (length(lines) > 0 && !is.null(enough) && enough(lines)) {
+      return(unique(lines))
+    }
     if (length(page) == 0 || is.na(total) || offset >= total) {
       break
     }

@@ -11,7 +11,7 @@ from __future__ import annotations
 import os
 import re
 import warnings
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager, nullcontext
 from datetime import UTC, datetime, timedelta
@@ -247,12 +247,14 @@ def connect_trace_lines(
     *,
     since: datetime | None = None,
     until: datetime | None = None,
+    enough: Callable[[Sequence[str]], bool] | None = None,
     page_size: int = TRACE_PAGE_SIZE,
 ) -> list[str]:
     """The content's trace lines, as OTLP JSON, newest first.
 
     `since` and `until` are sent padded, so the caller applies the window
-    exactly.
+    exactly. Once `enough(lines)` is true after a page of the `traces`
+    store, the read stops, before the job stores.
     """
     window = {
         key: value
@@ -285,6 +287,10 @@ def connect_trace_lines(
         lines.extend(page)
         total = _total(response)
         offset += len(page)
+        # The job stores hold only spans from before Connect 2026.07, which
+        # are older than every span in the `traces` store.
+        if lines and enough is not None and enough(lines):
+            return list(dict.fromkeys(lines))
         if not page or total is None or offset >= total:
             break
     # Connect 2026.07 moved new traces without migrating the per-job files.

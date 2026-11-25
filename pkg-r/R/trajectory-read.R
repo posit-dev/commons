@@ -166,11 +166,11 @@ parse_window_bound <- function(x) {
   NULL
 }
 
-# The `from`/`to` window is passed down to Connect so a filtered read
-# doesn't transfer the whole trace store. The server-side
-# `from` filter can still drop ancestor spans (see connect_window_param()),
-# severing turn-ancestor resolution; when that happens, refetch without
-# `from`.
+# The `from`/`to` window is passed down to Connect, and `n` stops the read
+# early, so a filtered read doesn't transfer the whole trace store. The
+# server-side `from` filter can still drop ancestor spans (see
+# connect_window_param()), severing turn-ancestor resolution; when that
+# happens, refetch without `from`.
 read_connect_spans <- function(
   client,
   guid,
@@ -202,12 +202,15 @@ fetch_connect_spans <- function(
     guid,
     from = from_pushdown,
     to = to,
+    enough = if (!is.null(n)) enough_trace_lines(n, from, to),
     call = call
   ))
 }
 
 # Builds connect_trace_lines()'s early-stop check: TRUE once the lines
-# fetched so far reconstruct `n` complete conversations in the window.
+# fetched so far hold the `n` latest conversations in the window whole. Lines
+# arrive newest first, so a conversation is whole once the lines reach its
+# first question, which an older line cannot change.
 enough_trace_lines <- function(n, from, to) {
   state <- new.env(parent = emptyenv())
   state$spans <- list()
@@ -220,12 +223,40 @@ enough_trace_lines <- function(n, from, to) {
     if (has_severed_ancestry(kept)) {
       return(FALSE)
     }
-    latest <- latest_chat_spans(Filter(is_chat_span, kept))
+    chat_spans <- Filter(is_chat_span, kept)
+    latest <- latest_chat_spans(chat_spans)
+    latest <- latest[lengths(lapply(latest, trajectory_turns)) > 0]
     if (length(latest) < n) {
       return(FALSE)
     }
-    sum(lengths(lapply(latest, trajectory_turns)) > 0) >= n
+    by_conversation <- split(
+      chat_spans,
+      vapply(chat_spans, span_conversation_id, character(1))
+    )
+    recent <- utils::tail(names(latest), n)
+    all(vapply(
+      by_conversation[recent],
+      reaches_first_question,
+      logical(1)
+    ))
   }
+}
+
+# Whether a conversation's chat spans reach back to its first question: the
+# earliest of them, leaving out title calls, records one exchange. The spans
+# after it then hold every later exchange.
+reaches_first_question <- function(chat_spans) {
+  candidates <- Filter(Negate(is_conversation_title_span), chat_spans)
+  if (length(candidates) == 0) {
+    return(FALSE)
+  }
+  starts <- vapply(
+    candidates,
+    function(span) pad_nano_time(span$start_time),
+    character(1)
+  )
+  earliest <- candidates[[order(starts)[[1]]]]
+  length(split_exchanges(trajectory_turns(earliest))) == 1
 }
 
 # Chat spans emitted without message content -- capture was off, or the spans

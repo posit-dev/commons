@@ -21,10 +21,12 @@ from .._connect import (
 )
 from .._tracing import CONTENT_TRACING_HINT, SERVER_TRACING_HINT
 from ._build import (
+    conversation_id,
     filter_chat_spans,
     has_severed_ancestry,
     is_chat_span,
     latest_chat_spans,
+    reaches_first_question,
 )
 from ._deployment import GUID_PATTERN, find_deployment, registered_connect_servers
 from ._otlp import Span, local_traces_dir, parse_otlp_lines, read_local_spans
@@ -181,7 +183,10 @@ def read_connect_spans(
     since: datetime | None,
     until: datetime | None,
 ) -> list[Span]:
-    """The content's spans, with the window sent to Connect."""
+    """The content's spans, with the window sent to Connect.
+
+    With `n`, the read stops once it holds the `n` latest conversations whole.
+    """
     spans = _fetch_connect_spans(client, guid, since, n=n, since=since, until=until)
     # The padded `from` can still drop a turn span that started more than an
     # hour earlier, so a severed chain is fetched once more without it.
@@ -201,14 +206,21 @@ def _fetch_connect_spans(
     since: datetime | None,
     until: datetime | None,
 ) -> list[Span]:
-    lines = connect_trace_lines(client, guid, since=pushdown, until=until)
+    enough = None if n is None else enough_trace_lines(n, since, until)
+    lines = connect_trace_lines(
+        client, guid, since=pushdown, until=until, enough=enough
+    )
     return parse_otlp_lines(lines)
 
 
 def enough_trace_lines(
     n: int, since: datetime | None, until: datetime | None
 ) -> Callable[[Sequence[str]], bool]:
-    """A check that the lines read so far hold `n` conversations with content."""
+    """A check that the lines read so far hold the `n` latest conversations whole.
+
+    Lines arrive newest first, so a conversation is whole once the lines reach
+    its first question, which an older line cannot change.
+    """
     spans: list[Span] = []
     parsed = 0
 
@@ -219,10 +231,18 @@ def enough_trace_lines(
         kept = filter_chat_spans(spans, since, until)
         if has_severed_ancestry(kept):
             return False
-        latest = latest_chat_spans([span for span in kept if is_chat_span(span)])
+        chat_spans = [span for span in kept if is_chat_span(span)]
+        latest = [
+            id_
+            for id_, span in latest_chat_spans(chat_spans).items()
+            if trajectory_turns(span)
+        ]
         if len(latest) < n:
             return False
-        return sum(1 for span in latest.values() if trajectory_turns(span)) >= n
+        by_conversation: dict[str, list[Span]] = {}
+        for span in chat_spans:
+            by_conversation.setdefault(conversation_id(span), []).append(span)
+        return all(reaches_first_question(by_conversation[id_]) for id_ in latest[-n:])
 
     return enough
 
