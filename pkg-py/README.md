@@ -2,7 +2,7 @@
 
 `commons` is a constructor for trustworthy data agents. It gives an LLM data, semantic, and context layers to work with, tools for querying them, and A/B/C provenance tags so every answer carries a classification as to its trustworthiness.
 
-**Status: beta.** The agent, the three layers (data, semantics, and context), and the chat UI are implemented: `commons.ui.server()` wires an agent to a chat element in a py-shiny app, and outside one, answers come back as text and server-rendered HTML. Python 3.11 or later is required.
+The agent, the three layers (data, semantics, and context), and the chat UI are implemented: `commons.ui.server()` wires an agent to a chat element in a py-shiny app, and outside one, answers come back as text and server-rendered HTML. Python 3.11 or later is required. A few features of the R package are not available in Python yet; see [feature parity](https://posit-dev.github.io/commons/py/user-guide/feature-parity.html).
 
 ## Optional extras
 
