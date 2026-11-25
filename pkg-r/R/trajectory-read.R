@@ -14,12 +14,7 @@
 #'   * `NULL` (the default) resolves automatically: on Posit Connect, this
 #'     content's own traces; in a project that has been deployed with
 #'     rsconnect, the deployed content's traces; otherwise, the local trace
-#'     directory that [agent()] writes to. A deployment record may send
-#'     `CONNECT_API_KEY` only to `CONNECT_SERVER`, or, when that is unset, to
-#'     a Connect server registered with rsconnect. Records that name such a
-#'     server are preferred, and a record that names any other server is
-#'     refused before any request is sent. To read from another server, set
-#'     `CONNECT_SERVER` and `CONNECT_API_KEY` for it.
+#'     directory that [agent()] writes to.
 #'   * A Connect content GUID, a content URL (`.../content/<guid>/`), a
 #'     vanity URL written as `<server>/content/<name>/` for content at
 #'     `<server>/<name>/`, or a dashboard URL (`.../connect/#/apps/<guid>/`).
@@ -43,8 +38,8 @@
 #' URL, the project's deployment record, or the sole Connect server registered
 #' with rsconnect), and editor-level access to the content: you must own it or
 #' be a collaborator. See the `share_with` argument of
-#' [agent()]. A GUID source refuses a deployment record as a `NULL` source
-#' does.
+#' [agent()]. A deployment record is used only when it names `CONNECT_SERVER`
+#' or, if that is unset, a server registered with rsconnect.
 #'
 #' @return A list of conversations, named by conversation id and ordered
 #'   oldest-first. Each conversation is a list with a `turns` field containing
