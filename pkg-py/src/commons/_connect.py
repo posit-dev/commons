@@ -424,6 +424,7 @@ def vanity_guid(client: ConnectClient, url: str, query: str) -> str:
     """
     expected = normalize_connect_url(f"{client.server}/{query.lstrip('/')}")
     page_number = 1
+    seen = 0
     while True:
         response = client.request(
             "GET",
@@ -443,7 +444,9 @@ def vanity_guid(client: ConnectClient, url: str, query: str) -> str:
         if not isinstance(body, dict):
             body = {}
         results = body.get("results")
-        for result in results if isinstance(results, list) else []:
+        if not isinstance(results, list):
+            results = []
+        for result in results:
             if not isinstance(result, dict):
                 continue
             vanity = result.get("vanity_url")
@@ -454,11 +457,14 @@ def vanity_guid(client: ConnectClient, url: str, query: str) -> str:
                 and normalize_connect_url(vanity) == expected
             ):
                 return guid
+        # Connect's total is the number of matching results across all pages.
+        seen += len(results)
         total = body.get("total")
         if (
             not isinstance(total, int | float)
             or isinstance(total, bool)
-            or page_number >= total
+            or not results
+            or seen >= total
         ):
             break
         page_number += 1

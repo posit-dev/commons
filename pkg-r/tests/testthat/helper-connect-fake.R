@@ -160,23 +160,37 @@ write_fixture_files <- function(dir, case) {
 expect_deployment_member <- function(member) {
   expect_gt(length(member[["cases"]]), 0)
   for (case in member[["cases"]]) {
-    info <- case[["name"]]
-    dir <- withr::local_tempdir()
-    write_fixture_files(dir, case)
-    found <- record_notices(find_rsconnect_deployment(dir))
-    notices <- found$notices
-    for (text in unlist(case[["mentions"]])) {
-      expect_true(all(grepl(text, found$texts, fixed = TRUE)), info = info)
-    }
-    found <- found$value
-    actual <- if (is.null(found)) {
-      NULL
-    } else {
-      list(guid = found$guid, server = sub("/+(__api__/*)?$", "", found$server))
-    }
-    expect_identical(actual, case[["expected"]], info = info)
-    expect_identical(notices, fixture_notices(case), info = info)
+    local({
+      info <- case[["name"]]
+      dir <- withr::local_tempdir()
+      write_fixture_files(dir, case)
+      local_fixture_servers(case)
+      found <- record_notices(find_rsconnect_deployment(dir))
+      notices <- found$notices
+      for (text in unlist(case[["mentions"]])) {
+        expect_true(all(grepl(text, found$texts, fixed = TRUE)), info = info)
+      }
+      found <- found$value
+      actual <- if (is.null(found)) {
+        NULL
+      } else {
+        list(guid = found$guid, server = sub("/+(__api__/*)?$", "", found$server))
+      }
+      expect_identical(actual, case[["expected"]], info = info)
+      expect_identical(notices, fixture_notices(case), info = info)
+    })
   }
+}
+
+# A case's environment and registered servers. Keeps a developer's
+# CONNECT_SERVER and rsconnect accounts out of the cases.
+local_fixture_servers <- function(case, env = parent.frame()) {
+  withr::local_envvar(connect_fixture_env(case[["env"]]), .local_envir = env)
+  registered <- unlist(case[["registered"]]) %||% character()
+  local_mocked_bindings(
+    registered_connect_servers = function() registered,
+    .env = env
+  )
 }
 
 # The notices a case expects. A `record` notice, which reports the deployment
@@ -232,10 +246,7 @@ expect_source_member <- function(member) {
       dir <- withr::local_tempdir()
       write_fixture_files(dir, case)
       withr::local_dir(dir)
-      withr::local_envvar(connect_fixture_env(case[["env"]]))
-      # Keeps a developer's rsconnect accounts out of the cases.
-      registered <- unlist(case[["registered"]]) %||% character()
-      local_mocked_bindings(registered_connect_servers = function() registered)
+      local_fixture_servers(case)
       if (!is.null(case[["search"]])) {
         httr2::local_mocked_responses(
           connect_fixture_responses(list(), new.env(), search = case[["search"]])
@@ -243,7 +254,11 @@ expect_source_member <- function(member) {
       }
       expected <- case[["expected"]]
       if (!is.null(expected[["error"]])) {
-        err <- expect_error(resolve_trajectory_source(case[["source"]]), info = info)
+        # A refused record may still be reported as the one read.
+        err <- expect_error(
+          suppressMessages(resolve_trajectory_source(case[["source"]])),
+          info = info
+        )
         message <- gsub("\\s+", " ", conditionMessage(err))
         for (text in c(expected[["error"]], unlist(expected[["mentions"]]))) {
           expect_true(grepl(text, message, fixed = TRUE), info = info)

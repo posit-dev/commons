@@ -40,10 +40,12 @@ def find_deployment(
 ) -> Deployment | None:
     """The most recently modified deployment record in the project, or None.
 
-    Warns which record is read when there are several, unless `quiet`;
-    `stacklevel` is as `warnings.warn` takes it, counted from this function.
-    Raises ValueError when the most recent record file lists deployments to
-    several servers and CONNECT_SERVER does not pick one of them.
+    Records whose server is trusted, as `check_record_server` decides, are
+    preferred to the others. Warns which record is read when there are
+    several, unless `quiet`; `stacklevel` is as `warnings.warn` takes it,
+    counted from this function. Raises ValueError when the most recent record
+    file lists deployments to several servers and CONNECT_SERVER does not pick
+    one of them.
     """
     directory = Path.cwd() if directory is None else directory
     found: list[tuple[float, Deployment]] = []
@@ -59,12 +61,23 @@ def find_deployment(
     if not found:
         return None
     found.sort(key=lambda item: item[0], reverse=True)
-    deployment = _latest_in_file([d for _, d in found if d.file == found[0][1].file])
+    trusted = _trusted_server_keys()
+    preferred = [item for item in found if _server_key(item[1].server) in trusted]
+    candidates = preferred or found
+    newest = candidates[0][1].file
+    deployment = _latest_in_file([d for _, d in candidates if d.file == newest])
     if not quiet and len({(d.guid, _server_key(d.server)) for _, d in found}) > 1:
+        suffix = ""
+        if preferred and len(preferred) < len(found):
+            suffix = (
+                " that names CONNECT_SERVER"
+                if os.environ.get("CONNECT_SERVER", "")
+                else " that names a registered Connect server"
+            )
         warnings.warn(
             f"Reading trajectories for {deployment.name!r} ({deployment.guid}) on "
             f"{deployment.server}, from the most recently modified deployment "
-            "record.",
+            f"record{suffix}.",
             stacklevel=stacklevel,
         )
     return deployment
@@ -81,21 +94,64 @@ def _latest_in_file(deployments: list[Deployment]) -> Deployment:
     if len(chosen) == 1:
         return chosen[0]
     servers = ", ".join(d.server for d in distinct)
+    if len({_server_key(d.server) for d in distinct}) == 1:
+        # Entries whose server URLs differ only in form name one server, so
+        # CONNECT_SERVER cannot pick between them. A GUID source reads this
+        # record again unless CONNECT_SERVER is set.
+        guids = ", ".join(d.guid for d in distinct)
+        remedy = (
+            f"Set CONNECT_SERVER and CONNECT_API_KEY for {distinct[0].server}, "
+            f"and pass one of their content GUIDs ({guids}) as `source`."
+        )
+    else:
+        remedy = "Set CONNECT_SERVER and CONNECT_API_KEY for one of them."
     raise ValueError(
         f"Can't tell which deployment in {distinct[0].file} is the most recent: "
-        f"it lists deployments to {servers}. Set CONNECT_SERVER to one of them, "
-        "or pass a content URL."
+        f"it lists deployments to {servers}. {remedy}"
     )
 
 
+def check_record_server(deployment: Deployment) -> None:
+    """Raise ValueError unless the record's server is trusted.
+
+    A record chooses where CONNECT_API_KEY is sent, so a project's record may
+    send it only to CONNECT_SERVER, or, when that is unset, to a Connect
+    server registered with rsconnect-python.
+    """
+    if _server_key(deployment.server) in _trusted_server_keys():
+        return
+    server = os.environ.get("CONNECT_SERVER", "")
+    if server:
+        reason = f"which is not CONNECT_SERVER ({server})"
+    else:
+        reason = "which is not a registered Connect server, and CONNECT_SERVER"
+        reason += " is not set"
+    raise ValueError(
+        f"The deployment record {deployment.file} names the Connect server "
+        f"{deployment.server}, {reason}. To read trajectories from "
+        f"{deployment.server}, set CONNECT_SERVER and CONNECT_API_KEY for that "
+        "server."
+    )
+
+
+def _trusted_server_keys() -> set[tuple[str, str, str]]:
+    server = os.environ.get("CONNECT_SERVER", "")
+    servers = [server] if server else registered_connect_servers()
+    return {_server_key(s) for s in servers}
+
+
 def _server_key(server: str) -> tuple[str, str, str]:
-    # A URL's scheme and host are case-insensitive; its path is not.
+    # A URL's scheme and host are case-insensitive; the rest of it is not.
     server = normalize_server(server)
     try:
         parts = urlsplit(server)
     except ValueError:
         return ("", "", server)
-    return (parts.scheme.lower(), parts.netloc.lower(), parts.path)
+    head = f"{parts.scheme}://{parts.netloc}"
+    # urlsplit drops tabs and newlines; key a server it rewrote as written.
+    if server[: len(head)].lower() != head.lower():
+        return ("", "", server)
+    return (parts.scheme.lower(), parts.netloc.lower(), server[len(head) :])
 
 
 def deployment_record_files(directory: Path, max_depth: int = 3) -> list[Path]:

@@ -30,6 +30,7 @@ from ._semconv import (
     INPUT_MESSAGES,
     OUTPUT_MESSAGES,
     SYSTEM_INSTRUCTIONS,
+    UnlinkedRequest,
     has_json,
     message_turns,
     system_turns,
@@ -567,9 +568,11 @@ def _content_signature(content: object) -> dict[str, Any]:
             "arguments": content.arguments,
         }
     if isinstance(content, ContentToolResult):
+        request = content.request
+        unlinked = request is None or isinstance(request, UnlinkedRequest)
         return {
             "type": "tool_result",
-            "id": None if content.request is None else content.request.id,
+            "id": None if unlinked else request.id,
             "value": content.value,
         }
     return {"type": type(content).__name__}

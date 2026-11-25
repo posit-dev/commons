@@ -155,6 +155,7 @@ def test_no_source_reads_the_python_deployment(
     store.mkdir()
     (store / "app.json").write_text(json.dumps(record), encoding="utf-8")
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("CONNECT_SERVER", server)
     monkeypatch.setenv("CONNECT_API_KEY", "key")
     traces = [{**span, "conversation": "deployed"} for span in _conversation()]
     route, seen = connect_fixture_server(

@@ -81,6 +81,33 @@ def test_each_role_decodes_to_its_chatlas_turn_class() -> None:
     assert [type(turn) for turn in turns] == [SystemTurn, UserTurn, AssistantTurn]
 
 
+def test_an_unlinked_result_prints_with_its_recorded_id() -> None:
+    """chatlas raises when it prints a result with no request, so the
+    shared fixture's unlinked results must still print."""
+    (turn,) = trajectory_turns(
+        _span(
+            {
+                "gen_ai.input.messages": [
+                    {
+                        "role": "tool",
+                        "parts": [
+                            {"type": "tool_call_response", "id": "c9", "response": "a"},
+                            {"type": "tool_call_response", "response": "b"},
+                        ],
+                    }
+                ]
+            }
+        )
+    )
+    orphan, no_id = turn.contents
+    assert isinstance(orphan, ContentToolResult)
+    assert isinstance(no_id, ContentToolResult)
+    assert "# ✅ tool result (c9)\na" in str(turn)
+    assert "\nb\n" in str(turn)
+    assert "Result from tool call" in orphan.to_html()
+    assert (orphan.id, no_id.id) == ("c9", "")
+
+
 def test_json_nested_past_the_recursion_limit_gives_no_turns() -> None:
     """Python's parser raises RecursionError on input this deep, where R's
     parser fails with an ordinary error; both must read it as unparseable.

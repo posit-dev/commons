@@ -34,7 +34,12 @@ from ._build import (
     reaches_first_question,
     span_index,
 )
-from ._deployment import GUID_PATTERN, find_deployment, registered_connect_servers
+from ._deployment import (
+    GUID_PATTERN,
+    check_record_server,
+    find_deployment,
+    registered_connect_servers,
+)
 from ._otlp import (
     Span,
     local_traces_dir,
@@ -116,6 +121,7 @@ def _default_source() -> LocalSource | ConnectSource:
     # Point a warning at the caller of trajectory_read().
     deployment = find_deployment(stacklevel=5)
     if deployment is not None:
+        check_record_server(deployment)
         client = ConnectClient.from_env(server=deployment.server)
         return ConnectSource(client, deployment.guid)
     return LocalSource(local_traces_dir())
@@ -145,7 +151,8 @@ def guid_server() -> str:
     """The server for a GUID source.
 
     CONNECT_SERVER, then the project's deployment record, then the one server
-    registered with rsconnect-python.
+    registered with rsconnect-python. A record whose server is not registered
+    is refused.
     """
     server = os.environ.get("CONNECT_SERVER", "")
     if server:
@@ -153,6 +160,7 @@ def guid_server() -> str:
     # The GUID names the content, so which record is read needs no warning.
     deployment = find_deployment(quiet=True)
     if deployment is not None:
+        check_record_server(deployment)
         return deployment.server
     servers = registered_connect_servers()
     if len(servers) == 1:
