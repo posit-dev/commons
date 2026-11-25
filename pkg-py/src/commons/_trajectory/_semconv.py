@@ -135,7 +135,16 @@ def _tool_request(
 def _tool_result(
     part: dict[str, Any], requests: dict[str, ContentToolRequest]
 ) -> ContentToolResult:
-    request = None if part.get("id") is None else requests.get(str(part["id"]))
+    """A tool result, linked to the earlier request with its id.
+
+    chatlas cannot print a result without a request, so a result with no
+    matching request gets a placeholder: a request with the result's id, an
+    empty name, and no arguments, which is not one of the decoded requests.
+    """
+    call_id = _text(part.get("id"))
+    request = requests.get(call_id)
+    if request is None:
+        request = ContentToolRequest(id=call_id, name="", arguments={})
     return ContentToolResult(value=part.get("response"), request=request)
 
 

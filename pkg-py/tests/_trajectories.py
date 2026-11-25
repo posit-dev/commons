@@ -122,13 +122,16 @@ def _descriptor(content: object, turns: Sequence[Turn]) -> dict[str, Any]:
         requests = [
             c for t in turns for c in t.contents if isinstance(c, ContentToolRequest)
         ]
-        assert content.request is None or any(content.request is r for r in requests)
+        request = content.request
+        assert request is not None
+        if not any(request is r for r in requests):
+            # The placeholder that lets an unlinked result print.
+            assert (request.name, request.arguments) == ("", {})
+            return {"type": "tool_result", "value": content.value, "request": None}
         return {
             "type": "tool_result",
             "value": content.value,
-            "request": None
-            if content.request is None
-            else {"id": content.request.id, "name": content.request.name},
+            "request": {"id": request.id, "name": request.name},
         }
     raise AssertionError(f"unexpected content {type(content).__name__}")
 
