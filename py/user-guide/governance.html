@@ -137,39 +137,6 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   }
 })();
 </script>
-<script>
-(function () {
-  var tries = 0;
-  function fix() {
-    var link = document.querySelector('[class*="announcement-banner"] a');
-    if (!link) {
-      if (tries++ < 100) return window.setTimeout(fix, 50);
-      return;
-    }
-    if (link.dataset.commonsOffsetApplied) return;
-    var ann = document.querySelector('meta[name$="announcement"]');
-    var raw = ann ? ann.getAttribute("data-url") || "" : "";
-    if (!raw || /^([a-z][a-z0-9+.-]*:|\/\/|\/|#)/i.test(raw)) return;
-    var off = document.querySelector('meta[name="quarto:offset"]');
-    var prefix = (off ? off.getAttribute("content") || "./" : "./");
-    var fixed = prefix.replace(/\/?$/, "/") + raw;
-    link.setAttribute("href", fixed);
-    // Quarto stashes the pre-rewrite href here and its external-link
-    // pass restores it, which would undo the line above. That pass
-    // treats this link as external whenever the served prefix differs
-    // from site_url, which is the case in every pull request preview,
-    // so both the opt-out class and the stashed value are set.
-    link.classList.add("no-external");
-    link.dataset.originalHref = fixed;
-    link.dataset.commonsOffsetApplied = "1";
-  }
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", fix);
-  } else {
-    fix();
-  }
-})();
-</script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <script>document.head.appendChild(Object.assign(document.createElement('link'),{rel:'stylesheet',href:(document.querySelector('meta[name="quarto:offset"]')||{content:''}).content+'termshow.css'}));</script>
 <script>document.head.appendChild(Object.assign(document.createElement('link'),{rel:'stylesheet',href:(document.querySelector('meta[name="quarto:offset"]')||{content:''}).content+'gd-lightbox.css'}));</script>
@@ -184,8 +151,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link rel="apple-touch-icon" sizes="180x180" href="../apple-touch-icon.png">
 <script src="../theme-init.js"></script>
 <script src="https://cdn.jsdelivr.net/gh/posit-dev/supported-by-posit/js/badge.min.js"></script>
-<meta name="gd-announcement" data-content="Heads up! <code>commons</code> for Python is <em>still in beta</em> and is not yet equal to the R package in functionality. Click here to see specific feature parity." data-type="info" data-dismissable="true" data-url="user-guide/feature-parity.html" data-style="" data-position="above-navbar">
-<meta name="gd-version-map" content="{&quot;versions&quot;:[{&quot;tag&quot;:&quot;dev&quot;,&quot;label&quot;:&quot;0.2.0 (dev)&quot;,&quot;path_prefix&quot;:&quot;v/dev&quot;,&quot;prerelease&quot;:true},{&quot;tag&quot;:&quot;0.1.0b2&quot;,&quot;label&quot;:&quot;0.1.0b2&quot;,&quot;latest&quot;:true,&quot;path_prefix&quot;:&quot;&quot;,&quot;prerelease&quot;:true}],&quot;pages&quot;:{}}">
+<meta name="gd-version-map" content="{&quot;versions&quot;:[{&quot;tag&quot;:&quot;dev&quot;,&quot;label&quot;:&quot;0.2.0 (dev)&quot;,&quot;path_prefix&quot;:&quot;v/dev&quot;,&quot;prerelease&quot;:true},{&quot;tag&quot;:&quot;0.1.0&quot;,&quot;label&quot;:&quot;0.1.0&quot;,&quot;latest&quot;:true,&quot;path_prefix&quot;:&quot;&quot;}],&quot;pages&quot;:{}}">
 
 
 <link rel="stylesheet" href="../styles.css">
@@ -380,7 +346,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <h1>Logging conversations</h1>
 <p>Conversation logging is off by default. With <code>Commons(log=True)</code>, <code>commons</code> turns on message content capture in the OpenTelemetry spans that chatlas records. These spans can contain user messages, model responses, tool requests, and tool results, including query results and plots. Treat them as another copy of the data available to the agent. An agent built with <code>log=True</code> also records the signed-in user’s name on each turn, if the Shiny session has one. It does this only if the process is tracing and content capture is not turned off when the agent is built. A conversation id is recorded only when the application sets one, as shinychat does when chat history is enabled. A tracing process records that id whether or not the agent logs.</p>
 <p>Capture is controlled for the whole process by the <code>OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT</code> environment variable, and the agent’s <code>log</code> argument only sets it when nothing else has. Once the variable is on, whether <code>log=True</code> or the environment turned it on, chatlas records the conversations of every agent in a traced process, including agents built with <code>log=False</code>. The variable is on when it is <code>true</code> or <code>1</code>, in any case. Any other non-empty value turns capture off, and <code>log=True</code> leaves that value alone. An empty value counts as unset.</p>
-<p>On Posit Connect, both the server administrator and the application author must opt in before any conversation is recorded. The administrator must enable OpenTelemetry and allow content instrumentation. The author opts in by passing <code>log=True</code>, or by setting the capture variable. With <code>log=True</code>, <code>commons</code> also turns on <a href="https://docs.posit.co/connect/user/content-settings/#content-observability">Content Observability</a> for the content item when the process started without tracing. Recording then begins after the content process restarts. A process that already has tracing records from the first conversation, unless content capture is turned off. Off Connect, nothing is recorded unless the application installs a tracer provider, and the spans then go wherever that provider exports them. See <a href="../user-guide/get-started.html#logging-conversations">Logging conversations</a> for the setup.</p>
+<p>On Posit Connect, both the server administrator and the application author must opt in before any conversation is recorded. The administrator must enable OpenTelemetry and allow content instrumentation. The author opts in by passing <code>log=True</code>, or by setting the capture variable. With <code>log=True</code>, <code>commons</code> also turns on <a href="https://docs.posit.co/connect/user/content-settings/#content-observability">Content Observability</a> for the content item when the process started without tracing. Recording then begins after the content process restarts. A process that already has tracing records from the first conversation, unless content capture is turned off. When running locally or deploying your app somewhere other than Posit Connect, nothing is recorded unless the application installs a tracer provider, and the spans then go wherever that provider exports them. See <a href="../user-guide/get-started.html#logging-conversations">Logging conversations</a> for the setup.</p>
 <p>Content owners and collaborators can read the traces on Connect, for example with <a href="../reference/trajectory_read.html#commons.trajectory_read" class="gdls-link gdls-code">commons.trajectory_read()</a> (see <a href="../user-guide/get-started.html#reading-logged-conversations">Reading logged conversations</a>). <code>share_with</code> adds the named users as collaborators, which gives them more than access to the traces. Store any exported transcripts and review notes only in an appropriately protected location, and review traces only in an environment trusted to handle internal user data, such as <a href="https://posit.co/products/enterprise/workbench">Posit Workbench</a>. Connect or the configured exporter decides retention and access for the OpenTelemetry data, not <code>commons</code>.</p>
 
 
@@ -821,7 +787,6 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </div>
 </div>
 </footer>
-<script src="../announcement-banner.js"></script>
 <script src="../github-widget.js"></script>
 <script src="../copy-page.js"></script>
 <script src="../sidebar-wrap.js"></script>
