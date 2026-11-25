@@ -469,7 +469,7 @@ def vanity_guid(client: ConnectClient, url: str, query: str) -> str:
                 and normalize_connect_url(vanity) == expected
             ):
                 return guid
-        # Connect's total counts results, not pages.
+        # Connect's total is the number of matching results across all pages.
         seen += len(results)
         total = body.get("total")
         if (

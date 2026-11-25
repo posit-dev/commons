@@ -83,7 +83,7 @@ connect_vanity_guid <- function(
         return(results$guid[which(matches)[[1]]])
       }
     }
-    # Connect's total counts results, not pages.
+    # Connect's total is the number of matching results across all pages.
     count <- if (is.data.frame(results)) nrow(results) else length(results)
     seen <- seen + count
     total <- body$total
