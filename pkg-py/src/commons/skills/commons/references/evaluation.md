@@ -99,6 +99,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+from chatlas import ContentToolResult
 from inspect_ai import Task, task
 from inspect_ai.dataset import Sample
 from inspect_ai.log import transcript
@@ -125,10 +126,25 @@ def commons_agent():
             agent.export(path, content="all", include_system_prompt=False)
             trajectory = path.read_text()
         state.store.set("trajectory", trajectory)
+        state.store.set("displays", displayed_html(agent))
         transcript().info(trajectory, source="commons agent")
         return state
 
     return solve
+
+
+def displayed_html(agent) -> list[str]:
+    # What the chat showed for each tool result, as shinychat reads it.
+    shown = []
+    for turn in agent.get_turns():
+        for content in turn.contents:
+            if not isinstance(content, ContentToolResult):
+                continue
+            display = (content.extra or {}).get("display")
+            html = display.get("html") if isinstance(display, dict) else getattr(display, "html", None)
+            if html is not None:
+                shown.append(str(html))
+    return shown
 
 
 @task
@@ -142,7 +158,7 @@ def my_agent():
     )
 ```
 
-Run it with `inspect eval evals/task.py --model <grader model>`. The agent calls the model its chatlas client names, so `--model` selects only the model `model_graded_qa()` grades with. Inspect loads the task file with `evals/` as the working directory, so build every path in `agent.py` and the target code from `Path(__file__).parent` rather than the working directory, and pass a path to `instructions` as a `str`. Use this only as a starting point. Adapt it rather than forcing every criterion into `model_graded_qa()`. Build a fresh agent for each sample, as above, so conversation history, temporary handles, and tool state cannot leak between questions. `get_cost()` raises when chatlas does not know the model's price; pass `token_price` or record `agent.get_tokens()` instead. The answer text includes the provenance marker and citation markup the agent appends; tell a model grader to disregard that markup, or strip it before grading. When a measure displays a table or plot, the agent is told not to repeat it in its reply, so a grader that sees only the answer text can mark a correct answer wrong. Give the scorer the results the user saw, from the trajectory the solver keeps in `state.store`, and label them as displayed results rather than intermediate tool output. The exported trajectory is not a copy of what the user saw: it has each tool's value as the model received it, so a formatted table shows raw values and may be cut to fewer rows than the display, and a plot is not an image. Grade from those values only when they are complete enough to settle the answer. Mark the other questions, such as those that depend on reading a plot, for human review, and have the reviewer ask them in the running app (`commons.ui.app(build_agent())`) to see the display itself. A scorer that checks tool use reads the same trajectory.
+Run it with `inspect eval evals/task.py --model <grader model>`. The agent calls the model its chatlas client names, so `--model` selects only the model `model_graded_qa()` grades with. Inspect loads the task file with `evals/` as the working directory, so build every path in `agent.py` and the target code from `Path(__file__).parent` rather than the working directory, and pass a path to `instructions` as a `str`. Use this only as a starting point. Adapt it rather than forcing every criterion into `model_graded_qa()`. Build a fresh agent for each sample, as above, so conversation history, temporary handles, and tool state cannot leak between questions. `get_cost()` raises when chatlas does not know the model's price; pass `token_price` or record `agent.get_tokens()` instead. The answer text includes the provenance marker and citation markup the agent appends; tell a model grader to disregard that markup, or strip it before grading. When a measure displays a table or plot, the agent is told not to repeat it in its reply, so a grader that sees only the answer text can mark a correct answer wrong. The exported trajectory does not show what the user saw either: it has each tool's value as the model received it, which can differ from the display, have fewer rows, or lack a plot image. The solver therefore also keeps the HTML the chat displayed for each tool result. Give the scorer the displayed tables, labeled as displayed results rather than intermediate tool output. A plot in that HTML is an image a text grader cannot read, so mark questions that depend on reading a plot for human review, and have the reviewer open that sample's saved HTML. A scorer that checks tool use reads the same trajectory.
 
 Keep question data, target-generating code and stored facts, task construction, custom scorers, metrics, and run scripts organized so another person can reproduce and audit a run. Provide the agent and target code with the credentials and data access they need, verify that access by running code, and never write credentials into evaluation data or logs.
 
