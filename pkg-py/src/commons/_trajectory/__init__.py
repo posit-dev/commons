@@ -49,10 +49,13 @@ def trajectory_read(
     under `rsconnect/`. With several records, the most recently modified is
     read, and a warning names it. An rsconnect-python record that lists
     deployments to several servers does not say which is the latest, so
-    `CONNECT_SERVER` picks one of them. When `CONNECT_SERVER` is set and the
-    record names another server, the read is refused before any request is
-    sent; pass the content URL to read from the record's server. Otherwise
-    the directory the file exporter writes to is read: the directory of
+    `CONNECT_SERVER` picks one of them. A record may send `CONNECT_API_KEY`
+    only to `CONNECT_SERVER`, or, when that is unset, to a Connect server
+    registered with rsconnect-python. Records that name such a server are
+    preferred, and a record that names any other server is refused before
+    any request is sent. To read from another server, set `CONNECT_SERVER`
+    and `CONNECT_API_KEY` for it. Without a deployment record, the directory
+    the file exporter writes to is read: the directory of
     `OTEL_EXPORTER_OTLP_TRACES_FILE` when it is set, and otherwise
     `COMMONS_TRACES_DIR`, or `commons-traces` under the temporary directory.
     `source` can also be a Connect content GUID, a content URL
@@ -64,11 +67,12 @@ def trajectory_read(
 
     Reading from Connect (2026.09.0 or later) needs `CONNECT_API_KEY`, and
     `CONNECT_SERVER` when the server is not in the URL, the deployment
-    record, or the one server registered with rsconnect-python. The key's
-    user needs editor-level access to the content: they must own it or be a
-    collaborator (see `share_with` on `Commons`). When Connect finds no
-    traces and reports that the content's or the server's tracing setting is
-    off, a warning names that setting.
+    record, or the one server registered with rsconnect-python. A GUID
+    source refuses a deployment record as a read with no source does. The
+    key's user needs editor-level access to the content: they must own it or
+    be a collaborator (see `share_with` on `Commons`). When Connect finds no
+    traces and reports that the content's or the server's tracing setting
+    is off, a warning names that setting.
 
     `since` and `until` keep the chat activity at or after `since` and
     before `until`. Each is a datetime, a date, or a string like
@@ -93,7 +97,7 @@ def trajectory_read(
     Raises `TypeError` when `source`, `n`, or a bound has an unsupported
     type; `ValueError` when there is no Connect server or API key, a
     deployment record does not settle which server to read or names a
-    server other than `CONNECT_SERVER`, a URL is not recognised, or a bound
+    server it may not send the key to, a URL is not recognised, or a bound
     or `n` has an invalid value; `LookupError` when
     a vanity URL is not found; and a `RuntimeError` when Connect refuses
     access, has no such content, or a request to it fails.

@@ -138,7 +138,8 @@ def guid_server() -> str:
     """The server for a GUID source.
 
     CONNECT_SERVER, then the project's deployment record, then the one server
-    registered with rsconnect-python.
+    registered with rsconnect-python. A record whose server is not registered
+    is refused.
     """
     server = os.environ.get("CONNECT_SERVER", "")
     if server:
@@ -146,6 +147,7 @@ def guid_server() -> str:
     # The GUID names the content, so which record is read needs no warning.
     deployment = find_deployment(quiet=True)
     if deployment is not None:
+        check_record_server(deployment)
         return deployment.server
     servers = registered_connect_servers()
     if len(servers) == 1:

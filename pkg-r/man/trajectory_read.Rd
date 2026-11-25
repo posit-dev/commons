@@ -12,10 +12,12 @@ trajectory_read(source = NULL, ..., n = NULL, from = NULL, to = NULL)
 \item \code{NULL} (the default) resolves automatically: on Posit Connect, this
 content's own traces; in a project that has been deployed with
 rsconnect, the deployed content's traces; otherwise, the local trace
-directory that \code{\link[=agent]{agent()}} writes to. When \code{CONNECT_SERVER} is set and
-the deployment record names another server, the read is refused before
-any request is sent; pass the content URL to read from the record's
-server.
+directory that \code{\link[=agent]{agent()}} writes to. A deployment record may send
+\code{CONNECT_API_KEY} only to \code{CONNECT_SERVER}, or, when that is unset, to
+a Connect server registered with rsconnect. Records that name such a
+server are preferred, and a record that names any other server is
+refused before any request is sent. To read from another server, set
+\code{CONNECT_SERVER} and \code{CONNECT_API_KEY} for it.
 \item A Connect content GUID, a content URL (\verb{.../content/<guid>/}), a
 vanity URL written as \verb{<server>/content/<name>/} for content at
 \verb{<server>/<name>/}, or a dashboard URL (\verb{.../connect/#/apps/<guid>/}).
@@ -62,7 +64,8 @@ variable (and \code{CONNECT_SERVER}, when the server can't be inferred from the
 URL, the project's deployment record, or the sole Connect server registered
 with rsconnect), and editor-level access to the content: you must own it or
 be a collaborator. See the \code{share_with} argument of
-\code{\link[=agent]{agent()}}.
+\code{\link[=agent]{agent()}}. A GUID source refuses a deployment record as a \code{NULL} source
+does.
 }
 \examples{
 \dontrun{

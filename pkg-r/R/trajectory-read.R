@@ -14,10 +14,12 @@
 #'   * `NULL` (the default) resolves automatically: on Posit Connect, this
 #'     content's own traces; in a project that has been deployed with
 #'     rsconnect, the deployed content's traces; otherwise, the local trace
-#'     directory that [agent()] writes to. When `CONNECT_SERVER` is set and
-#'     the deployment record names another server, the read is refused before
-#'     any request is sent; pass the content URL to read from the record's
-#'     server.
+#'     directory that [agent()] writes to. A deployment record may send
+#'     `CONNECT_API_KEY` only to `CONNECT_SERVER`, or, when that is unset, to
+#'     a Connect server registered with rsconnect. Records that name such a
+#'     server are preferred, and a record that names any other server is
+#'     refused before any request is sent. To read from another server, set
+#'     `CONNECT_SERVER` and `CONNECT_API_KEY` for it.
 #'   * A Connect content GUID, a content URL (`.../content/<guid>/`), a
 #'     vanity URL written as `<server>/content/<name>/` for content at
 #'     `<server>/<name>/`, or a dashboard URL (`.../connect/#/apps/<guid>/`).
@@ -41,7 +43,8 @@
 #' URL, the project's deployment record, or the sole Connect server registered
 #' with rsconnect), and editor-level access to the content: you must own it or
 #' be a collaborator. See the `share_with` argument of
-#' [agent()].
+#' [agent()]. A GUID source refuses a deployment record as a `NULL` source
+#' does.
 #'
 #' @return A list of conversations, named by conversation id and ordered
 #'   oldest-first. Each conversation is a list with a `turns` field containing
@@ -326,6 +329,7 @@ trajectory_guid_server <- function(call = rlang::caller_env()) {
   # The GUID names the content, so which record is read needs no notice.
   deployment <- find_rsconnect_deployment(quiet = TRUE)
   if (!is.null(deployment)) {
+    check_record_server(deployment, call)
     return(deployment$server)
   }
 
@@ -448,9 +452,10 @@ content_vanity_url <- function(x) {
 }
 
 # Find the project's Connect deployment record (written by rsconnect under
-# rsconnect/). The record's `url` field has the content GUID. With several
-# records naming more than one deployment, reports which one is read unless
-# `quiet`.
+# rsconnect/). The record's `url` field has the content GUID. Records whose
+# server is trusted, as check_record_server() decides, are preferred to the
+# others. With several records naming more than one deployment, reports which
+# one is read unless `quiet`.
 find_rsconnect_deployment <- function(dir = getwd(), quiet = FALSE) {
   files <- rsconnect_record_files(dir)
   if (length(files) == 0) {
@@ -462,55 +467,74 @@ find_rsconnect_deployment <- function(dir = getwd(), quiet = FALSE) {
     return(NULL)
   }
 
-  if (length(deployments) > 1) {
-    mtimes <- vapply(
-      deployments,
-      function(dep) as.numeric(file.mtime(dep$file)),
-      numeric(1)
-    )
-    deployments <- deployments[order(mtimes, decreasing = TRUE)]
-    keys <- vapply(
-      deployments,
-      function(dep) paste(dep$guid, deployment_server_key(dep$server)),
-      character(1)
-    )
-    if (!quiet && length(unique(keys)) > 1) {
-      cli::cli_inform(
-        "Reading trajectories for {.val {deployments[[1]]$name}}
-         ({deployments[[1]]$guid}) on {.url {deployments[[1]]$server}}, from
-         the most recently modified deployment record."
-      )
+  mtimes <- vapply(
+    deployments,
+    function(dep) as.numeric(file.mtime(dep$file)),
+    numeric(1)
+  )
+  deployments <- deployments[order(mtimes, decreasing = TRUE)]
+  servers <- vapply(
+    deployments,
+    function(dep) deployment_server_key(dep$server),
+    character(1)
+  )
+  preferred <- servers %in% trusted_server_keys()
+  chosen <- deployments[[if (any(preferred)) which(preferred)[[1]] else 1]]
+
+  keys <- paste(vapply(deployments, `[[`, character(1), "guid"), servers)
+  if (!quiet && length(unique(keys)) > 1) {
+    suffix <- ""
+    if (any(preferred) && !all(preferred)) {
+      suffix <- if (nzchar(Sys.getenv("CONNECT_SERVER"))) {
+        " that names CONNECT_SERVER"
+      } else {
+        " that names a registered Connect server"
+      }
     }
+    cli::cli_inform(
+      "Reading trajectories for {.val {chosen$name}} ({chosen$guid}) on
+       {.url {chosen$server}}, from the most recently modified deployment
+       record{suffix}."
+    )
   }
 
-  deployments[[1]]
+  chosen
 }
 
 # A record chooses where CONNECT_API_KEY is sent, so a project's record may
-# not send it anywhere but the server the user set.
+# send it only to CONNECT_SERVER, or, when that is unset, to a Connect server
+# registered with rsconnect.
 check_record_server <- function(deployment, call = rlang::caller_env()) {
-  server <- Sys.getenv("CONNECT_SERVER")
-  if (
-    !nzchar(server) ||
-      identical(
-        deployment_server_key(server),
-        deployment_server_key(deployment$server)
-      )
-  ) {
+  if (deployment_server_key(deployment$server) %in% trusted_server_keys()) {
     return(invisible())
   }
   record <- deployment$server
-  url <- paste0(record, "/content/", deployment$guid, "/")
+  server <- Sys.getenv("CONNECT_SERVER")
+  reason <- if (nzchar(server)) {
+    "which is not {.envvar CONNECT_SERVER} ({.url {server}})."
+  } else {
+    "which is not a registered Connect server, and {.envvar CONNECT_SERVER}
+     is not set."
+  }
   cli::cli_abort(
     c(
-      "The deployment record {.file {deployment$file}} names the Connect
-       server {.url {record}}, which is not {.envvar CONNECT_SERVER}
-       ({.url {server}}).",
-      i = "To read trajectories from {.url {record}}, pass its content URL,
-           {.url {url}}, as {.arg source}."
+      paste(
+        "The deployment record {.file {deployment$file}} names the Connect
+         server {.url {record}},",
+        reason
+      ),
+      i = "To read trajectories from {.url {record}}, set
+           {.envvar CONNECT_SERVER} and {.envvar CONNECT_API_KEY} for that
+           server."
     ),
     call = call
   )
+}
+
+trusted_server_keys <- function() {
+  server <- Sys.getenv("CONNECT_SERVER")
+  servers <- if (nzchar(server)) server else registered_connect_servers()
+  vapply(servers, deployment_server_key, character(1), USE.NAMES = FALSE)
 }
 
 # A server URL's scheme and host are case-insensitive; the rest of it is not.

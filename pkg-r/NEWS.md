@@ -1,6 +1,6 @@
 # commons (development version)
 
-* `trajectory_read()` with no `source` now refuses a project's deployment record that names a server other than `CONNECT_SERVER`, so a cloned project can't choose where your `CONNECT_API_KEY` is sent. Pass the content URL to read from the record's server.
+* `trajectory_read()` now reads a project's deployment record only when it names `CONNECT_SERVER` or, with `CONNECT_SERVER` unset, a Connect server registered with rsconnect, so a cloned project can't choose where your `CONNECT_API_KEY` is sent. This applies with no `source` and when a GUID `source` takes its server from the record. To read from another server, set `CONNECT_SERVER` and `CONNECT_API_KEY` for it.
 
 # commons 0.2.0
 
