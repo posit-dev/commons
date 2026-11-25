@@ -113,9 +113,7 @@ def build_trajectories(spans: Sequence[Span]) -> dict[str, Trajectory]:
     index = span_index(spans)
     chat_spans = [span for span in spans if is_chat_span(span)]
     latest = latest_chat_spans(chat_spans)
-    by_conversation: dict[str, list[Span]] = {}
-    for span in chat_spans:
-        by_conversation.setdefault(conversation_id(span), []).append(span)
+    by_conversation = chat_spans_by_conversation(chat_spans)
     turns_of = functools.partial(
         _chat_span_turns, cache={}, by_conversation=by_conversation, index=index
     )
@@ -202,6 +200,14 @@ def conversation_id(span: Span) -> str:
     return span.trace_id if id_ is None else str(id_)
 
 
+def chat_spans_by_conversation(chat_spans: Sequence[Span]) -> dict[str, list[Span]]:
+    """The chat spans of each conversation, in the order given."""
+    by_conversation: dict[str, list[Span]] = {}
+    for span in chat_spans:
+        by_conversation.setdefault(conversation_id(span), []).append(span)
+    return by_conversation
+
+
 def latest_chat_spans(chat_spans: Sequence[Span]) -> dict[str, Span]:
     """The chat span that supplies each conversation's turns, oldest first."""
     latest: dict[str, Span] = {}
@@ -227,12 +233,14 @@ def reaches_first_question(chat_spans: Sequence[Span]) -> bool:
     """Do a conversation's chat spans reach back to its first question?
 
     True when the earliest of them, leaving out title calls, records one
-    exchange. The spans after it then hold every later exchange.
+    exchange. The spans after it then hold every later exchange. Earliest is
+    by `span_time`, as `_conversation_user` picks the span the user is read
+    from.
     """
     candidates = [span for span in chat_spans if not _is_title_span(span)]
     if not candidates:
         return False
-    earliest = min(candidates, key=lambda span: span.start_time_unix_nano)
+    earliest = min(candidates, key=span_time)
     return len(split_exchanges(trajectory_turns(earliest))) == 1
 
 

@@ -103,18 +103,41 @@ def _otlp_span(span: dict[str, Any]) -> Span:
 
 def parse_otlp_lines(lines: Iterable[str]) -> list[Span]:
     """Read the spans of OTLP envelopes, one per line; a line that is not one is skipped."""
-    spans: list[Span] = []
-    for line in lines:
-        try:
-            envelope = json.loads(line)
-        except ValueError:
-            continue
-        if not isinstance(envelope, dict):
-            continue
-        for resource in _entries(envelope, "resourceSpans"):
-            for scope in _entries(resource, "scopeSpans"):
-                spans.extend(_otlp_span(span) for span in _entries(scope, "spans"))
-    return spans
+    return [span for line in lines for span in parse_otlp_line(line)[0]]
+
+
+def parse_otlp_line(line: str) -> tuple[list[Span], int | None]:
+    """The spans of one OTLP envelope, and the time Connect sorts the line by.
+
+    Connect sorts trace lines by the start time of the line's first span. The
+    time is None when that span is missing or records no start time.
+    """
+    try:
+        envelope = json.loads(line)
+    except ValueError:
+        return [], None
+    if not isinstance(envelope, dict):
+        return [], None
+    spans = [
+        _otlp_span(span)
+        for resource in _entries(envelope, "resourceSpans")
+        for scope in _entries(resource, "scopeSpans")
+        for span in _entries(scope, "spans")
+    ]
+    return spans, _sort_time(envelope)
+
+
+def _sort_time(envelope: dict[str, Any]) -> int | None:
+    value: Any = envelope
+    for key in ("resourceSpans", "scopeSpans", "spans"):
+        entries = value.get(key) if isinstance(value, dict) else None
+        if not isinstance(entries, list) or not entries:
+            return None
+        value = entries[0]
+    start = value.get("startTimeUnixNano") if isinstance(value, dict) else None
+    if not isinstance(start, str) or not re.fullmatch(r"[0-9]+", start):
+        return None
+    return int(start)
 
 
 def local_traces_pattern() -> re.Pattern[str]:

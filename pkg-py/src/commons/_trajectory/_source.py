@@ -5,11 +5,12 @@ import re
 import warnings
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from urllib.parse import unquote
 
 from .._connect import (
+    FROM_PAD,
     ConnectClient,
     ConnectError,
     connect_content_guid,
@@ -22,7 +23,7 @@ from .._connect import (
 from .._tracing import CONTENT_TRACING_HINT, SERVER_TRACING_HINT
 from ._build import (
     chat_span_gives_turns,
-    conversation_id,
+    chat_spans_by_conversation,
     filter_chat_spans,
     has_severed_ancestry,
     is_chat_span,
@@ -31,7 +32,13 @@ from ._build import (
     span_index,
 )
 from ._deployment import GUID_PATTERN, find_deployment, registered_connect_servers
-from ._otlp import Span, local_traces_dir, parse_otlp_lines, read_local_spans
+from ._otlp import (
+    Span,
+    local_traces_dir,
+    parse_otlp_line,
+    parse_otlp_lines,
+    read_local_spans,
+)
 
 EMPTY_READ_MESSAGE = "No traces were found for this content."
 
@@ -219,17 +226,27 @@ def enough_trace_lines(
 ) -> Callable[[Sequence[str]], bool]:
     """A check that the lines read so far hold the `n` latest conversations whole.
 
-    Lines arrive newest first, so a conversation is whole once the lines reach
-    its first question, which an older line cannot change.
+    A conversation is whole once the lines reach its first question. Connect
+    sorts lines newest first by the start time of each line's first span, and
+    one line can hold spans of several conversations, so a line not yet read
+    can still hold a later chat span. The check also waits for a line that
+    sorts an hour (`FROM_PAD`) before the conversations' earliest chat span.
+    That assumes a span lasts at most an hour, as the `from` pushdown does.
     """
     spans: list[Span] = []
     parsed = 0
+    oldest: int | None = None
+    pad = -FROM_PAD // timedelta(microseconds=1) * 1000
     # Settled once the ancestry is intact, so each span is checked once.
     gives_turns: dict[tuple[str, str], bool] = {}
 
     def enough(lines: Sequence[str]) -> bool:
-        nonlocal parsed
-        spans.extend(parse_otlp_lines(lines[parsed:]))
+        nonlocal parsed, oldest
+        for line in lines[parsed:]:
+            line_spans, sort_time = parse_otlp_line(line)
+            spans.extend(line_spans)
+            if sort_time is not None and (oldest is None or sort_time < oldest):
+                oldest = sort_time
         parsed = len(lines)
         kept = filter_chat_spans(spans, since, until)
         if has_severed_ancestry(kept):
@@ -245,10 +262,12 @@ def enough_trace_lines(
                 latest.append(id_)
         if len(latest) < n:
             return False
-        by_conversation: dict[str, list[Span]] = {}
-        for span in chat_spans:
-            by_conversation.setdefault(conversation_id(span), []).append(span)
-        return all(reaches_first_question(by_conversation[id_]) for id_ in latest[-n:])
+        by_conversation = chat_spans_by_conversation(chat_spans)
+        recent = [by_conversation[id_] for id_ in latest[-n:]]
+        if not all(reaches_first_question(spans_) for spans_ in recent):
+            return False
+        first = min(span.start_time_unix_nano for spans_ in recent for span in spans_)
+        return oldest is not None and oldest + pad <= first
 
     return enough
 

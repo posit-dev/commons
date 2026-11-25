@@ -107,8 +107,8 @@ normalize_connect_url <- function(x) {
 # `traces` store, paged until the X-Total-Count header is exhausted, then each
 # job's own store. Once `enough(lines)` is TRUE after a page of the `traces`
 # store, the read stops, before the job stores.
-# Connect returns rows newest-first by span start time and filters `from`/`to`
-# on span start time over `[from, to)`.
+# Connect returns rows newest-first by the start time of each row's first
+# span, and filters `from`/`to` on that time over `[from, to)`.
 connect_trace_lines <- function(
   client,
   guid,
@@ -126,7 +126,7 @@ connect_trace_lines <- function(
         httr2::req_url_query(
           limit = page_size,
           offset = offset,
-          from = connect_window_param(from, -3600),
+          from = connect_window_param(from, connect_from_pad),
           to = connect_window_param(to, 1)
         ) |>
         httr2::req_perform(),
@@ -263,7 +263,7 @@ connect_job_trace_req <- function(
     httr2::req_url_query(
       limit = page_size,
       offset = offset,
-      since = connect_window_param(from, -3600)
+      since = connect_window_param(from, connect_from_pad)
     ) |>
     httr2::req_throttle(capacity = max_active, fill_time_s = 0.5)
 }
@@ -288,6 +288,9 @@ parse_connect_version <- function(x) {
   }
   numeric_version(version[[2]])
 }
+
+# The seconds `from` is padded by.
+connect_from_pad <- -3600
 
 # Connect silently ignores timestamps it can't parse, including any without
 # an explicit timezone, so always format the query bounds here. The exact
