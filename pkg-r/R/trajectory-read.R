@@ -7,8 +7,8 @@
 #' enabled—and read back from Posit Connect's content observability store or
 #' from local trace files.
 #'
-#' This feature requires Connect >= 2026.09.0. A read from an older server stops
-#' with an error.
+#' This feature requires Connect >= 2026.09.0. A read stops with an error when
+#' the server reports an older version.
 #'
 #' @param source Where to read trajectories from:
 #'
