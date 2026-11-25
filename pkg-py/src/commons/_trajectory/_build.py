@@ -110,7 +110,7 @@ class _Candidate:
 
 def build_trajectories(spans: Sequence[Span]) -> dict[str, Trajectory]:
     """The conversations the chat spans record, keyed by conversation id, oldest first."""
-    index = _span_index(spans)
+    index = span_index(spans)
     chat_spans = [span for span in spans if is_chat_span(span)]
     latest = latest_chat_spans(chat_spans)
     by_conversation: dict[str, list[Span]] = {}
@@ -213,6 +213,16 @@ def latest_chat_spans(chat_spans: Sequence[Span]) -> dict[str, Span]:
     return dict(sorted(latest.items(), key=lambda item: span_time(item[1])))
 
 
+def chat_span_gives_turns(span: Span, index: dict[_SpanKey, Span]) -> bool:
+    """Does the chat span give its conversation turns, as recorded or rebuilt?"""
+    if trajectory_turns(span):
+        return True
+    return (
+        not has_json(span.attributes.get(INPUT_MESSAGES))
+        and _turn_ancestor(span, index) is not None
+    )
+
+
 def reaches_first_question(chat_spans: Sequence[Span]) -> bool:
     """Do a conversation's chat spans reach back to its first question?
 
@@ -276,7 +286,7 @@ def _span_key(span: Span) -> _SpanKey:
     return (span.trace_id, span.span_id)
 
 
-def _span_index(spans: Sequence[Span]) -> dict[_SpanKey, Span]:
+def span_index(spans: Sequence[Span]) -> dict[_SpanKey, Span]:
     index: dict[_SpanKey, Span] = {}
     for span in spans:
         index.setdefault(_span_key(span), span)
@@ -300,7 +310,7 @@ def _turn_ancestor(span: Span, index: dict[_SpanKey, Span]) -> Span | None:
 
 def has_severed_ancestry(spans: Sequence[Span]) -> bool:
     """Has a chat span lost a parent between it and its turn span?"""
-    index = _span_index(spans)
+    index = span_index(spans)
     return any(_ancestry_severed(span, index) for span in spans if is_chat_span(span))
 
 

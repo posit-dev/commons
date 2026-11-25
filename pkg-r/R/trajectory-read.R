@@ -215,6 +215,8 @@ enough_trace_lines <- function(n, from, to) {
   state <- new.env(parent = emptyenv())
   state$spans <- list()
   state$n_seen <- 0
+  # Settled once the ancestry is intact, so each span is checked once.
+  state$gives_turns <- new.env(parent = emptyenv())
   function(lines) {
     new_lines <- lines[rlang::seq2(state$n_seen + 1, length(lines))]
     state$n_seen <- length(lines)
@@ -224,8 +226,15 @@ enough_trace_lines <- function(n, from, to) {
       return(FALSE)
     }
     chat_spans <- Filter(is_chat_span, kept)
+    index <- span_index(kept)
     latest <- latest_chat_spans(chat_spans)
-    latest <- latest[lengths(lapply(latest, trajectory_turns)) > 0]
+    latest <- Filter(function(span) {
+      key <- paste(span$trace_id, span$span_id)
+      if (is.null(state$gives_turns[[key]])) {
+        state$gives_turns[[key]] <- chat_span_gives_turns(span, index)
+      }
+      state$gives_turns[[key]]
+    }, latest)
     if (length(latest) < n) {
       return(FALSE)
     }
@@ -240,6 +249,16 @@ enough_trace_lines <- function(n, from, to) {
       logical(1)
     ))
   }
+}
+
+# Whether a chat span gives its conversation turns, as recorded or rebuilt by
+# recover_missing_input().
+chat_span_gives_turns <- function(span, index) {
+  if (length(trajectory_turns(span)) > 0) {
+    return(TRUE)
+  }
+  is.null(parse_semconv_json(span$attributes[["gen_ai.input.messages"]])) &&
+    !is.null(conversation_turn_ancestor(span, index))
 }
 
 # Whether a conversation's chat spans reach back to its first question: the

@@ -21,16 +21,17 @@ from .._connect import (
 )
 from .._tracing import CONTENT_TRACING_HINT, SERVER_TRACING_HINT
 from ._build import (
+    chat_span_gives_turns,
     conversation_id,
     filter_chat_spans,
     has_severed_ancestry,
     is_chat_span,
     latest_chat_spans,
     reaches_first_question,
+    span_index,
 )
 from ._deployment import GUID_PATTERN, find_deployment, registered_connect_servers
 from ._otlp import Span, local_traces_dir, parse_otlp_lines, read_local_spans
-from ._semconv import trajectory_turns
 
 EMPTY_READ_MESSAGE = "No traces were found for this content."
 
@@ -223,6 +224,8 @@ def enough_trace_lines(
     """
     spans: list[Span] = []
     parsed = 0
+    # Settled once the ancestry is intact, so each span is checked once.
+    gives_turns: dict[tuple[str, str], bool] = {}
 
     def enough(lines: Sequence[str]) -> bool:
         nonlocal parsed
@@ -232,11 +235,14 @@ def enough_trace_lines(
         if has_severed_ancestry(kept):
             return False
         chat_spans = [span for span in kept if is_chat_span(span)]
-        latest = [
-            id_
-            for id_, span in latest_chat_spans(chat_spans).items()
-            if trajectory_turns(span)
-        ]
+        index = span_index(kept)
+        latest = []
+        for id_, span in latest_chat_spans(chat_spans).items():
+            key = (span.trace_id, span.span_id)
+            if key not in gives_turns:
+                gives_turns[key] = chat_span_gives_turns(span, index)
+            if gives_turns[key]:
+                latest.append(id_)
         if len(latest) < n:
             return False
         by_conversation: dict[str, list[Span]] = {}
