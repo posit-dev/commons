@@ -46,10 +46,10 @@ def trajectory_read(
     read when it runs on Posit Connect. Off Connect, the deployed content's
     traces are read when the project has a deployment record, written by
     rsconnect-python under `rsconnect-python/` or by the R package rsconnect
-    under `rsconnect/`. With several records, the most recently modified is
-    read, and a warning names it. An rsconnect-python record that lists
-    deployments to several servers does not say which is the latest, so
-    `CONNECT_SERVER` picks one of them. Otherwise the directory the file
+    under `rsconnect/`. With several records, the most recently modified
+    one that may be used (see below) is read, and a warning names it. An
+    rsconnect-python record that lists deployments to several servers does
+    not say which is the latest, so `CONNECT_SERVER` picks one of them. Otherwise the directory the file
     exporter writes to is read: the directory of
     `OTEL_EXPORTER_OTLP_TRACES_FILE` when it is set, and otherwise
     `COMMONS_TRACES_DIR`, or `commons-traces` under the temporary directory.
