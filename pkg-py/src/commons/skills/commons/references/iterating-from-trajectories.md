@@ -1,0 +1,43 @@
+# Iterate on a commons agent from trajectories
+
+Use this reference when asked to improve an existing commons agent from logged trajectories, user feedback, or repeated low-trust answers.
+
+The task is to move recurring questions to the highest appropriate path, increasing trustworthiness and decreasing latency.
+
+```text
+Path A: semantic layer
+The answer comes from a trusted calculation such as a `measure()`. Prefer this for stable, recurring business metrics.
+
+Path B, documented
+The answer uses SQL, but the context layer identifies the right table, grain, filters, joins, caveats, or SQL shape. If there are recurring cases in this bucket, consider proposing changes to the semantic layer that would promote those cases into Path A.
+
+Path B, exploratory
+The answer uses SQL with little documentation and the agent had to inspect tables, write custom SQL, or make assumptions. Promote recurring cases out of this state.
+```
+
+## Workflow
+
+1. Find the agent definition.
+   Find the agent definition and follow any project helpers to locate its semantic layer and context layer.
+
+2. Read trajectories.
+   Reuse loaded trajectories or read recent conversations with `commons.trajectory_read(n=25, since=date.today() - timedelta(days=7))`. With no `source`, it reads this content's own traces on Posit Connect, the deployed content's traces when the project has an rsconnect deployment record, and otherwise the local trace directory. Pass a directory of trace files or a Connect content GUID or URL to choose one. A Connect read needs `CONNECT_API_KEY` and editor-level access to the content. The result maps each conversation id to a `Trajectory`, whose `turns` are chatlas turns and whose `exchanges` record each answer's provenance tag and citation decisions. If no conversations come back, confirm that the agent was built with `log=True` and that tracing is active where it runs.
+
+3. Analyze themes.
+   Group conversations by the business concept being asked about, not by exact wording. Note which themes already hit Path A, which are documented Path B, and which are exploratory Path B.
+
+4. Propose changes.
+   Present the highest-value changes first. For each proposal, note the theme and current typical path, how many questions are described by that theme, and the recommended change.
+
+   Prefer semantic layer edits when the question calls for a stable trusted calculation. Prefer context layer edits when the issue is table choice, grain, filters, joins, caveats, terminology, or reusable SQL shape.
+
+   Classify each proposal the same way the extraction reference does, so the two skills reconcile against existing context identically:
+   * **new** — add it.
+   * **duplicate** — same concept, same computation: add a `provenance` entry to the existing measure instead of creating a new one.
+   * **extension** — same concept, superset behavior: edit the existing measure, adding the relevant parameters and `provenance` entries. Never create `revenue2`.
+   * **conflict** — same concept but a different computation, or a contradiction with an existing dictionary caveat: surface to the user with both sides; do not resolve silently.
+
+5. Wait before editing.
+   Do not make semantic layer or context layer edits until the user chooses which proposed changes to apply. The data scientist should confirm any new business definition, canonical table, exclusion rule, or SQL pattern.
+
+   When a proposal is accepted, new measures and context land in the agent project layout defined in `SKILL.md`: measures in `measures/`, free-text in `context/`. Because these changes are born from trajectory analysis rather than an artifact, they carry the self-referencing provenance `trajectory analysis (<yyyy-mm-dd>)` — a `provenance=[...]` entry on measures, YAML frontmatter on context files. Then check that the agent reaches for each new measure, as in extraction step 9.
