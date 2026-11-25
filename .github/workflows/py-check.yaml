@@ -47,7 +47,7 @@ jobs:
         run: uv run pyrefly check src tests
       - name: Test
         run: uv run pytest
-      - name: Verify the built wheel ships the browser assets
+      - name: Verify the built wheel ships the browser assets and agent skill
         # The suite runs against an editable install, which reads src/ and so
         # passes whatever the wheel contains. Only the release workflow built
         # a wheel before this, so a dropped asset would have surfaced at
@@ -63,11 +63,17 @@ jobs:
               'commons/www/commons-chat/commons-chat.js',
               'commons/www/commons-chat/commons-chat.css',
               'commons/www/commons-chat/figs/citation-mark.svg',
+              'commons/skills/commons/SKILL.md',
+              'commons/skills/commons/references/onboarding.md',
+              'commons/skills/commons/references/data-dictionaries.md',
+              'commons/skills/commons/references/extracting-from-artifacts.md',
+              'commons/skills/commons/references/evaluation.md',
+              'commons/skills/commons/references/iterating-from-trajectories.md',
           }
           missing = sorted(required - names)
           if missing:
               sys.exit(f'{wheel} is missing: {missing}')
-          print(f'{wheel} ships the browser assets')
+          print(f'{wheel} ships the browser assets and agent skill')
           "
 
   seccomp-32bit:
