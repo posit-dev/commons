@@ -67,7 +67,7 @@ For artifacts not under version control, prefer a stable URL that identifies the
 
 Where each kind of contribution carries it:
 
-- Measures: one or more strings in `@commons.measure(provenance=[...])`. Provenance never reaches the model; the model sees the measure's name, title, description (the docstring or `description=`), and the descriptions of its model-supplied parameters. A provenance URL becomes a "View source" link under the measure's result in the chat.
+- Measures: one or more strings in `@commons.measure(provenance=[...])`. Each entry that starts with a URL becomes a "View source" link under the measure's result in the chat, and the whole entry is the link target, so give a retrieval date its own entry: `provenance=["https://reports.example.com/sales", "retrieved 2026-06-01"]`. Provenance never reaches the model; the model sees the measure's name, title, description (the docstring or `description=`), and the descriptions of its model-supplied parameters.
 - Context files: the same string under a `provenance` key in YAML frontmatter:
   ```yaml
   ---
