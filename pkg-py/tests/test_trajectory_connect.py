@@ -419,6 +419,11 @@ def test_a_python_record_for_one_server_in_two_forms_names_its_guids(
         find_deployment(tmp_path)
 
     assert f"{GUID}, {other}" in str(raised.value)
+    # A GUID source reads the record again unless CONNECT_SERVER is set, so
+    # the remedy names both steps.
+    assert "Set CONNECT_SERVER and CONNECT_API_KEY for https://one.example.com" in (
+        str(raised.value)
+    )
 
 
 def test_connect_server_picks_a_server_whatever_its_hosts_case(

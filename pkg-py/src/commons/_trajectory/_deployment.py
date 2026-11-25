@@ -96,9 +96,13 @@ def _latest_in_file(deployments: list[Deployment]) -> Deployment:
     servers = ", ".join(d.server for d in distinct)
     if len({_server_key(d.server) for d in distinct}) == 1:
         # Entries whose server URLs differ only in form name one server, so
-        # CONNECT_SERVER cannot pick between them.
+        # CONNECT_SERVER cannot pick between them. A GUID source reads this
+        # record again unless CONNECT_SERVER is set.
         guids = ", ".join(d.guid for d in distinct)
-        remedy = f"Pass one of their content GUIDs ({guids}) as `source`."
+        remedy = (
+            f"Set CONNECT_SERVER and CONNECT_API_KEY for {distinct[0].server}, "
+            f"and pass one of their content GUIDs ({guids}) as `source`."
+        )
     else:
         remedy = "Set CONNECT_SERVER and CONNECT_API_KEY for one of them."
     raise ValueError(
