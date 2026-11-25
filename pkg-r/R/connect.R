@@ -59,6 +59,7 @@ connect_vanity_guid <- function(
   call = rlang::caller_env()
 ) {
   page_number <- 1L
+  seen <- 0L
   repeat {
     body <- connect_req(client, "search", "content") |>
       httr2::req_url_query(
@@ -82,7 +83,13 @@ connect_vanity_guid <- function(
         return(results$guid[which(matches)[[1]]])
       }
     }
-    if (is.null(body$total) || page_number >= body$total) {
+    # Connect's total counts results, not pages.
+    count <- if (is.data.frame(results)) nrow(results) else length(results)
+    seen <- seen + count
+    total <- body$total
+    if (
+      !is.numeric(total) || length(total) != 1 || count == 0 || seen >= total
+    ) {
       break
     }
     page_number <- page_number + 1L
