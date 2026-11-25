@@ -1,5 +1,7 @@
 # commons (development version)
 
+* `trajectory_read()` with no `source` now refuses a project's deployment record that names a server other than `CONNECT_SERVER`, so a cloned project can't choose where your `CONNECT_API_KEY` is sent. Pass the content URL to read from the record's server.
+
 # commons 0.2.0
 
 commons 0.2.0 introduces three big features in addition to a number of minor improvements and big fixes.

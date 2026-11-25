@@ -26,7 +26,12 @@ from ._build import (
     is_chat_span,
     latest_chat_spans,
 )
-from ._deployment import GUID_PATTERN, find_deployment, registered_connect_servers
+from ._deployment import (
+    GUID_PATTERN,
+    check_record_server,
+    find_deployment,
+    registered_connect_servers,
+)
 from ._otlp import Span, local_traces_dir, parse_otlp_lines, read_local_spans
 from ._semconv import trajectory_turns
 
@@ -103,6 +108,7 @@ def _default_source() -> LocalSource | ConnectSource:
     # Point a warning at the caller of trajectory_read().
     deployment = find_deployment(stacklevel=5)
     if deployment is not None:
+        check_record_server(deployment)
         client = ConnectClient.from_env(server=deployment.server)
         return ConnectSource(client, deployment.guid)
     return LocalSource(local_traces_dir())

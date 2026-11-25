@@ -88,6 +88,24 @@ def _latest_in_file(deployments: list[Deployment]) -> Deployment:
     )
 
 
+def check_record_server(deployment: Deployment) -> None:
+    """Raise ValueError when CONNECT_SERVER is set and names another server.
+
+    A record chooses where CONNECT_API_KEY is sent, so a project's record may
+    not send it anywhere but the server the user set.
+    """
+    server = os.environ.get("CONNECT_SERVER", "")
+    if not server or _server_key(server) == _server_key(deployment.server):
+        return
+    url = f"{deployment.server}/content/{deployment.guid}/"
+    raise ValueError(
+        f"The deployment record {deployment.file} names the Connect server "
+        f"{deployment.server}, which is not CONNECT_SERVER ({server}). To read "
+        f"trajectories from {deployment.server}, pass its content URL, {url}, "
+        "as the source."
+    )
+
+
 def _server_key(server: str) -> tuple[str, str, str]:
     # A URL's scheme and host are case-insensitive; its path is not.
     server = normalize_server(server)

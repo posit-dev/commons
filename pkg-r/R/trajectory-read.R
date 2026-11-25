@@ -14,7 +14,10 @@
 #'   * `NULL` (the default) resolves automatically: on Posit Connect, this
 #'     content's own traces; in a project that has been deployed with
 #'     rsconnect, the deployed content's traces; otherwise, the local trace
-#'     directory that [agent()] writes to.
+#'     directory that [agent()] writes to. When `CONNECT_SERVER` is set and
+#'     the deployment record names another server, the read is refused before
+#'     any request is sent; pass the content URL to read from the record's
+#'     server.
 #'   * A Connect content GUID, a content URL (`.../content/<guid>/`), a
 #'     vanity URL written as `<server>/content/<name>/` for content at
 #'     `<server>/<name>/`, or a dashboard URL (`.../connect/#/apps/<guid>/`).
@@ -378,6 +381,7 @@ resolve_default_source <- function(call = rlang::caller_env()) {
 
   deployment <- find_rsconnect_deployment()
   if (!is.null(deployment)) {
+    check_record_server(deployment, call)
     return(list(
       kind = "connect",
       guid = deployment$guid,
@@ -480,6 +484,33 @@ find_rsconnect_deployment <- function(dir = getwd(), quiet = FALSE) {
   }
 
   deployments[[1]]
+}
+
+# A record chooses where CONNECT_API_KEY is sent, so a project's record may
+# not send it anywhere but the server the user set.
+check_record_server <- function(deployment, call = rlang::caller_env()) {
+  server <- Sys.getenv("CONNECT_SERVER")
+  if (
+    !nzchar(server) ||
+      identical(
+        deployment_server_key(server),
+        deployment_server_key(deployment$server)
+      )
+  ) {
+    return(invisible())
+  }
+  record <- deployment$server
+  url <- paste0(record, "/content/", deployment$guid, "/")
+  cli::cli_abort(
+    c(
+      "The deployment record {.file {deployment$file}} names the Connect
+       server {.url {record}}, which is not {.envvar CONNECT_SERVER}
+       ({.url {server}}).",
+      i = "To read trajectories from {.url {record}}, pass its content URL,
+           {.url {url}}, as {.arg source}."
+    ),
+    call = call
+  )
 }
 
 # A server URL's scheme and host are case-insensitive; its path is not.
